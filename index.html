@@ -1175,12 +1175,16 @@ async function lidarVegGrid(){
   const mc=document.createElement('canvas');mc.width=mc.height=n;const mg=mc.getContext('2d');mg.fillStyle='#000';mg.fillRect(0,0,n,n);mg.fillStyle='#fff';mg.strokeStyle='#fff';mg.lineWidth=2.2;
   S.meshes.forEach(mm=>{mm.userData.rings.forEach(ring=>{mg.beginPath();ring.forEach((p,i)=>{const px=(p.x+R)/step,py=(R-p.y)/step;i?mg.lineTo(px,py):mg.moveTo(px,py);});mg.closePath();mg.fill('evenodd');mg.stroke();});});
   const md=mg.getImageData(0,0,n,n).data; const isB=(i,j)=>md[(j*n+i)*4]>127;
+  // halo 3 m around each building carrying its roof height: LiDAR roof parts that stick out of the IGN footprint are not vegetation
+  const hc=document.createElement('canvas');hc.width=hc.height=n;const hg2=hc.getContext('2d');hg2.lineWidth=2*3/step;hg2.lineJoin='round';
+  S.meshes.forEach(mm=>{const u=mm.userData;if(!u.rings)return;const top=u.ridge||u.h||0;const c=`rgb(${Math.min(255,Math.round(top*8))},${Math.min(255,Math.round((u.h||0)*8))},0)`;hg2.fillStyle=c;hg2.strokeStyle=c;u.rings.forEach(ring=>{hg2.beginPath();ring.forEach((p,i)=>{const px=(p.x+R)/step,py=(R-p.y)/step;i?hg2.lineTo(px,py):hg2.moveTo(px,py);});hg2.closePath();hg2.fill();hg2.stroke();});});
+  const hd=hg2.getImageData(0,0,n,n).data; const roofLike=(i,j,z)=>{const k=(j*n+i)*4;if(!hd[k+3])return false;const top=hd[k]/8,eave=hd[k+1]/8;return z>Math.min(eave,top)-1.8&&z<top+1.5;};
   // ortho greenness at the cell (relaxed threshold)
   let greenAt=()=>true; const RO=S.rawOrtho;
   if(RO){const W=RO.raw.width,mpp=(RO.e-RO.w)/W;const d=RO.raw.getContext('2d').getImageData(0,0,W,W).data;
     greenAt=(x,y)=>{const px=Math.round((x-RO.w)/mpp),py=Math.round((RO.n-y)/mpp);if(px<1||py<1||px>=W-1||py>=W-1)return true;let e=0,c=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const k=((py+dy)*W+px+dx)*4;e+=2*d[k+1]-d[k]-d[k+2];c++;}return e/c>6;};}
   const veg=new Float32Array(n*n); let nv=0;
-  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const z=hs[j*n+i];if(z==null||z<0.7||isB(i,j))continue;const x=-R+i*step,y=R-j*step;if(!greenAt(x,y))continue;veg[j*n+i]=z;nv++;}
+  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const z=hs[j*n+i];if(z==null||z<0.7||isB(i,j)||roofLike(i,j,z))continue;const x=-R+i*step,y=R-j*step;if(!greenAt(x,y))continue;veg[j*n+i]=z;nv++;}
   if(!nv)return;
   // low vegetation (<4.5 m): chains of cells → smooth ribbons (hedges); compact blobs → bushes. Tall → trees on local maxima
   const P=[],N=[]; const tall=[]; const low=(i,j)=>i>=0&&j>=0&&i<n&&j<n&&veg[j*n+i]>0&&veg[j*n+i]<4.5; const bushes=[];
