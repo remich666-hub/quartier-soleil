@@ -1926,6 +1926,11 @@ function rectDecomp(ring){ // up to 4 maximal rectangles aligned on the walls th
   }
   return out;
 }
+function roughRoof(u,F){ // 75th percentile of height steps at 50 cm over the footprint: ≈0.2 m on a roof, ≥0.5 m on foliage
+  const r=u.rings[0],sh=u.shift||{dx:0,dy:0};let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});const d=[];
+  for(let x=x0+0.25;x<x1;x+=0.5)for(let y=y0+0.25;y<y1;y+=0.5){if(!pointInPoly(x,y,r))continue;const a=F.at(x+sh.dx,y+sh.dy),b=F.at(x+0.5+sh.dx,y+sh.dy),c=F.at(x+sh.dx,y+0.5+sh.dy);if(a==null||b==null||c==null)continue;d.push(Math.abs(a-b),Math.abs(a-c));}
+  if(d.length<8)return 0; d.sort((p,q)=>p-q); return d[Math.floor(d.length*0.75)];
+}
 function findTowers(rings,u,F,green){
   const r0=rings[0],a=domAngle(r0),ca=Math.cos(a),sa=Math.sin(a),sh=u.shift||{dx:0,dy:0},st=0.5,cA=st*st;
   let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; r0.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
@@ -1986,6 +1991,7 @@ async function lidarBuildings(){
       const F=(Ff&&ext<Ff.R-2)?Ff:Fc;if(!F)continue;
       if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
       const smp=lidarSamples(u,F,green); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
+      if(Math.abs(areaOf(u.rings[0]))<80&&roughRoof(u,F)>0.45)continue; // small building under a tree: the laser sees the crown, keep the IGN volume
       const clean=u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;});
       const bases=[clean];
       const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
