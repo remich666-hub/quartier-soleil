@@ -1101,7 +1101,10 @@ async function fetchClimate(){ // share of clear-sky direct sun actually receive
     const j=await r.json();const T=j.hourly.time,V=j.hourly.direct_normal_irradiance;const B={};
     T.forEach((t,i)=>{const v=V[i];if(v==null)return;const k=(+t.slice(5,7))+':'+(+t.slice(11,13));(B[k]=B[k]||[]).push(v);});
     const fr=[];for(let m=1;m<=12;m++){let s=0,cs=0;for(let hh=0;hh<24;hh++){const a=B[m+':'+hh];if(!a)continue;const so=[...a].sort((x,y)=>x-y);const p=so[Math.floor(so.length*0.95)];if(p<50)continue;s+=a.reduce((x,y)=>x+y,0);cs+=p*a.length;}fr.push(cs?s/cs:null);}
-    return {frac:fr,src:'Open-Meteo, rayonnement direct mesuré par satellite 2019-2024'};
+    // calibration: the satellite ratio overestimates sunshine, more under cloudy skies.
+    // Fitted on the 1991-2020 Météo-France sunshine normals of 10 stations (Brest 0.79 … Marseille 0.92, residuals ≈ ±4 %).
+    const fa=fr.filter(v=>v!=null).reduce((a,b)=>a+b,0)/fr.filter(v=>v!=null).length; const k=Math.max(0.75,Math.min(0.95,0.571+0.49*fa));
+    return {frac:fr.map(v=>v==null?null:v*k),k:+k.toFixed(3),src:'rayonnement direct mesuré par satellite 2019-2024 (Open-Meteo), recalé sur les normales d\'ensoleillement Météo-France 1991-2020'};
   }catch(e){return null;}
 }
 function rangesOf(lit,step){const out=[];let a=-1;lit.forEach((v,i)=>{if(v&&a<0)a=i;if(!v&&a>=0){out.push([a*step,i*step]);a=-1;}});if(a>=0)out.push([a*step,lit.length*step]);return out.map(([x,y])=>[fmtTime(x),fmtTime(y)]);}
@@ -1134,11 +1137,12 @@ async function reportData(){
       let lost=0;for(let doy=1;doy<=365;doy+=4){const md=dayOfYearToMD(Y,doy);for(let t=0;t<1440;t+=10){const sp=sunPos(localToInstant(Y,md.m,md.d,Math.floor(t/60),t%60),S.lat,S.lon);if(sp.alt<=0.005||sunVec(sp).dot(w.normal)<=0.02)continue;const a=sp.az/RAD;let da=((a-az0)%360+360)%360,span=((az1-az0)%360+360)%360;if(da>span+1.25)continue;if(sp.alt<=horizonAt(sk,sp.az))lost+=10/60*4;}}
       const nz=a=>Math.round(((a%360)+360)%360);return {type:o.type,dir:DIRS[Math.round(mid/45)%8],az0:nz(az0),az1:nz(az1),deg:+top.deg.toFixed(0),d:+top.d.toFixed(0),h:top.h!=null?+top.h.toFixed(1):null,lostH:Math.round(lost)};}).filter(o=>o.lostH>=5||o.deg>=12).sort((a,b)=>b.lostH-a.lostH).slice(0,6);
   }
+  let blind=false; if(S.skyline){const sk=S.skyline,mid=(sk.az.length-1)/2;let c=0,n=0;for(let i=0;i<sk.az.length;i++){if(Math.abs(i-mid)>12)continue;n++;const hh=sk.hits[i];if(hh&&hh.d<=3.5&&sk.hor[i]>60*RAD)c++;}blind=n>0&&c/n>0.7;}
   const climate=await fetchClimate();
   const real=climate?months.map((r,i)=>climate.frac[i]!=null?+(r.h*climate.frac[i]).toFixed(2):null):null;
   return {v:1,generated:new Date().toISOString(),address:S.label,lat:+S.lat.toFixed(6),lon:+S.lon.toFixed(6),alt:Math.round(S.alt0),
     window:{az:+f.az.toFixed(0),dir:DIRS[Math.round(f.az/45)%8],floor:w.floor,heightAboveGround:+(w.pos.z-u.zBase).toFixed(1),facadeLen:+f.len.toFixed(0),building:{h:+u.h.toFixed(1),ridge:u.ridge?+u.ridge.toFixed(1):null,floors:u.floors||null,usage:u.usage||null}},
-    lidar:L, year:Y, annual:{h:+(tot/nd).toFixed(2),free:+(ftot/nd).toFixed(2),hYear:Math.round(tot/nd*365)}, months, matrix, keyDates:kd, paths, sky, obstacles,
+    lidar:L, blind, year:Y, annual:{h:+(tot/nd).toFixed(2),free:+(ftot/nd).toFixed(2),hYear:Math.round(tot/nd*365)}, months, matrix, keyDates:kd, paths, sky, obstacles,
     climate:climate?{frac:climate.frac.map(v=>v!=null?+v.toFixed(2):null),src:climate.src,realMonths:real,realAnnual:+(real.reduce((a,b)=>a+(b||0),0)/12).toFixed(2)}:null};
 }
 async function captureViews(){ // aerial view of the building + views from the window at the key dates (JPEG data URLs)

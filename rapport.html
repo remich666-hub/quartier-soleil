@@ -93,6 +93,7 @@ th.n{text-align:right;white-space:nowrap}
 .tag{display:inline-flex;align-items:center;gap:6px}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .views{display:grid;grid-template-columns:1fr;gap:16px}
+.pano svg{border-radius:10px;overflow:hidden}
 .views figure{margin:0}
 .views .shot{aspect-ratio:1200/520}
 .views figcaption{font-size:12px;color:var(--ink2);margin-top:6px}
@@ -162,6 +163,7 @@ const sunMark=(s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" aria-
 
 function verdict(R){
   const a=R.annual.h, w=R.keyDates[0].h, s=R.keyDates[2].h, lost=R.annual.free-a;
+  if(R.blind)return `Attention : un mur plus haut que la fenêtre est collé à cette façade, qui est probablement <b>aveugle</b> (mur mitoyen). Vérifiez qu'il y a bien une fenêtre à cet endroit ; sinon, choisissez une autre façade.`;
   let level=a>=5?'très ensoleillée':a>=3?'bien ensoleillée':a>=1.5?'moyennement ensoleillée':a>=0.5?'peu ensoleillée':'presque sans soleil direct';
   const main=R.obstacles&&R.obstacles[0];
   let t=`Cette fenêtre est <b>${level}</b> : ${hm(a)} de soleil direct par jour en moyenne, sur ${hm(R.annual.free)} possibles pour une façade ${DIRL[R.window.dir]||''} sans aucun obstacle.`;
@@ -226,6 +228,28 @@ function maskChart(R){
 }
 
 /* hour by hour, all year: 12 months × 10 min */
+/* what the window sees: a 180° panorama in perspective, measured skyline, sun on three key days */
+function panorama(R){
+  const W=640,H=270,hz=200,f=170; const az0=R.window.az;
+  const d=a=>((a-az0+540)%360)-180; const x=a=>W/2+d(a)/90*(W/2); const y=e=>hz-Math.tan(Math.min(78,Math.max(-5,e))*Math.PI/180)*f;
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Panorama depuis la fenêtre"><defs><linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfdde6"/><stop offset="1" stop-color="#f3eee4"/></linearGradient></defs>`;
+  s+=`<rect x="0" y="0" width="${W}" height="${hz}" fill="url(#skyG)"/><rect x="0" y="${hz}" width="${W}" height="${H-hz}" fill="#e9e2d6"/>`;
+  // sun paths
+  const days=[[12,'21 déc.'],[3,'20 mars'],[6,'21 juin']];
+  const horAt=a=>{if(!R.sky)return 0;let b=null,bd=1e9;R.sky.az.forEach((z,i)=>{const dd=Math.abs(((a-z+540)%360)-180);if(dd<bd){bd=dd;b=R.sky.deg[i];}});return bd>3?90:b;};
+  // skyline silhouette, coloured by kind of obstacle
+  if(R.sky){const pts=R.sky.az.map((a,i)=>[a,R.sky.deg[i],(R.sky.type||[])[i]||'']).filter(p=>Math.abs(d(p[0]))<=90).sort((p,q)=>d(p[0])-d(q[0]));
+    const col={'végétation':'#a9bd9c','bâtiment':'#d3cbbe','votre bâtiment':'#ddd5c8','relief':'#c2b7a4'};
+    for(let i=0;i<pts.length-1;i++){const [a1,e1,t1]=pts[i],[a2,e2]=pts[i+1];if(e1<=0.3&&e2<=0.3)continue;s+=`<path d="M${x(a1).toFixed(1)} ${hz} L${x(a1).toFixed(1)} ${y(Math.max(0,e1)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,e2)).toFixed(1)} L${x(a2).toFixed(1)} ${hz}Z" fill="${col[t1]||'#d3cbbe'}" stroke="${col[t1]||'#d3cbbe'}" stroke-width=".6"/>`;}
+    let dl=`M${x(pts[0][0])} ${y(Math.max(0,pts[0][1]))}`;pts.forEach(p=>{dl+=` L${x(p[0]).toFixed(1)} ${y(Math.max(0,p[1])).toFixed(1)}`;});s+=`<path d="${dl}" fill="none" stroke="#e8772e" stroke-width="1.2" stroke-opacity=".8"/>`;}
+  days.forEach(([m,lab])=>{const p=R.paths.find(q=>q.m===(m===3?3:m));if(!p)return;let seg=[],on=null;const flush=()=>{if(seg.length>1)s+=`<polyline points="${seg.join(' ')}" fill="none" stroke="${on?'#e8772e':'#9a9083'}" stroke-width="${on?2.2:1.2}" ${on?'':'stroke-dasharray="3 3"'} stroke-linecap="round"/>`;};
+    p.pts.forEach(([a,e])=>{if(e<0||Math.abs(d(a))>90){flush();seg=[];on=null;return;}const vis=e>horAt(a);const pt=x(a).toFixed(1)+','+y(e).toFixed(1);if(on!==null&&vis!==on){seg.push(pt);flush();seg=[pt];}on=vis;seg.push(pt);});flush();
+    const pk=p.pts.reduce((b,c)=>c[1]>b[1]?c:b);if(Math.abs(d(pk[0]))<85){const vis=pk[1]>horAt(pk[0]);s+=`<circle cx="${x(pk[0])}" cy="${y(pk[1])}" r="7" fill="${vis?'#f0a35a':'#fdfbf7'}" stroke="${vis?'#e8772e':'#9a9083'}" stroke-width="1.2"/><text x="${x(pk[0])}" y="${y(pk[1])-12}" text-anchor="middle" font-size="10" fill="#5e554a">${lab}</text>`;}});
+  // own wall beyond ±90° and frame
+  s+=`<rect x="0" y="0" width="6" height="${H}" fill="#cfc6b8"/><rect x="${W-6}" y="0" width="6" height="${H}" fill="#cfc6b8"/>`;
+  [['E',90],['SE',135],['S',180],['SO',225],['O',270],['N',0],['NE',45],['NO',315]].forEach(([n,a])=>{if(Math.abs(d(a))>85)return;s+=`<text x="${x(a)}" y="${H-10}" text-anchor="middle" font-size="11" font-weight="500" fill="#5e554a">${n}</text>`;});
+  return s+'</svg>';
+}
 function heatmap(R){
   const t0=4*6,t1=22*6; const W=640,rowH=15,pl=44,pt=4,pb=20; const cw=(W-pl)/(t1-t0); const H=pt+rowH*12+pb;
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Soleil sur la fenêtre, heure par heure, toute l'année">`;
@@ -276,14 +300,14 @@ function render(R){
     <p class="lead">Chaque ligne est un mois, de 4 h à 22 h. En orange, le soleil frappe la vitre. En gris, il est levé et face à la fenêtre, mais caché par un obstacle.</p>
     <div class="chart">${heatmap(R)}</div>
     <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil sur la fenêtre</span><span><i class="sw" style="background:var(--shade)"></i>Soleil caché par un obstacle</span><span><i class="sw" style="background:var(--raised)"></i>Soleil absent ou derrière la façade</span></div>
-    ${views.length?`<div class="figure" style="margin-top:8px"><h3>La vue depuis la fenêtre</h3><p class="small">Reconstitution 3D à partir des données IGN, à hauteur de la fenêtre. La ligne orange est l'horizon mesuré au LiDAR, le disque le soleil à l'heure indiquée.</p>
-      <div class="views">${views.map((v,i)=>i!==0?'':`<figure><div class="shot"><img src="${v}" alt="Vue depuis la fenêtre le ${vlab[i][0]}"></div><figcaption><b>${vlab[i][0]}</b> · ${vlab[i][1]} · l'arc pointillé est la course du soleil ce jour-là</figcaption></figure>`).join('')}</div></div>`:''}`;
+    <div class="figure" style="margin-top:8px"><h3>Ce que voit la fenêtre</h3><p class="small">Panorama à 180° depuis la vitre, dessiné à partir de l'horizon mesuré au LiDAR (trait orange) : bâtiments en beige, végétation en vert. Les arcs sont la course du soleil le 21 décembre, le 20 mars et le 21 juin ; pleins quand le soleil est visible, pointillés quand il est caché.</p>
+      <div class="chart pano">${panorama(R)}</div></div>`;
   const p5=`<div><div class="kicker">Méthode</div><h2>Comment ces chiffres sont calculés</h2></div>
     <div class="method">
       <div><h3>La position du soleil</h3><p>Calculée pour l'adresse exacte, toutes les 5 à 10 minutes, avec l'algorithme astronomique de la NOAA et l'heure légale française (heure d'été comprise).</p></div>
       <div><h3>La fenêtre</h3><p>${winTxt}. Le soleil compte comme « direct » quand il est au-dessus de l'horizon, face à la façade, et qu'aucun obstacle ne coupe la ligne entre lui et le centre de la vitre.</p></div>
       <div><h3>Les obstacles</h3><p>L'horizon est mesuré dans ${R.sky?R.sky.az.length:'—'} directions autour de la fenêtre, jusqu'à 320 m, sur le modèle numérique de surface LiDAR HD de l'IGN (un point tous les 50 cm, qui inclut bâtiments, arbres, haies et relief). Le contour du bâtiment est recalé sur le toit mesuré au laser.</p></div>
-      <div><h3>Les nuages</h3><p>${R.climate?`Le rayonnement direct réellement reçu à cet endroit, mesuré par satellite de 2019 à 2024, est comparé à celui d'un ciel parfaitement clair. On obtient pour chaque mois la part de soleil qui passe vraiment les nuages.`:'Non disponible pour cette adresse.'}</p></div>
+      <div><h3>Les nuages</h3><p>${R.climate?`Le rayonnement direct réellement reçu à cet endroit, mesuré par satellite de 2019 à 2024, est comparé à celui d'un ciel parfaitement clair, mois par mois. Le résultat est recalé sur les normales d'ensoleillement Météo-France 1991-2020 de dix grandes villes (écart résiduel d'environ ±5 %).`:'Non disponible pour cette adresse.'}</p></div>
       <div><h3>Les limites</h3><p>Les arbres à feuilles caduques laissent passer une partie du soleil en hiver : le rapport les compte comme opaques toute l'année. Les données LiDAR datent du dernier vol de l'IGN sur la zone, un chantier ou un abattage récent n'y figure pas. Les débords de toit, volets et balcons ne sont pas modélisés.</p></div>
       <div><h3>Précision</h3><p>Sur nos tests, l'horizon mesuré correspond à la vue réelle à quelques degrés près. Les heures de soleil sont données à 10 minutes près. L'estimation avec les nuages est une moyenne : une année donnée peut s'en écarter.</p></div>
     </div>
@@ -293,6 +317,7 @@ function render(R){
       <li><span>Relief : RGE ALTI®</span><span>IGN</span></li>
       <li><span>Vue aérienne : BD ORTHO®</span><span>IGN</span></li>
       <li><span>Ensoleillement réel : rayonnement satellite 2019-2024</span><span>Open-Meteo</span></li>
+      <li><span>Calage des nuages : normales d'ensoleillement 1991-2020</span><span>Météo-France</span></li>
       <li><span>Adresse : Base Adresse Nationale</span><span>data.gouv.fr</span></li>
     </ul></div>
     <p class="small" style="margin-top:auto">${R.anonymous?'Exemple réel, adresse volontairement tronquée.':`Coordonnées : <span class="mono">${fr(R.lat,5)}, ${fr(R.lon,5)} · altitude ${R.alt} m</span>.`} Ce rapport décrit l'ensoleillement géométrique d'une fenêtre à partir de données publiques. Il ne remplace pas une visite à différentes heures.</p>`;
