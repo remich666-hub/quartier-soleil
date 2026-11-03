@@ -20,6 +20,7 @@
   color-scheme:light;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--desk);color:var(--ink);font:400 14px/1.5 var(--sans);font-feature-settings:"tnum" 1;
   padding:32px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
@@ -82,9 +83,12 @@ p{margin:0;max-width:68ch}
 .figure{display:flex;flex-direction:column;gap:10px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{font-weight:500;color:var(--muted);font-size:12px;text-align:left;padding:0 8px 8px 0;border-bottom:1px solid var(--line2)}
+th{font-weight:500;color:var(--muted);font-size:12px;text-align:left;padding:0 8px 8px 0;border-bottom:1px solid var(--line2);font-family:var(--sans)}
+.tablewrap{overflow-x:auto;margin:0 -2px}
+.tablewrap table{min-width:520px}
 td{padding:9px 8px 9px 0;border-bottom:1px solid var(--line);vertical-align:top}
-td.n,th.n{text-align:right;font-family:var(--mono);white-space:nowrap}
+td.n{text-align:right;font-family:var(--mono);white-space:nowrap}
+th.n{text-align:right;white-space:nowrap}
 .tag{display:inline-flex;align-items:center;gap:6px}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .views{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
@@ -202,7 +206,7 @@ function maskChart(R){
   // sun paths: Dec, Jan/Nov, Feb/Oct, Mar/Sep, Apr/Aug, May/Jul, Jun
   [12,1,2,3,4,5,6].forEach(m=>{const p=R.paths.find(q=>q.m===m);if(!p)return;let seg=[],on=null;const flush=()=>{if(seg.length>1)s+=`<polyline points="${seg.join(' ')}" fill="none" stroke="${on?css('--sun'):css('--shade-ink')}" stroke-width="${on?2.2:1.2}" ${on?'':'stroke-dasharray="3 3"'} stroke-linecap="round"/>`;};
     p.pts.forEach(([a,e])=>{const d=((a-az0+540)%360)-180;if(e<0||Math.abs(d)>95){flush();seg=[];on=null;return;}const vis=Math.abs(d)<90&&e>horAt(a);if(on!==null&&vis!==on){const pt0=x(a).toFixed(1)+','+y(e).toFixed(1);seg.push(pt0);flush();seg=[pt0];}on=vis;seg.push(x(a).toFixed(1)+','+y(e).toFixed(1));});flush();
-    const peak=p.pts.reduce((b,c)=>c[1]>b[1]?c:b);const dp=((peak[0]-az0+540)%360)-180;if(Math.abs(dp)<80)s+=`<text x="${x(peak[0])+4}" y="${y(peak[1])-5}" font-size="9.5" fill="${css('--ink2')}">${{12:'21 déc.',1:'21 janv. · nov.',2:'21 févr. · oct.',3:'21 mars · sept.',4:'21 avr. · août',5:'21 mai · juil.',6:'21 juin'}[m]}</text>`;});
+    const peak=p.pts.reduce((b,c)=>c[1]>b[1]?c:b);const dp=((peak[0]-az0+540)%360)-180;if(Math.abs(dp)<80&&[12,3,6].includes(m))s+=`<text x="${x(peak[0])+4}" y="${y(peak[1])-5}" font-size="9.5" fill="${css('--ink2')}">${{12:'21 décembre',3:'21 mars et 21 septembre',6:'21 juin'}[m]}</text>`;});
   s+=`<rect x="${pl}" y="${pt}" width="${W-pl-pr}" height="${H-pt-pb}" fill="none" stroke="${css('--line2')}"/>`;
   return s+'</svg>';
 }
@@ -249,9 +253,9 @@ function render(R){
     <p class="lead">Le graphique montre le ciel tel que la fenêtre le voit, de gauche à droite. La silhouette grise est l'horizon réel mesuré au laser aérien (LiDAR HD de l'IGN) : bâtiments, arbres, haies, relief. Chaque courbe est la course du soleil un jour de l'année. Là où la courbe passe au-dessus de la silhouette, le soleil entre.</p>
     <div class="chart">${maskChart(R)}</div>
     <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil visible</span><span><i class="sw" style="border:1px dashed var(--shade-ink)"></i>Soleil caché</span><span><i class="sw" style="background:var(--shade)"></i>Obstacles et mur de la façade</span><span><i class="sw" style="border-top:1px dashed var(--muted);border-radius:0;height:0;width:14px"></i>Heures</span></div>
-    ${obs.length?`<div class="figure"><h3>Obstacles identifiés</h3><table><thead><tr><th>Obstacle</th><th>Direction</th><th class="n">Distance</th><th class="n">Hauteur</th><th class="n">Hauteur dans le ciel</th><th class="n">Soleil retiré / an</th></tr></thead><tbody>
-      ${obs.map(o=>`<tr><td><span class="tag"><i class="dot" style="background:${o.type==='végétation'?'#8aa37c':o.type==='relief'?'#b9a98f':'#b8b0a3'}"></i>${o.type==='végétation'?'Végétation':o.type==='votre bâtiment'?'Votre bâtiment':o.type==='bâtiment'?'Bâtiment voisin':'Mur, clôture ou relief'}</span></td><td>${DIRL[o.dir]} <span class="mono">${o.az0}°–${o.az1}°</span></td><td class="n">${o.d} m</td><td class="n">${o.h!=null?fr(o.h)+' m':'—'}</td><td class="n">jusqu'à ${o.deg}°</td><td class="n">${o.lostH} h</td></tr>`).join('')}
-      </tbody></table><p class="small">« Soleil retiré » : heures de soleil direct par an que la fenêtre recevrait si cet obstacle n'existait pas.</p></div>`:''}`;
+    ${obs.length?`<div class="figure"><h3>Obstacles identifiés</h3><div class="tablewrap"><table><thead><tr><th>Obstacle</th><th>Direction</th><th class="n">Distance</th><th class="n">Hauteur</th><th class="n">Masque</th><th class="n">Soleil retiré / an</th></tr></thead><tbody>
+      ${obs.map(o=>`<tr><td><span class="tag"><i class="dot" style="background:${o.type==='végétation'?'#8aa37c':o.type==='relief'?'#b9a98f':'#b8b0a3'}"></i>${o.type==='végétation'?'Végétation':o.type==='votre bâtiment'?'Votre bâtiment':o.type==='bâtiment'?'Bâtiment voisin':'Mur, clôture ou relief'}</span></td><td>${DIRL[o.dir]} <span class="mono">${o.az0}°–${o.az1}°</span></td><td class="n">${o.d} m</td><td class="n">${o.h!=null?fr(o.h)+' m':'—'}</td><td class="n">${o.deg}°</td><td class="n">${o.lostH} h</td></tr>`).join('')}
+      </tbody></table></div><p class="small">« Masque » : angle jusqu'auquel l'obstacle cache le ciel vu de la fenêtre. « Soleil retiré » : heures de soleil direct par an que la fenêtre recevrait si cet obstacle n'existait pas.</p></div>`:''}`;
   const views=(R.images&&R.images.views)||[];
   const vlab=[['21 décembre','12 h 30'],['20 mars','13 h'],['21 juin','13 h 30']];
   const p4=`<div><div class="kicker">Heure par heure</div><h2>Toute l'année d'un coup d'œil</h2></div>
