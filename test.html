@@ -956,7 +956,7 @@ function buildScene(features){
       fitWallUVs(geo,h);
       const mesh=new THREE.Mesh(geo,matsFor(usage,false));
       mesh.position.z=zBase-SINK; mesh.castShadow=true; mesh.receiveShadow=true;
-      mesh.userData={h,floors:p.nombre_d_etages,usage,zBase,roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes)};
+      mesh.userData={h,floors:p.nombre_d_etages,usage,zBase,zTop:tMax!=null?tMax-S.alt0:null,roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes)};
       if(rise>0&&!far){let done=false;const ra=roofSets[roofKey].P.length;if(!holes.length&&convexity(outer)>0.8)done=addRoof(roofSets[roofKey],outer,zBase+h,zBase+h+rise);if(done)mesh.userData.roofRef={key:roofKey,a:ra,b:roofSets[roofKey].P.length};
         if(!done){const g2=new THREE.ExtrudeGeometry(shape,{depth:rise+0.02,bevelEnabled:false});const m2=new THREE.Mesh(g2,ROOF[roofKey]);m2.position.z=zBase+h-0.01;m2.castShadow=m2.receiveShadow=true;scene.add(m2);roofMeshes.push(m2);mesh.userData.roofMesh=m2;}
         mesh.userData.ridge=h+rise;}
@@ -2007,6 +2007,13 @@ async function lidarBuildings(){
       const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
       const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const bp=tw&&tw.base.length>=8?tw.base:pt.pts;const md=partModel(bp,pt.rings);if(!md)continue;md.pts=F===Ff?bp:null;vols.push({rings:pt.rings,md});
         if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){m2.pts=F===Ff?t.pts:null;vols.push({rings:[t.ring],md:m2,tower:true});}});}
+      // Hard ceiling: the IGN's highest roof point of this building (photogrammetry on the building itself). The laser also sees
+      // tree crowns over roofs; whatever rises above that ceiling is foliage, never a storey: towers are dropped, volumes clipped.
+      if(u.zTop!=null&&u.zTop>u.zBase+2){const lim=u.zTop-u.zBase+0.8;
+        for(let i=vols.length-1;i>=0;i--){const v=vols[i],md=v.md,top=md.h+(md.rise||0);if(top<=lim)continue;
+          if(v.tower){vols.splice(i,1);continue;}
+          const over=top-lim; if((md.rise||0)>over)md.rise-=over; else{md.rise=Math.min(md.rise||0,Math.max(0,lim-2.5));md.h=Math.max(2.5,lim-md.rise);} md.pts=null;}
+        if(!vols.length)continue;}
       // storeys: the IGN count belongs to the main volume (largest footprint); the others are counted from it, ~3 m a storey
       const F0=u.floors; let main=null,ma=-1; vols.forEach(v=>{if(v.tower)return;const ar=Math.abs(areaOf(v.rings[0]));if(ar>ma){ma=ar;main=v;}}); if(!main)main=vols[0];
       const sH=main&&F0>0?main.md.h/F0:0, ok=sH>=2.6&&sH<=3.8; // the IGN count is trusted only if it gives a believable storey height
