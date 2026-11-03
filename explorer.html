@@ -1167,13 +1167,15 @@ function introMove(){
   if(t){const bb=t.geometry.boundingBox||(t.geometry.computeBoundingBox(),t.geometry.boundingBox);c=new THREE.Vector3((bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2,t.userData.zBase+t.userData.h*0.4);
     d1=Math.max(d1,Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y)*3);}
   let th1=-0.8, ph1=0.78;
-  // land facing the house's longest, most open façade (party walls excluded)
+  // land facing the main façade: street side first, then long and open (party walls excluded)
   const hc=c.clone(); scene.updateMatrixWorld();
   if(t){try{const u=t.userData, bl=blindMap(t), others=S.meshes.filter(m=>m!==t); let best=null,bs=-1;
     u.facades.forEach((f,i)=>{if(f.len<3||bl[i].every(b=>b))return;
       const o=new THREE.Vector3(f.mid.x,f.mid.y,u.zBase+2.5).addScaledVector(f.normal,0.5);
       const h=new THREE.Raycaster(o,f.normal,0,120).intersectObjects(others,false); const d=h.length?h[0].distance:120;
-      const sc=f.len*Math.sqrt(Math.min(d,80)); if(sc>bs){bs=sc;best=f;}});
+      // the address point usually sits on the street, in front of the entrance: favour the façade that faces it
+      const vx=-f.mid.x,vy=-f.mid.y,vd=Math.hypot(vx,vy),face=vd>3?(f.normal.x*vx+f.normal.y*vy)/vd:0;
+      const sc=f.len*Math.sqrt(Math.min(d,80))*(1+2*Math.max(0,face)); if(sc>bs){bs=sc;best=f;}});
     if(best){th1=Math.atan2(best.normal.x,best.normal.y); ph1=0.5;
       c=new THREE.Vector3(best.mid.x+best.normal.x*2,best.mid.y+best.normal.y*2,u.zBase+u.h*0.45);
       d1=Math.max(isPhone()?70:60,best.len*(isPhone()?3.2:2.4),u.h*4);}}catch(e){}}
