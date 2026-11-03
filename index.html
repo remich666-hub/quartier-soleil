@@ -443,7 +443,7 @@ function orthoLayer(mesh,mat,lat,lon,z,R,fallback,segs,onDone){
 function loadOrtho(lat,lon){
   orthoLayer(ground,groundMat,lat,lon,17,3,0xe9e6df,28);          // 7×7 tiles ≈ 1.4 km, 80 cm/px
   orthoLayer(inner,innerMat,lat,lon,19,isPhone()?4:5,0,40,(raw,w,e,n,s)=>{ // 9×9 or 11×11 tiles ≈ 450–550 m, 20 cm/px
-    if(!raw)return; try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;const nt=rebuildTrees();S.counts&&(S.counts.orthoHedges=buildHedges((S.osmHedges||[]).concat(det.hedges)));if(S.counts)status(loadedText(nt));refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
+    if(!raw)return; S.rawOrtho={raw,w,e,n,s}; try{const det=detectCanopy(raw,w,e,n,s);console.log('canopy',det.trees.length,det.hedges.length);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;const nt=rebuildTrees();S.counts&&(S.counts.orthoHedges=buildHedges((S.osmHedges||[]).concat(det.hedges)));if(S.counts)status(loadedText(nt));refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
   });
   inner.position.z=ground.position.z+0.06;
 }
@@ -1095,7 +1095,7 @@ function frame(now){
   renderer.render(scene,camera); requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.QS={S,scene,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown}};
+window.QS={S,scene,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown}};
 update(); load($('addr').value);
 })();
 </script>
