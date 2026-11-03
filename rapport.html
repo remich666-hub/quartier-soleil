@@ -283,7 +283,8 @@ function render(R){
       <li><span>Adresse : Base Adresse Nationale</span><span>data.gouv.fr</span></li>
     </ul></div>
     <p class="small" style="margin-top:auto">Coordonnées : <span class="mono">${fr(R.lat,5)}, ${fr(R.lon,5)} · altitude ${R.alt} m</span>. Ce rapport décrit l'ensoleillement géométrique d'une fenêtre à partir de données publiques. Il ne remplace pas une visite à différentes heures.</p>`;
-  $('#doc').innerHTML=[p1,p2,p3,p4,p5].map((b,i)=>page(i+1,N,R,b,i===0?'cover-page':'')).join('');
+  const all=[p1,p2,p3,p4,p5].map((b,i)=>page(i+1,N,R,b,i===0?'cover-page':''));
+  $('#doc').innerHTML=(new URLSearchParams(location.search).get('embed')?[all[2],all[1]]:all).join('');
   document.title=`Ensoleillement · ${R.address}`;
 }
 
