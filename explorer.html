@@ -421,7 +421,7 @@ el.addEventListener('touchstart',e=>{if(e.touches.length===2){pinch=Math.hypot(e
 el.addEventListener('touchend',e=>{if(e.touches.length<2)setTimeout(()=>{pinch=null;},80);},{passive:true});
 el.addEventListener('touchmove',e=>{if(e.touches.length===2&&pinch){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(cam.mode==='window'){cam.hfov=Math.max(30,Math.min(110,(cam.hfov||82)*pinch/d));setFov();}else{cam.dist=Math.max(30,Math.min(2600,cam.dist*pinch/d));
     // two fingers moving together slide the map (same feel as a right-drag)
-    const m=mid2(e.touches);if(pmid){const dx=m.x-pmid.x,dy=m.y-pmid.y,k=cam.dist*0.0016;const right=new THREE.Vector3(Math.cos(cam.theta),-Math.sin(cam.theta),0);const fwd=new THREE.Vector3(-Math.sin(cam.theta),-Math.cos(cam.theta),0);cam.target.addScaledVector(right,-dx*k).addScaledVector(fwd,-dy*k);}pmid=m;applyCam();}pinch=d;}},{passive:true});
+    const m=mid2(e.touches);if(pmid){const dx=m.x-pmid.x,dy=m.y-pmid.y,k=cam.dist*0.0016;const right=new THREE.Vector3(Math.cos(cam.theta),-Math.sin(cam.theta),0);const fwd=new THREE.Vector3(-Math.sin(cam.theta),-Math.cos(cam.theta),0);cam.target.addScaledVector(right,dx*k).addScaledVector(fwd,dy*k);}pmid=m;applyCam();}pinch=d;}},{passive:true});
 function resize(){const w=view.clientWidth,h=view.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
 window.addEventListener('resize',()=>{resize();if(cam.mode==='window')setFov();}); resize(); applyCam();
 function showTab(name){ if(name==='bottom'){$('sheet').classList.add('collapsed');} else $('sheet').classList.remove('collapsed'); }
@@ -1632,6 +1632,7 @@ async function lidarBuildings(){
     return true;
   }
 }
+window.__dbg={S,get cam(){return cam;}};
 function rebuildEdges(){
   if(edgeLines){scene.remove(edgeLines);edgeLines.geometry.dispose();edgeLines=null;}
   const parts=S.meshes.map(m=>m.userData.edgeArr).filter(Boolean).concat(S.roofEdgeParts||[]);
