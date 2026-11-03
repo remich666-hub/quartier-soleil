@@ -1573,8 +1573,8 @@ async function lidarBuildings(){
         if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){m2.pts=F===Ff?t.pts:null;vols.push({rings:[t.ring],md:m2,tower:true});}});}
       // storeys: the IGN count belongs to the main volume (largest footprint); the others are counted from it, ~3 m a storey
       const F0=u.floors; let main=null,ma=-1; vols.forEach(v=>{if(v.tower)return;const ar=Math.abs(areaOf(v.rings[0]));if(ar>ma){ma=ar;main=v;}}); if(!main)main=vols[0];
-      const ok=main&&F0>0&&main.md.h/F0>=2.3&&main.md.h/F0<=4.6;
-      vols.forEach(v=>{const hb=v.md.h;v.md.floors=ok?Math.max(1,F0+Math.round((hb-main.md.h)/3)):Math.max(1,Math.floor((hb-0.5)/2.9+0.35));});
+      const sH=main&&F0>0?main.md.h/F0:0, ok=sH>=2.6&&sH<=3.8; // the IGN count is trusted only if it gives a believable storey height
+      vols.forEach(v=>{const hb=v.md.h;v.md.floors=ok?(v===main?F0:Math.max(1,Math.round(hb/sH))):Math.max(1,Math.floor((hb-0.5)/2.9+0.35));});
       const blocks=vols.map(v=>{const b=makeBlock(m,v.rings,v.md,roofSets);if(v.tower)b.userData.tower=true;return b;});
       if(!blocks.length)continue;
       buildingsGroup.remove(m);m.geometry.dispose();gone.add(m);
