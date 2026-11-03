@@ -544,33 +544,50 @@ async function buildParcels(lat,lon){
   const M=2*(DETAIL_R+40), cv=document.createElement('canvas'); cv.width=cv.height=M; const cg=cv.getContext('2d'); cg.fillStyle='#000';
   S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;cg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>{const X=q.x+M/2,Y=M/2-q.y;i?cg.lineTo(X,Y):cg.moveTo(X,Y);});cg.closePath();});cg.fill('evenodd');});
   const occ=cg.getImageData(0,0,M,M).data; const built=(x,y)=>{const X=Math.floor(x+M/2),Y=Math.floor(M/2-y);if(X<0||Y<0||X>=M||Y>=M)return false;return occ[(Y*M+X)*4+3]>100;};
-  const cG=new THREE.Color(0xb3cc9a), cM=new THREE.Color(0xc8c3ba), P=[],N=[],C=[],L=[];
+  const cG=new THREE.Color(0xb3cc9a), cM=new THREE.Color(0xc8c3ba), cLot=new THREE.Color(PLAN_GROUND), P=[],N=[],C=[],L=[],BP=[],BN=[]; let nParc=0;
   feats.forEach(f=>{const g=f.geometry;const polys=g.type==='Polygon'?[g.coordinates]:(g.type==='MultiPolygon'?g.coordinates:[]);
     polys.forEach(poly=>{if(!poly[0]||poly[0].length<4)return;const outer=ringToLocal(poly[0]);const holes=[];for(let i=1;i<poly.length;i++)holes.push(ringToLocal(poly[i]));
       let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;outer.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});
       if(Math.hypot((x0+x1)/2,(y0+y1)/2)>DETAIL_R+30)return;
       // outline
-      [outer].concat(holes).forEach(r=>{for(let i=0;i<r.length-1;i++){const q=drapeLine([r[i].x,r[i].y],[r[i+1].x,r[i+1].y],3);for(let k=0;k<q.length-1;k++){const a=q[k],b=q[k+1];L.push(a[0],a[1],terrainZ(a[0],a[1])+0.09,b[0],b[1],terrainZ(b[0],b[1])+0.09);}}});
+      [outer].concat(holes).forEach(r=>{for(let i=0;i<r.length-1;i++){const q=drapeLine([r[i].x,r[i].y],[r[i+1].x,r[i+1].y],3);for(let k=0;k<q.length-1;k++){const a=q[k],b=q[k+1],za=terrainZ(a[0],a[1]),zb=terrainZ(b[0],b[1]);L.push(a[0],a[1],za+0.12,b[0],b[1],zb+0.12);
+        // a 30 cm strip as well, so the limits still read in oblique views where a 1 px line vanishes
+        const dx=b[0]-a[0],dy=b[1]-a[1],ll=Math.hypot(dx,dy);if(ll>0.05){const nx=-dy/ll*0.15,ny=dx/ll*0.15;pushQuad(BP,BN,[a[0]-nx,a[1]-ny,za+0.11],[b[0]-nx,b[1]-ny,zb+0.11],[b[0]+nx,b[1]+ny,zb+0.11],[a[0]+nx,a[1]+ny,za+0.11],[0,0,1]);}}}});
       // what covers the open part
       let n=0,nb=0,ng=0; const st=(x1-x0)*(y1-y0)>4000?2:1.2;
       for(let x=x0+st/2;x<x1;x+=st)for(let y=y0+st/2;y<y1;y+=st){if(!pointInPoly(x,y,outer)||holes.some(h=>pointInPoly(x,y,h)))continue;n++;if(built(x,y)){nb++;continue;}
         const e=green(x,y); const tall=MH&&MH.at?MH.at(x,y):null; if(e>12||(tall!=null&&tall>1.2))ng++;}
-      const open=n-nb; if(open*st*st<25||open<0.12*n)return; // almost fully built: outline only
-      const gr=ng/open, t=Math.min(1,Math.max(0,(gr-0.2)/0.5)); const col=cM.clone().lerp(cG,t*t*(3-2*t));
+      const open=n-nb; let col;
+      if(open*st*st<25||open<0.12*n)col=cLot; // almost fully built: a plain lot
+      else{const gr=ng/open, t=Math.min(1,Math.max(0,(gr-0.2)/0.5)); col=cM.clone().lerp(cG,t*t*(3-2*t));}
       const shape=new THREE.Shape(outer);holes.forEach(h=>shape.holes.push(new THREE.Path(h)));const sg=new THREE.ShapeGeometry(shape);const pos=sg.attributes.position,idx=sg.index;
       const T=[];for(let i=0;i<idx.count;i+=3)T.push([0,1,2].map(d=>{const k=idx.getX(i+d);return [pos.getX(k),pos.getY(k)];}));
-      const n0=P.length; drapeTris(T,0.06,P,N); for(let k=n0;k<P.length;k+=3)C.push(col.r,col.g,col.b); sg.dispose();});});
+      nParc++; const n0=P.length; drapeTris(T,0.08,P,N); for(let k=n0;k<P.length;k+=3)C.push(col.r,col.g,col.b); sg.dispose();});});
   if(tok!==parcelTok)return;
   parcelGroup=new THREE.Group();
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
-    const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true,polygonOffset:true,polygonOffsetFactor:-1}));m.receiveShadow=true;m.renderOrder=0;m.userData.fill=true;fadeMat(m.material);parcelGroup.add(m);}
+    const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8}));m.receiveShadow=true;m.renderOrder=0;m.userData.fill=true;fadeMat(m.material);parcelGroup.add(m);}
+  if(BP.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(BP,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(BN,3));
+    const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa39a8a,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}));m.receiveShadow=true;m.renderOrder=1;fadeMat(m.material);parcelGroup.add(m);}
   if(L.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(L,3));
-    const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x9a907f,transparent:true,opacity:0.6}));l.renderOrder=1;fadeMat(l.material);parcelGroup.add(l);}
-  scene.add(parcelGroup); applyGroundMode();
+    const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x8a8070,transparent:true,opacity:0.75}));l.renderOrder=1;fadeMat(l.material);parcelGroup.add(l);}
+  scene.add(parcelGroup); if(nParc>20)streetsFromCadastre(); applyGroundMode();
+}
+const STREET=0xf4f1eb, CAD_R0=200, CAD_R1=226;
+function streetsFromCadastre(){ // streets = the public space between parcels: no more estimated road ribbons inside the cadastral zone
+  S.cadStreets=true; groundStreetColours();
+  if(S.roadFeats&&S.roadMesh){const P=[],N=[];ribbons(S.roadFeats,roadWidth,0.18,P,N,CAD_R0-8);const g=S.roadMesh.geometry;g.dispose();
+    const ng=new THREE.BufferGeometry();ng.setAttribute('position',new THREE.Float32BufferAttribute(P,3));ng.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));S.roadMesh.geometry=ng;}
+}
+function groundStreetColours(){ // street colour inside the parcels' zone, plan colour beyond (vertex colours of the ground)
+  const g=ground.geometry,pos=g.attributes.position; if(!pos)return; const a=new Float32Array(pos.count*3),c0=new THREE.Color(STREET),c1=new THREE.Color(PLAN_GROUND),c=new THREE.Color();
+  for(let i=0;i<pos.count;i++){const r=Math.hypot(pos.getX(i)+ground.position.x,pos.getY(i)+ground.position.y),t=Math.min(1,Math.max(0,(r-CAD_R0)/(CAD_R1-CAD_R0)));c.copy(c0).lerp(c1,t*t*(3-2*t));a[i*3]=c.r;a[i*3+1]=c.g;a[i*3+2]=c.b;}
+  g.setAttribute('color',new THREE.BufferAttribute(a,3));
 }
 function applyGroundMode(){
   if(photoMode&&ground.userData.loadTiles)ground.userData.loadTiles();
   [[ground,groundMat,PLAN_GROUND],[inner,innerMat,null]].forEach(([m,mat,col])=>{const t=m.userData.photoTex;
+    const vc=m===ground&&!!S.cadStreets&&!photoMode&&!!m.geometry.attributes.color; if(mat.vertexColors!==vc){mat.vertexColors=vc;mat.needsUpdate=true;} if(vc)col=0xffffff;
     if(photoMode&&t){mat.map=t;mat.color.set(0xffffff);mat.opacity=1;m.visible=true;}
     else{mat.map=null;if(col!=null){mat.color.set(col);mat.opacity=1;m.visible=true;}else{mat.opacity=0;m.visible=false;}}
     mat.needsUpdate=true;});
@@ -724,10 +741,10 @@ function pushQuad(P,N,a,b,c,d,n){P.push(a[0],a[1],a[2],b[0],b[1],b[2],c[0],c[1],
 function densify(pts){ // a polyline with a point every ≤ 3 m, so it follows the laser relief
   if(!S.mnt||pts.length<2)return pts; const out=[pts[0]];
   for(let i=0;i<pts.length-1;i++){const r=drapeLine(pts[i],pts[i+1],3);for(let k=1;k<r.length;k++)out.push(r[k]);} return out;}
-function ribbons(feats,width,lift,P,N){ // flat strip on the ground
+function ribbons(feats,width,lift,P,N,minR){ // flat strip on the ground
   feats.forEach(f=>{const g=f.geometry;const lines=g.type==='LineString'?[g.coordinates]:(g.type==='MultiLineString'?g.coordinates:[]);const w=typeof width==='function'?width(f.properties):width;
     lines.forEach(line=>{const pts=densify(line.map(lineLocal)).map(p=>[p[0],p[1],terrainZ(p[0],p[1])+lift]);
-      for(let i=0;i<pts.length-1;i++){const a=pts[i],b=pts[i+1];const dx=b[0]-a[0],dy=b[1]-a[1];const L=Math.hypot(dx,dy);if(L<0.3)continue;const nx=-dy/L*w/2,ny=dx/L*w/2;
+      for(let i=0;i<pts.length-1;i++){const a=pts[i],b=pts[i+1];const dx=b[0]-a[0],dy=b[1]-a[1];const L=Math.hypot(dx,dy);if(L<0.3)continue;const nx=-dy/L*w/2,ny=dx/L*w/2; if(minR&&Math.hypot((a[0]+b[0])/2,(a[1]+b[1])/2)<minR)continue;
         pushQuad(P,N,[a[0]-nx,a[1]-ny,a[2]],[b[0]-nx,b[1]-ny,b[2]],[b[0]+nx,b[1]+ny,b[2]],[a[0]+nx,a[1]+ny,a[2]],[0,0,1]);}});});
 }
 function fences(feats,width,height,P,N){ // thin box along the line (hedge, wall)
@@ -772,11 +789,13 @@ function buildPlan(veg,roads){
     const mx=(s.a[0]+s.b[0])/2,my=(s.a[1]+s.b[1])/2; m.position.set(mx,my,Math.max(terrainZ(mx,my),terrainZ(s.a[0],s.a[1]),terrainZ(s.b[0],s.b[1]))+0.3); m.rotation.z=ang; m.renderOrder=2; planLayer.add(m);});
   applyGroundMode();
 }
+const roadWidth=p=>Math.max(4,(+p.largeur_de_chaussee)||((+p.nombre_de_voies)||1)*3.2);
 function buildLayers(roads,hedges,walls,rails,water){
   blockers=blockers.filter(b=>!layerMeshes.includes(b)); layerMeshes.forEach(m=>{scene.remove(m);m.geometry.dispose();}); layerMeshes=[];
   let P=[],N=[];
-  ribbons(roads.filter(f=>!(+(f.properties.position_par_rapport_au_sol??0)>0)),p=>Math.max(4,(+p.largeur_de_chaussee)||((+p.nombre_de_voies)||1)*3.2),0.18,P,N);
-  meshOf(P,N,new THREE.MeshLambertMaterial({color:0xf5f2ec}),false);
+  S.roadFeats=roads.filter(f=>!(+(f.properties.position_par_rapport_au_sol??0)>0));
+  ribbons(S.roadFeats,roadWidth,0.18,P,N,S.cadStreets?CAD_R0-8:0);
+  S.roadMesh=meshOf(P,N,new THREE.MeshLambertMaterial({color:0xf5f2ec}),false);
   P=[];N=[]; ribbons(rails,3.2,0.14,P,N); meshOf(P,N,new THREE.MeshLambertMaterial({color:0xc9c4bb}),false);
   P=[];N=[]; surfaces(water,0.16,P,N); meshOf(P,N,new THREE.MeshLambertMaterial({color:0xc4d3da}),false);
   P=[];N=[]; fences(hedges,1.6,p=>{const h=+p.hauteur;return (h>0.3&&h<12)?h:2.2;},P,N); const hm=meshOf(P,N,new THREE.MeshLambertMaterial({color:0xa3bb98}),true); if(hm)blockers.push(hm);
@@ -937,7 +956,7 @@ function buildScene(features){
       fitWallUVs(geo,h);
       const mesh=new THREE.Mesh(geo,matsFor(usage,false));
       mesh.position.z=zBase-SINK; mesh.castShadow=true; mesh.receiveShadow=true;
-      mesh.userData={h,floors:p.nombre_d_etages,usage,zBase,roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes)};
+      mesh.userData={h,floors:p.nombre_d_etages,usage,zBase,zTop:tMax!=null?tMax-S.alt0:null,roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes)};
       if(rise>0&&!far){let done=false;const ra=roofSets[roofKey].P.length;if(!holes.length&&convexity(outer)>0.8)done=addRoof(roofSets[roofKey],outer,zBase+h,zBase+h+rise);if(done)mesh.userData.roofRef={key:roofKey,a:ra,b:roofSets[roofKey].P.length};
         if(!done){const g2=new THREE.ExtrudeGeometry(shape,{depth:rise+0.02,bevelEnabled:false});const m2=new THREE.Mesh(g2,ROOF[roofKey]);m2.position.z=zBase+h-0.01;m2.castShadow=m2.receiveShadow=true;scene.add(m2);roofMeshes.push(m2);mesh.userData.roofMesh=m2;}
         mesh.userData.ridge=h+rise;}
@@ -1632,7 +1651,7 @@ async function load(q,at){
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
     S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
-    S.mnt=null; status('Relief mesuré au laser…');
+    S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
     try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms)S.mnt=buildMNT(ms,mh,feats);}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
     buildScene(feats); loadOrtho(g.lat,g.lon);
@@ -1911,6 +1930,11 @@ function rectDecomp(ring){ // up to 4 maximal rectangles aligned on the walls th
   }
   return out;
 }
+function roughRoof(u,F){ // 75th percentile of height steps at 50 cm over the footprint: ≈0.2 m on a roof, ≥0.5 m on foliage
+  const r=u.rings[0],sh=u.shift||{dx:0,dy:0};let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});const d=[];
+  for(let x=x0+0.25;x<x1;x+=0.5)for(let y=y0+0.25;y<y1;y+=0.5){if(!pointInPoly(x,y,r))continue;const a=F.at(x+sh.dx,y+sh.dy),b=F.at(x+0.5+sh.dx,y+sh.dy),c=F.at(x+sh.dx,y+0.5+sh.dy);if(a==null||b==null||c==null)continue;d.push(Math.abs(a-b),Math.abs(a-c));}
+  if(d.length<8)return 0; d.sort((p,q)=>p-q); return d[Math.floor(d.length*0.75)];
+}
 function findTowers(rings,u,F,green){
   const r0=rings[0],a=domAngle(r0),ca=Math.cos(a),sa=Math.sin(a),sh=u.shift||{dx:0,dy:0},st=0.5,cA=st*st;
   let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; r0.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
@@ -1932,8 +1956,11 @@ function findTowers(rings,u,F,green){
       if(dh.length<6)continue; dh.sort((p,q)=>p-q); if(qtl(dh,0.5)<1.4)continue;
       const fill=cells.length/((i1-i0+1)*(j1-j0+1)); if(fill<0.55)continue;
       // a tree crown over the roof is not a tower: roofs are smooth at 50 cm (median step ≈ 0.1 m), foliage is rough (≥ 0.4 m)
-      {const set=new Set(cells),st2=[];cells.forEach(c=>{const ci=c%nu;if(ci+1<nu&&set.has(c+1))st2.push(Math.abs(H[c]-H[c+1]));if(set.has(c+nu))st2.push(Math.abs(H[c]-H[c+nu]));});
-       if(st2.length>=10){st2.sort((p,q)=>p-q);if(st2[st2.length>>1]>0.3)continue;}}
+      // measured on the raw laser surface over the whole rectangle (the vegetation filter above would hide the crown's ragged edges)
+      {const st2=[];for(let jj=j0;jj<=j1;jj++)for(let ii=i0;ii<=i1;ii++){const k=jj*nu+ii,x=XY[k*2]+sh.dx,y=XY[k*2+1]+sh.dy;if(!pointInPoly(x-sh.dx,y-sh.dy,r0))continue;
+         const a0=F.at(x,y),a1=F.at(x+st,y),a2=F.at(x,y+st);if(a0==null||a1==null||a2==null)continue;st2.push(Math.abs(a0-a1),Math.abs(a0-a2));}
+       if(st2.length>=10){st2.sort((p,q)=>p-q);if(st2[st2.length>>1]>0.3||st2[Math.floor(st2.length*0.75)]>0.45)continue;}
+       let gs=0,gn=0;cells.forEach(c=>{const e=green(XY[c*2]+sh.dx,XY[c*2+1]+sh.dy);if(e>-90){gs+=e;gn++;}}); if(gn>8&&gs/gn>8)continue;}
       cells.forEach(c=>used[c]=1); towers.push({cells,i0,i1,j0,j1});
     }
   }
@@ -1968,11 +1995,25 @@ async function lidarBuildings(){
       const F=(Ff&&ext<Ff.R-2)?Ff:Fc;if(!F)continue;
       if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
       const smp=lidarSamples(u,F,green); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
+      { const ar=Math.abs(areaOf(u.rings[0])); if(ar<80&&roughRoof(u,F)>0.45){ // small building under a tree: the laser only sees the crown
+        if(ar<40&&u.h>3.5){ // a shed or a garage, not a tower: bring it down to a believable height (the IGN height there is often the tree's too)
+          const nh=3.5, sc=(nh+SINK)/(u.h+SINK), z0=u.zBase-SINK; m.scale.z=sc;
+          if(u.edgeArr)for(let i=2;i<u.edgeArr.length;i+=3)u.edgeArr[i]=z0+(u.edgeArr[i]-z0)*sc;
+          if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh=null;} if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);
+          u.h=nh; u.floors=1; u.ridge=null; }
+        continue; } }
       const clean=u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;});
       const bases=[clean];
       const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
       const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const bp=tw&&tw.base.length>=8?tw.base:pt.pts;const md=partModel(bp,pt.rings);if(!md)continue;md.pts=F===Ff?bp:null;vols.push({rings:pt.rings,md});
         if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){m2.pts=F===Ff?t.pts:null;vols.push({rings:[t.ring],md:m2,tower:true});}});}
+      // Hard ceiling: the IGN's highest roof point of this building (photogrammetry on the building itself). The laser also sees
+      // tree crowns over roofs; whatever rises above that ceiling is foliage, never a storey: towers are dropped, volumes clipped.
+      if(u.zTop!=null&&u.zTop>u.zBase+2){const lim=u.zTop-u.zBase+1.5; // the IGN top can read ~1 m low (Léguevin tower: 7.2 vs 7.6 + 0.6 m)
+        for(let i=vols.length-1;i>=0;i--){const v=vols[i],md=v.md,top=md.h+(md.rise||0);if(top<=lim)continue;
+          if(v.tower&&md.h>lim-0.5){vols.splice(i,1);continue;} // a "tower" taller than the whole building is a crown
+          const over=top-lim; if((md.rise||0)>over)md.rise-=over; else{md.rise=Math.min(md.rise||0,Math.max(0,lim-2.5));md.h=Math.max(2.5,lim-md.rise);} md.pts=null;}
+        if(!vols.length)continue;}
       // storeys: the IGN count belongs to the main volume (largest footprint); the others are counted from it, ~3 m a storey
       const F0=u.floors; let main=null,ma=-1; vols.forEach(v=>{if(v.tower)return;const ar=Math.abs(areaOf(v.rings[0]));if(ar>ma){ma=ar;main=v;}}); if(!main)main=vols[0];
       const sH=main&&F0>0?main.md.h/F0:0, ok=sH>=2.6&&sH<=3.8; // the IGN count is trusted only if it gives a believable storey height
