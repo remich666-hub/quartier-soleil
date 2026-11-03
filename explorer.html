@@ -1561,7 +1561,7 @@ function carveFootprint(u,cloud){
     IN[k]=1;const c=cloud.at(p.x+sh.dx,p.y+sh.dy);if(c<0)continue;const z=cloud.z6[c];Z[k]=z;
     if(z>zb+2.2){ST[k]=1;zs.push(z);}else if(cloud.gnd[c])ST[k]=2;}
   if(zs.length<20)return null; zs.sort((p,q)=>p-q); const med=zs[zs.length>>1];
-  for(let k=0;k<nu*nv;k++)if(ST[k]===1&&Z[k]<med-5)ST[k]=3; // much lower cover (a glass roof over the ground floor at the bottom of a light well)
+  for(let k=0;k<nu*nv;k++)if(ST[k]===1&&Z[k]<med-4)ST[k]=3; // a narrow well only half-seen by the laser, or a low cover at its bottom // much lower cover (a glass roof over the ground floor at the bottom of a light well)
   // fill unknown cells from neighbours, then open (erode+dilate) the void mask to drop slivers < 1 m
   const V=new Uint8Array(nu*nv);for(let k=0;k<nu*nv;k++)if(IN[k]&&(ST[k]===2||ST[k]===3))V[k]=1;
   for(let j=1;j<nv-1;j++)for(let i=1;i<nu-1;i++){const k=j*nu+i;if(!IN[k]||ST[k])continue;let vc=0,sc=0;for(let b=-1;b<=1;b++)for(let c=-1;c<=1;c++){const q=k+b*nu+c;if(ST[q]===1)sc++;else if(ST[q]===2||ST[q]===3)vc++;}if(vc>sc&&vc>=3)V[k]=1;}
@@ -1572,7 +1572,7 @@ function carveFootprint(u,cloud){
   const lab=new Int32Array(nu*nv).fill(-1);let id=0;const cuts=[];
   for(let s=0;s<nu*nv;s++){if(!Op[s]||lab[s]>=0)continue;const cells=[s];lab[s]=++id;
     for(let c=0;c<cells.length;c++){const ci=cells[c]%nu,cj=(cells[c]/nu)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv)continue;const q=nj*nu+ni;if(Op[q]&&lab[q]<0){lab[q]=id;cells.push(q);}}}
-    const area=cells.length*st*st; if(area<1.5)continue; const low=cells.filter(c=>ST[c]===3).length; if(low>cells.length/2&&area>30)continue; // a big low part is an annex, not a well
+    const area=cells.length*st*st; if(area<1.5)continue; const low=cells.filter(c=>ST[c]===3).length; if(low>cells.length/2&&area>12)continue; // a big low part is an annex, not a well
     const M=new Uint8Array(nu*nv);cells.forEach(c=>M[c]=1);let left=cells.length;
     for(let it=0;it<3&&left>cells.length*0.15;it++){const hh=new Int32Array(nu);let best=null;
       for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hh[i]=M[j*nu+i]?hh[i]+1:0;const stk=[];for(let i=0;i<=nu;i++){const cur=i<nu?hh[i]:0;let s0=i;while(stk.length&&stk[stk.length-1][1]>=cur){const [si,sh2]=stk.pop();const ar=sh2*(i-si);if(sh2&&(!best||ar>best.ar))best={ar,i0:si,i1:i-1,j0:j-sh2+1,j1:j};s0=si;}stk.push([s0,cur]);}}
