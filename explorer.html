@@ -1514,12 +1514,12 @@ function copcLibs(){
   if(!_copcLibs)_copcLibs=(async()=>{const J='https://cdn.jsdelivr.net/npm/';
     const [cp,lz,pj,pc]=await Promise.all([import(J+'copc@0.0.9/+esm'),import(J+'laz-perf@0.0.7/+esm'),import(J+'proj4@2.11.0/+esm'),import(J+'polygon-clipping@0.15.7/+esm')]);
     const proj4=pj.default||pj; proj4.defs('EPSG:2154','+proj=lcc +lat_0=46.5 +lon_0=3 +lat_1=49 +lat_2=44 +x_0=700000 +y_0=6600000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
-    const lazPerf=await (lz.createLazPerf||lz.LazPerf.create)({locateFile:()=>J+'laz-perf@0.0.7/lib/web/laz-perf.wasm'});
-    return {Copc:cp.Copc,lazPerf,proj4,pc:pc.default||pc};})();
+    const mkLaz=()=>(lz.createLazPerf||lz.LazPerf.create)({locateFile:()=>J+'laz-perf@0.0.7/lib/web/laz-perf.wasm'});
+    return {Copc:cp.Copc,mkLaz,proj4,pc:pc.default||pc};})();
   return _copcLibs;
 }
 async function fetchCloud(R){
-  const t0=performance.now(); const {Copc,lazPerf,proj4,pc}=await copcLibs();
+  const t0=performance.now(); const {Copc,mkLaz,proj4,pc}=await copcLibs();
   const [X0,Y0]=proj4('EPSG:4326','EPSG:2154',[S.lon,S.lat]);
   const loc=(X,Y)=>{const ll=proj4('EPSG:2154','EPSG:4326',[X,Y]);return proj(ll[0],ll[1]);};
   const o=loc(X0,Y0),e=loc(X0+100,Y0),nn=loc(X0,Y0+100),A=(e[0]-o[0])/100,B=(nn[0]-o[0])/100,C=(e[1]-o[1])/100,D=(nn[1]-o[1])/100;
@@ -1532,8 +1532,8 @@ async function fetchCloud(R){
     const hit=k=>{const [d,x,y]=k.split('-').map(Number);const s=(cube[3]-cube[0])/2**d;const x0=cube[0]+x*s,y0=cube[1]+y*s;return x0<=X0+R2&&x0+s>=X0-R2&&y0<=Y0+R2&&y0+s>=Y0-R2;};
     const nodes={}; const walk=async page=>{const hp=await Copc.loadHierarchyPage(url,page);Object.assign(nodes,hp.nodes);for(const [k,p] of Object.entries(hp.pages||{}))if(hit(k))await walk(p);};
     await walk(copc.info.rootHierarchyPage);
-    const sel=Object.entries(nodes).filter(([k,n])=>n&&n.pointCount>0&&hit(k)); let i=0;
-    const work=async()=>{while(i<sel.length){const n=sel[i++][1];const v=await Copc.loadPointDataView(url,copc,n,{lazPerf});
+    const sel=Object.entries(nodes).filter(([k,n])=>n&&n.pointCount>0&&hit(k)); let i=0, lazPerf=await mkLaz(), used=0; // a fresh decoder every few chunks: its memory is not given back
+    const work=async()=>{while(i<sel.length){const n=sel[i++][1];if(used++>=8){lazPerf=await mkLaz();used=1;}let v;try{v=await Copc.loadPointDataView(url,copc,n,{lazPerf});}catch(err){lazPerf=await mkLaz();used=1;try{v=await Copc.loadPointDataView(url,copc,n,{lazPerf});}catch(e2){continue;}}
       const gx=v.getter('X'),gy=v.getter('Y'),gz=v.getter('Z'),gc=v.getter('Classification');
       for(let q=0;q<v.pointCount;q++){const cl=gc(q);if(cl!==6&&cl!==2)continue;const X=gx(q)-X0,Y=gy(q)-Y0;if(X>R2||X<-R2||Y>R2||Y<-R2)continue;
         const lx=o[0]+A*X+B*Y,ly=o[1]+C*X+D*Y,ii=Math.floor((lx+R2)/cell),jj=Math.floor((R2-ly)/cell);if(ii<0||jj<0||ii>=N||jj>=N)continue;const k=jj*N+ii;
