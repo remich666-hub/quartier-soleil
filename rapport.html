@@ -128,8 +128,9 @@ th.n{text-align:right;white-space:nowrap}
 </head>
 <body>
 <div class="toolbar" id="toolbar" hidden>
-  <span class="note" id="tbNote">Exemple de rapport, calculé sur un immeuble réel de Clichy (92)</span>
-  <a class="btn primary" href="explorer.html" style="display:inline-flex;align-items:center;text-decoration:none">Calculer pour mon adresse</a>
+  <a class="note" href="./" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#e8772e"/><path d="M2 17h20" stroke="#1f1b16" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
+  <span class="note" id="tbNote"></span>
+  <span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="pdf" type="button">Télécharger en PDF</button><a class="btn primary" id="tbGo" href="explorer.html" style="display:inline-flex;align-items:center;text-decoration:none">Calculer pour mon adresse</a></span>
 </div>
 <div id="doc"><p class="loading">Préparation du rapport…</p></div>
 
@@ -291,9 +292,14 @@ function render(R){
 (async()=>{
   const q=new URLSearchParams(location.search); let R=null;
   if(!q.get('ex')){try{const s=localStorage.getItem('qs-report');if(s)R=JSON.parse(s);}catch(e){}}
-  if(!R){const ex=(q.get('ex')||'clichy').replace(/[^a-z0-9-]/g,'');try{R=await (await fetch(`exemples/${ex}.json`)).json();if(!q.get('embed'))$('#toolbar').hidden=false;else document.body.style.paddingTop='16px';}catch(e){$('#doc').innerHTML='<p class="loading">Rapport introuvable.</p>';return;}}
+  if(!R){const ex=(q.get('ex')||'clichy').replace(/[^a-z0-9-]/g,'');try{R=await (await fetch(`exemples/${ex}.json`)).json();R.__example=true;}catch(e){$('#doc').innerHTML='<p class="loading">Rapport introuvable.</p>';return;}}
   if(document.fonts&&document.fonts.ready)await document.fonts.ready;
   render(R);
+  if(q.get('embed')){document.body.style.paddingTop='16px';}
+  else{$('#toolbar').hidden=false;
+    $('#tbNote').textContent=R.__example?'Exemple de rapport, calculé sur un immeuble réel de Clichy (92)':'Rapport '+(R.ref||'')+' · '+new Date(R.generated).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
+    if(!R.__example)$('#tbGo').textContent='Retour à l\u2019outil';
+    $('#pdf').addEventListener('click',()=>window.print());}
 })();
 </script>
 </body>
