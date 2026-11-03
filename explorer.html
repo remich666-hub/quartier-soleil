@@ -26,149 +26,182 @@
   --bg:#161513; --panel:rgba(28,26,24,.94); --fg:#efe9de; --ink2:#aaa398; --muted:#8a847a; --line:rgba(239,233,222,.12); --raised:#262421;
   --accent:#ef8a44; --accent-ink:#f2a066; --accent-fg:#161513; --btn:#efe9de; --btn-fg:#161513; --sun:#ef8a44; --shade:#4a453e; color-scheme:dark}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--display);font-size:14px;line-height:1.4;overflow:hidden}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--display);font-size:14px;line-height:1.45;overflow:hidden}
 #app{position:relative;height:100%;width:100%}
 #view{position:absolute;inset:0}
 #view canvas{display:block;width:100%;height:100%;touch-action:none}
-#sheet{display:contents}
-.panel{position:absolute;background:var(--panel);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-sizing:border-box;z-index:5;box-shadow:0 8px 24px rgba(31,27,22,.08)}
-#left{top:max(12px,env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));width:min(340px,calc(100% - 32px));display:flex;flex-direction:column;gap:10px}
-#right{top:max(12px,env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:min(370px,calc(100% - 32px));max-height:calc(100% - 140px);overflow:auto;display:flex;flex-direction:column;gap:10px}
-#bottom{bottom:max(12px,env(safe-area-inset-bottom,0px));left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:grid;grid-template-columns:auto 1fr auto 1fr auto;gap:10px 14px;align-items:center}
-#handle{display:none}
-h1{font-size:15px;margin:0;font-weight:600;letter-spacing:-.005em}
-h2{font-size:13px;margin:0;font-weight:500;color:var(--ink2)}
+[hidden]{display:none!important}
+.legacy{display:none!important}
+/* main card */
+#sheet{position:absolute;z-index:5;top:max(16px,env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));width:min(380px,calc(100% - 32px));display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.panel{background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px rgba(31,27,22,.10);pointer-events:auto}
+#left{padding:18px;display:flex;flex-direction:column;gap:16px;overflow:auto;max-height:100%;min-height:0}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;color:var(--fg);text-decoration:none}
-.brand:hover{color:var(--accent-ink)}
+.icons{display:flex;gap:4px}
+.ibtn{width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:var(--ink2)}
+.ibtn:hover{background:var(--raised);color:var(--fg)}
+.ibtn svg{width:18px;height:18px}
+h1{font-size:15px;margin:0;font-weight:600}
+h2{font-size:13px;margin:0;font-weight:500;color:var(--ink2)}
+.step{display:flex;flex-direction:column;gap:10px}
+.step .n{font-family:var(--mono);font-size:12px;color:var(--accent-ink)}
+.step .q{font-size:17px;font-weight:500;letter-spacing:-.005em}
 .row{display:flex;gap:8px;align-items:center;min-width:0}
-input[type=text],input[type=number],select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 10px;min-width:0;flex:1}
-input[type=number]{width:64px;flex:0 0 auto}
-select{max-width:100%}
-button{font:inherit;font-weight:500;border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:9px;padding:8px 12px;cursor:pointer;transition:background-color .15s var(--ease),transform .12s var(--ease)}
+input[type=text]{font:inherit;font-size:15px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0;flex:1}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+button{font:inherit;font-weight:500;border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:10px;padding:9px 14px;cursor:pointer;transition:background-color .15s var(--ease),transform .12s var(--ease),color .15s var(--ease)}
 button:hover{background:var(--raised)}
 button:active{transform:scale(.98)}
+button:disabled{opacity:.5;cursor:default}
 button.primary{background:var(--btn);color:var(--btn-fg);border-color:var(--btn)}
 button.primary:hover{background:color-mix(in srgb,var(--btn) 86%,var(--accent))}
-button.cta{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);width:100%;padding:11px 12px;font-size:15px}
+button.cta{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);width:100%;padding:12px 14px;font-size:15px}
 button.cta:hover{background:color-mix(in srgb,var(--accent) 88%,#000)}
-button.link{border:0;padding:4px 2px;color:var(--ink2);font-size:13px;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
-button.link:hover{background:transparent;color:var(--fg)}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-button:disabled{opacity:.5;cursor:default}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:13px;align-items:center}
-.kv b{font-weight:600;color:var(--muted)}
-.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.status{font-size:12px;color:var(--muted);min-height:1.2em}
+button.link{border:0;padding:2px 0;color:var(--ink2);font-size:13px;background:none;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+button.link:hover{color:var(--fg);background:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.status{font-size:13px;color:var(--ink2);min-height:1.2em}
 .status.err{color:var(--bad)}
-.wx{display:flex;gap:12px;align-items:baseline}
-.wx .t{font-size:26px;font-weight:500;letter-spacing:-.01em}
-.wx .d{font-size:12px;color:var(--muted)}
-.slider{display:flex;flex-direction:column;gap:2px;min-width:0}
-.slider label{font-size:12px;color:var(--muted)}
-input[type=range]{width:100%;accent-color:var(--accent);margin:0}
-.val{font-family:var(--mono);font-size:13px;white-space:nowrap}
-.hint{font-size:12px;color:var(--muted)}
-.chart{width:100%;height:auto;display:block}
-.chart text{font-family:var(--mono);font-size:10px;fill:var(--muted)}
-table{border-collapse:collapse;width:100%;font-size:12px}
-td,th{padding:3px 4px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
-th{font-family:var(--display);color:var(--muted);font-weight:500;font-size:12px}
-td:first-child,th:first-child{text-align:left}
-.legend{display:flex;gap:10px;font-size:11px;color:var(--muted);flex-wrap:wrap}
-.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:4px}
-.pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:var(--line)}
-.strip{display:grid;grid-template-columns:repeat(96,1fr);gap:1px;height:14px;border-radius:3px;overflow:hidden}
-.strip i{background:var(--line)}
+.addrDone{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.addrDone .a{font-weight:500;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hintBox{display:flex;gap:12px;align-items:flex-start;background:var(--raised);border-radius:12px;padding:14px;color:var(--ink2);font-size:14px}
+.hintBox svg{flex:none;width:22px;height:22px;color:var(--accent)}
+.stepper{display:grid;grid-template-columns:40px 1fr 40px;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
+.stepper button{border:0;border-radius:0;height:40px;padding:0;font-size:16px;color:var(--ink2)}
+.stepper .v{text-align:center;font-size:14px;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stepper .v small{display:block;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12px;color:var(--muted)}
+.warn{font-size:13px;color:var(--fg);background:color-mix(in srgb,var(--warn) 14%,transparent);border-radius:10px;padding:10px 12px}
+/* result */
+#results{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:16px}
+.big{display:flex;align-items:baseline;gap:6px}
+.big .v{font-family:"Instrument Serif",ui-serif,Georgia,serif;font-size:56px;line-height:.95;letter-spacing:-.02em}
+.big .v small{font-size:28px}
+.big .c{font-size:13px;color:var(--ink2);max-width:15ch;line-height:1.35}
+.kd{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kd div{padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.kd div+div{border-left:1px solid var(--line)}
+.kd span{font-size:11px;color:var(--muted)}
+.kd b{font-family:var(--mono);font-weight:500;font-size:14px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2)}
+.badge i{width:7px;height:7px;border-radius:50%;background:var(--good);display:inline-block}
+.badge.busy i{background:var(--accent);animation:pulse 1s var(--ease) infinite alternate}
+@keyframes pulse{to{opacity:.3}}
+.strip{display:grid;grid-template-columns:repeat(96,1fr);gap:1px;height:12px;border-radius:4px;overflow:hidden}
+.strip i{background:var(--raised)}
 .strip i.on{background:var(--sun)}
-.strip i.now{outline:2px solid var(--accent);outline-offset:-1px}
+.strip i.now{outline:2px solid var(--fg);outline-offset:-1px}
 .axis{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:var(--mono)}
+.hint{font-size:12px;color:var(--muted)}
 .btns{display:flex;gap:8px;flex-wrap:wrap}
-#toast{position:absolute;left:50%;top:max(12px,env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:9;background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;pointer-events:none;opacity:0;transition:opacity .2s;white-space:nowrap}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:12px}
+#info{font-size:12px;color:var(--ink2);display:flex;flex-direction:column;gap:8px;background:var(--raised);border-radius:12px;padding:12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px}
+.kv b{font-weight:500;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wx{display:flex;gap:10px;align-items:baseline}
+.wx .t{font-size:20px;font-weight:500}
+/* time pill and panel */
+#timePill{position:absolute;z-index:6;left:max(16px,env(safe-area-inset-left,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:8px;background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:999px;padding:8px 14px;box-shadow:0 10px 30px rgba(31,27,22,.10);font-size:13px}
+#timePill svg{width:18px;height:18px;color:var(--accent)}
+#bottom{position:absolute;z-index:6;left:max(16px,env(safe-area-inset-left,0px));bottom:calc(max(16px,env(safe-area-inset-bottom,0px)) + 52px);width:min(420px,calc(100% - 32px));padding:16px;display:grid;grid-template-columns:auto 1fr;gap:12px 14px;align-items:center}
+#bottom .val{font-family:var(--mono);font-size:13px;white-space:nowrap}
+#bottom .slider{display:flex;flex-direction:column;gap:2px;min-width:0}
+#bottom .slider label{font-size:11px;color:var(--muted)}
+#bottom .btns{grid-column:1/-1}
+#toast{position:absolute;left:50%;top:max(16px,env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:9;background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:13px;pointer-events:none;opacity:0;transition:opacity .2s var(--ease);white-space:nowrap}
 #toast.show{opacity:1}
-#tabs{display:none}
 @media (max-width:760px){
-  #app{display:flex;flex-direction:column}
-  #view{position:relative;inset:auto;flex:1;min-height:0}
-  #sheet{display:flex;flex-direction:column;flex:none;height:46%;background:var(--panel);border-top:1px solid var(--line);box-sizing:border-box;min-height:0}
-  #sheet.collapsed{height:auto}
-  #tabs{display:flex;gap:4px;padding:6px max(12px,env(safe-area-inset-left,0px)) 6px max(12px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);flex:none}
-  #tabs button{flex:1;padding:8px 4px;border:0;border-radius:8px;background:transparent;font-size:13px}
-  #tabs button.active{background:var(--raised)}
-  #tabs #collapse{flex:0 0 auto;width:40px}
-  #sheet.collapsed #collapse{transform:rotate(180deg)}
-  #left,#right,#bottom{display:none;position:static;transform:none;width:auto;max-height:none;background:transparent;backdrop-filter:none;border:0;border-radius:0;padding:10px max(16px,env(safe-area-inset-left,0px)) max(14px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px));margin:0;overflow:auto;flex:1;min-height:0}
-  #left.active,#right.active{display:flex;flex-direction:column;gap:10px}
-  #bottom.active{display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-content:start}
-  #sheet.collapsed #left,#sheet.collapsed #right,#sheet.collapsed #bottom{display:none}
-  #bottom .btns{grid-column:1/-1}
-  #left .hint.src{display:none}
-  #toast{top:12px}
+  #app{display:block}
+  #sheet{top:auto;left:0;right:0;bottom:0;width:auto;max-height:56%;gap:0}
+  #left{border-radius:18px 18px 0 0;border-bottom:0;padding:14px max(16px,env(safe-area-inset-left,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px));gap:14px}
+  #sheet.collapsed #left .collapsible{display:none}
+  .grab{display:block;width:40px;height:4px;border-radius:2px;background:var(--line);margin:-4px auto 0;border:0;padding:0}
+  #timePill{bottom:auto;top:max(12px,env(safe-area-inset-top,0px))}
+  #bottom{bottom:auto;top:calc(max(12px,env(safe-area-inset-top,0px)) + 48px)}
+  .big .v{font-size:48px}
+  #toast{top:auto;bottom:calc(56% + 12px)}
 }
-@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+@media (min-width:761px){.grab{display:none}}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}.badge.busy i{animation:none}}
 </style>
 
+<script>try{var qsT=localStorage.getItem("qs-theme");if(qsT)document.documentElement.dataset.theme=qsT;}catch(e){}</script>
 <div id="app">
   <div id="view"></div>
   <div id="toast" role="status"></div>
 
+  <button type="button" id="timePill" aria-expanded="false" aria-controls="bottom"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="currentColor"/></svg><span>Soleil le <span id="pillDate">—</span> à <span id="pillTime">—</span></span></button>
+  <section class="panel" id="bottom" hidden>
+    <span class="val" id="dateVal">—</span>
+    <div class="slider"><label for="day">Date</label><input type="range" id="day" min="1" max="365" value="1"></div>
+    <span class="val" id="timeVal">—</span>
+    <div class="slider"><label for="time">Heure</label><input type="range" id="time" min="0" max="1439" step="5" value="720"></div>
+    <div class="btns"><button id="now" type="button">Maintenant</button><button id="play" type="button">Journée ▶</button></div>
+  </section>
+
   <div id="sheet">
-    <div id="tabs" role="tablist">
-      <button type="button" data-tab="left" class="active">Adresse</button>
-      <button type="button" data-tab="bottom">Temps</button>
-      <button type="button" data-tab="right">Fenêtre</button>
-      <button type="button" id="collapse" aria-label="Réduire ou agrandir le panneau">⌄</button>
-    </div>
-
-    <section class="panel active" id="left">
-      <a class="brand" href="./"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#e8772e"/><path d="M2 17h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
-      <form id="form" class="row">
-        <input type="text" id="addr" placeholder="Adresse du logement" autocomplete="off">
-        <button class="primary" id="go" type="submit">Charger</button>
-      </form>
-      <div class="status" id="status">Prêt.</div>
-      <div class="kv" id="site" hidden>
-        <b>Adresse</b><span id="siteLabel"></span>
-        <b>Soleil</b><span id="sunInfo" class="mono"></span>
-      </div>
-      <div id="wxBox" hidden>
-        <h2>Météo <span id="wxWhen"></span></h2>
-        <div class="wx"><span class="t mono" id="wxT">—</span><span class="d" id="wxD">—</span></div>
-        <div class="hint mono" id="wxMore"></div>
-      </div>
-      <div class="hint src">Bâtiments, végétation, orthophoto : IGN. Météo : Open-Meteo. Adresses : BAN. Glisser pour tourner, molette pour zoomer, clic droit pour déplacer, clic sur un bâtiment pour le choisir.</div>
-    </section>
-
-    <section class="panel" id="bottom">
-      <span class="val" id="dateVal">—</span>
-      <div class="slider"><label for="day">Date</label><input type="range" id="day" min="1" max="365" value="1"></div>
-      <span class="val" id="timeVal">—</span>
-      <div class="slider"><label for="time">Heure</label><input type="range" id="time" min="0" max="1439" step="5" value="720"></div>
-      <div class="btns"><button id="now" type="button">Maintenant</button><button id="play" type="button">Journée ▶</button></div>
-    </section>
-
-    <section class="panel" id="right">
-      <h2 style="font-size:15px;color:var(--fg)">Ensoleillement d'une fenêtre</h2>
-      <div class="hint" id="winHint">Touchez un bâtiment dans la maquette pour choisir une façade.</div>
-      <div id="winBox" hidden>
-        <div class="kv">
-          <b>Bâtiment</b><span id="bInfo" class="mono"></span>
-          <b>Façade</b><span class="row"><button type="button" id="facPrev" aria-label="Façade précédente">◀</button><select id="facade"></select><button type="button" id="facNext" aria-label="Façade suivante">▶</button></span>
-          <b>Étage</b><span class="row"><input type="number" id="floor" min="0" max="40" step="1" value="2"> <span class="hint">0 = rez-de-chaussée</span></span>
-          <b>Position</b><span class="row"><input type="range" id="along" min="5" max="95" value="50" style="flex:1"><span class="hint">le long de la façade</span></span>
+    <section class="panel" id="left">
+      <button class="grab" type="button" id="grab" aria-label="Réduire ou agrandir le panneau"></button>
+      <div class="top">
+        <a class="brand" href="./"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#e8772e"/><path d="M2 17h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
+        <div class="icons">
+          <button class="ibtn" type="button" id="infoBtn" aria-label="Informations et sources" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01" stroke-linecap="round"/></svg></button>
+          <button class="ibtn" type="button" id="themeBtn" aria-label="Basculer clair / foncé"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" stroke-linejoin="round"/></svg></button>
         </div>
-        <button class="cta" id="report" type="button" style="margin-top:12px">Rapport complet</button><div class="btns" style="margin-top:8px"><button class="primary" id="viewWin" type="button" disabled>Vue depuis la fenêtre</button><button id="analyze" type="button">Calculer l'année</button></div><div class="btns" style="margin-top:4px;gap:14px"><button class="link" id="lidar" type="button">Vérifier au LiDAR HD</button><button class="link" id="frameB" type="button">Cadrer le bâtiment</button><button class="link" id="clearWin" type="button">Retirer</button></div>
       </div>
-      <div id="results" hidden>
-        <h2 style="margin-top:4px">Aujourd'hui, sur cette fenêtre</h2>
-        <div class="strip" id="strip"></div>
-        <div class="axis"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div>
-        <div class="hint" id="todayText"></div>
-        <h2 style="margin-top:8px">Soleil direct par mois (h/jour)</h2>
-        <svg class="chart" id="chart" viewBox="0 0 340 150" role="img" aria-label="Heures de soleil direct par mois"></svg>
-        <div class="legend"><span><i style="background:var(--sun)"></i>avec bâtiments et arbres voisins</span><span><i style="background:var(--shade)"></i>sans obstacle</span></div>
-        <table id="tbl"><thead><tr><th>Mois</th><th>Soleil</th><th>De</th><th>À</th></tr></thead><tbody></tbody></table>
-        <div class="hint" id="verdict"></div>
-        <div class="hint" id="lidarText"></div>
+
+      <div id="info" hidden>
+        <div class="kv" id="site" hidden><b>Adresse</b><span id="siteLabel"></span><b>Soleil</b><span id="sunInfo" class="mono"></span></div>
+        <div id="wxBox" hidden><h2>Météo <span id="wxWhen"></span></h2><div class="wx"><span class="t mono" id="wxT">—</span><span id="wxD">—</span></div><div class="hint mono" id="wxMore"></div></div>
+        <div>Données : bâtiments, relief, orthophoto et LiDAR HD de l'IGN, météo Open-Meteo, adresses Base Adresse Nationale. Glissez pour tourner, molette ou pincement pour zoomer, clic droit ou deux doigts pour déplacer.</div>
+        <div>Vos adresses ne sont enregistrées que sur cet appareil. <button class="link" type="button" id="wipe">Effacer mes données</button></div>
+      </div>
+
+      <div class="step collapsible" id="stepAddr">
+        <span class="n">01 · Adresse</span>
+        <form id="form" class="row">
+          <input type="text" id="addr" placeholder="Adresse du logement" autocomplete="street-address" aria-label="Adresse du logement">
+          <button class="primary" id="go" type="submit">Charger</button>
+        </form>
+        <div class="status" id="status">Entrez l'adresse du logement à étudier.</div>
+      </div>
+
+      <div class="step collapsible" id="stepPick" hidden>
+        <span class="n">02 · Fenêtre</span>
+        <div class="hintBox" id="winHint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3l10 7-5 1-2 5z" stroke-linejoin="round"/></svg><span id="winHintText">Touchez le bâtiment du logement dans la maquette, sur la façade de la fenêtre.</span></div>
+      </div>
+
+      <div class="step" id="winBox" hidden>
+        <span class="n">02 · Fenêtre</span>
+        <div class="field"><label>Façade</label>
+          <div class="stepper"><button type="button" id="facPrev" aria-label="Façade précédente">‹</button><div class="v" id="facLabel">—</div><button type="button" id="facNext" aria-label="Façade suivante">›</button></div>
+          <select id="facade" class="legacy" aria-hidden="true" tabindex="-1"></select></div>
+        <div class="field"><label>Étage</label>
+          <div class="stepper"><button type="button" id="floorDown" aria-label="Étage inférieur">−</button><div class="v" id="floorLabel">—</div><button type="button" id="floorUp" aria-label="Étage supérieur">+</button></div>
+          <input type="number" id="floor" class="legacy" value="0" aria-hidden="true" tabindex="-1"></div>
+        <div class="field"><label for="along">Position sur la façade</label><input type="range" id="along" min="5" max="95" value="50"></div>
+        <div class="warn" id="blindWarn" hidden></div>
+        <span id="bInfo" class="hint"></span>
+
+        <div id="results" hidden>
+          <span class="badge" id="calcBadge"><i></i><span id="calcText">Mesuré au LiDAR HD</span></span>
+          <div class="big"><span class="v" id="avgBig">—</span><span class="c">de soleil direct par jour, en moyenne sur l'année</span></div>
+          <div class="kd"><div><span>21 déc.</span><b id="kdDec">—</b></div><div><span>20 mars</span><b id="kdMar">—</b></div><div><span>21 juin</span><b id="kdJun">—</b></div></div>
+          <div><div class="strip" id="strip"></div><div class="axis"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div><div class="hint" id="todayText"></div></div>
+          <button class="cta" id="report" type="button">Voir le rapport complet</button>
+          <div class="btns"><button class="primary" id="viewWin" type="button" disabled>Vue depuis la fenêtre</button><button id="frameB" type="button">Recadrer</button></div>
+        </div>
+        <div class="foot"><button class="link" id="clearWin" type="button">Choisir un autre bâtiment</button></div>
+      </div>
+
+      <div class="legacy">
+        <div id="tabs"><button type="button" data-tab="left">a</button><button type="button" data-tab="right">b</button><button type="button" id="collapse">c</button></div>
+        <section id="right"></section>
+        <button id="analyze" type="button"></button><button id="lidar" type="button"></button>
+        <svg id="chart"></svg><table id="tbl"><tbody></tbody></table><div id="verdict"></div><div id="lidarText"></div>
       </div>
     </section>
   </div>
@@ -180,7 +213,7 @@ td:first-child,th:first-child{text-align:left}
 'use strict';
 const TZ='Europe/Paris';
 const $=id=>document.getElementById(id);
-const status=(t,err)=>{const s=$('status');s.textContent=t;s.classList.toggle('err',!!err)};
+const status=(t,err)=>{const s=$('status');const friendly=/^Chargé/.test(t)?(S&&S.building?'Quartier chargé.':'Quartier chargé. Touchez maintenant le bâtiment du logement.'):t;s.textContent=friendly;s.title=t;s.classList.toggle('err',!!err)};
 const toast=t=>{const e=$('toast');e.textContent=t;e.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>e.classList.remove('show'),2500)};
 const MONTHS=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 const DIRS=['N','NE','E','SE','S','SO','O','NO'];
@@ -354,8 +387,8 @@ function setMode(mode){
   cam.hfov=82; camera.near=win?0.3:1; setFov();
   if(win){cam.baseYaw=Math.atan2(S.win.normal.x,S.win.normal.y);cam.yaw=0;cam.pitch=0.05;}
   marker.visible=!win&&!!S.win; markerArrow.visible=!win&&!!S.win; facadeLine.visible=!win&&!!S.win;
-  $('viewWin').textContent=win?'Retour à la maquette':'Vue depuis la fenêtre';
-  $('winHint').textContent=win?'Vous êtes à la fenêtre. Glissez pour regarder autour ; l\'arc jaune est la course du soleil ce jour-là. Onglet Temps pour faire défiler l\'heure.':'Choisissez la façade, l\'étage et la position, puis calculez.';
+  $('viewWin').textContent=win?'Retour à la maquette':'Vue depuis la fenêtre'; if(!win)$('sheet').classList.remove('collapsed');
+  $('winHintText').textContent=win?'Vous êtes à la fenêtre. Glissez pour regarder autour ; l\'arc jaune est la course du soleil ce jour-là. Onglet Temps pour faire défiler l\'heure.':'Choisissez la façade, l\'étage et la position, puis calculez.';
   if(win&&isPhone())showTab('bottom');
   applyCam(); update();
 }
@@ -380,11 +413,7 @@ el.addEventListener('touchend',e=>{if(e.touches.length<2)setTimeout(()=>{pinch=n
 el.addEventListener('touchmove',e=>{if(e.touches.length===2&&pinch){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(cam.mode==='window'){cam.hfov=Math.max(30,Math.min(110,(cam.hfov||82)*pinch/d));setFov();}else{cam.dist=Math.max(30,Math.min(2600,cam.dist*pinch/d));applyCam();}pinch=d;}},{passive:true});
 function resize(){const w=view.clientWidth,h=view.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
 window.addEventListener('resize',()=>{resize();if(cam.mode==='window')setFov();}); resize(); applyCam();
-function showTab(name){
-  document.querySelectorAll('#tabs [data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
-  ['left','bottom','right'].forEach(id=>$(id).classList.toggle('active',id===name));
-  $('sheet').classList.remove('collapsed'); setTimeout(resize,0);
-}
+function showTab(name){ if(name==='bottom'){$('sheet').classList.add('collapsed');} else $('sheet').classList.remove('collapsed'); }
 document.querySelectorAll('#tabs [data-tab]').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
 $('collapse').addEventListener('click',()=>{$('sheet').classList.toggle('collapsed');setTimeout(resize,0);});
 function setFov(){ // keep a wide horizontal field even on a portrait phone
@@ -906,7 +935,7 @@ function update(){
   if(pk!==pathKey){pathKey=pk;const md=dayOfYearToMD(S.year,S.doy);const pts=[];for(let t=0;t<=1440;t+=10){const q=sunPos(localToInstant(S.year,md.m,md.d,Math.floor(t/60),t%60),S.lat,S.lon);if(q.alt>-0.01)pts.push(sunVec(q).multiplyScalar(1900));}
     sunPath.geometry.dispose();sunPath.geometry=new THREE.BufferGeometry().setFromPoints(pts.length?pts:[new THREE.Vector3()]);}
   const md=dayOfYearToMD(S.year,S.doy);
-  $('dateVal').textContent=`${md.d} ${MONTHS[md.m-1]} ${S.year}`; $('timeVal').textContent=fmtTime(S.minute);
+  $('dateVal').textContent=`${md.d} ${MONTHS[md.m-1]} ${S.year}`; $('timeVal').textContent=fmtTime(S.minute); $('pillDate').textContent=`${md.d} ${MONTHS[md.m-1]}`; $('pillTime').textContent=fmtTime(S.minute).replace(':',' h ');
   $('sunInfo').textContent=sp.alt>0?`hauteur ${(sp.alt/RAD).toFixed(0)}°, azimut ${(sp.az/RAD).toFixed(0)}°`:'sous l\'horizon';
   const box=$('wxBox');
   if(wx){box.hidden=false;$('wxWhen').textContent='('+wx.src+')';$('wxT').textContent=Math.round(wx.t)+'°';$('wxD').textContent=wxDesc(wx.code);$('wxMore').textContent=`nuages ${wx.cloud}% · précip. ${wx.rain} mm`+(wx.wind!=null?` · vent ${Math.round(wx.wind)} km/h`:'');}
@@ -953,13 +982,14 @@ function selectBuilding(obj){
   const fl=Math.max(0,Math.min(40,Math.round(((u.floors||Math.round(u.h/3))-1)/2)));
   $('floor').value=fl; $('along').value=50;
   $('winBox').hidden=false; $('viewWin').disabled=false; $('results').hidden=true;
-  $('winHint').textContent='Choisissez la façade, l\'étage et la position, puis calculez.';
+  $('winHintText').textContent='Choisissez la façade, l\'étage et la position, puis calculez.';
+  $('stepPick').hidden=true; refreshWinUI();
 }
 function chooseFacade(idx){
   const obj=S.building; if(!obj)return; const f=obj.userData.facades[idx]; if(!f)return;
   S.win={obj,facade:f,floor:Math.max(0,Math.min(40,+$('floor').value||0)),along:(+$('along').value||50)/100,normal:f.normal.clone()};
   S.skyline=null; skyLine.visible=false; $('lidarText').textContent='';
-  placeMarker();
+  placeMarker(); refreshWinUI(); scheduleSummary();
 }
 function placeMarker(){
   const w=S.win; if(!w)return; const f=w.facade;
@@ -988,7 +1018,7 @@ function frameBuilding(){
 $('frameB').addEventListener('click',frameBuilding);
 $('floor').addEventListener('input',()=>{if(S.win){S.win.floor=Math.max(0,Math.min(40,+$('floor').value||0));placeMarker();}});
 $('along').addEventListener('input',()=>{if(S.win){S.win.along=(+$('along').value)/100;placeMarker();}});
-$('clearWin').addEventListener('click',()=>{if(cam.mode==='window')setMode('orbit');S.win=null;S.building=null;S.skyline=null;skyLine.visible=false;marker.visible=false;markerArrow.visible=false;facadeLine.visible=false;$('winBox').hidden=true;$('results').hidden=true;$('viewWin').disabled=true;$('winHint').textContent='Touchez un bâtiment dans la maquette pour choisir une façade.';});
+$('clearWin').addEventListener('click',()=>{if(cam.mode==='window')setMode('orbit');S.win=null;S.building=null;S.skyline=null;skyLine.visible=false;marker.visible=false;markerArrow.visible=false;facadeLine.visible=false;$('winBox').hidden=true;$('results').hidden=true;$('viewWin').disabled=true;$('winHintText').textContent='Touchez un bâtiment dans la maquette pour choisir une façade.';});
 
 /* ---------- LiDAR HD skyline from the window (IGN altimetry API, MNS at 50 cm) ---------- */
 const skyLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xd9731a,transparent:true,opacity:0.9,fog:false,depthTest:false}));
@@ -1130,7 +1160,7 @@ $('report').addEventListener('click',async()=>{
     try{localStorage.setItem('qs-report',JSON.stringify(R));}catch(e){R.images={};localStorage.setItem('qs-report',JSON.stringify(R));}
     const url=new URL('rapport.html',location.href).href; if(tab&&!tab.closed)tab.location.href=url; else location.href=url;
   }catch(e){toast(e.message||'Rapport impossible');if(tab)tab.close();}
-  b.disabled=false; b.textContent='Rapport complet';
+  b.disabled=false; b.textContent='Voir le rapport complet';
 });
 /* ---------- sun analysis ---------- */
 function sunHits(pos,normal,inst,useLidar){
@@ -1240,7 +1270,7 @@ async function lidarVegGrid(){
 function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?` · végétation LiDAR HD (rayon ${CORE} m)`:c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
 /* ---------- load flow ---------- */
 async function load(q){
-  $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
+  $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
     const g=await geocode(q); S.lat=g.lat;S.lon=g.lon;S.label=g.label; S.counts={}; startLidar();
@@ -1258,15 +1288,59 @@ async function load(q){
     const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,600,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); const nl=applyLandmarks(pois);
     treeSets.ign=vegZoneSpots(veg); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}); S.wx=wx; if(!wx)toast('Météo indisponible');
-    S.loading=false; applyVegetation();
+    S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building;
     try{localStorage.setItem('qs-addr',q);}catch(e){}
   }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;}
   $('go').disabled=false; update();
 }
 $('form').addEventListener('submit',e=>{e.preventDefault();load($('addr').value);});
 try{const a=localStorage.getItem('qs-addr');if(a)$('addr').value=a;}catch(e){}
-{const q=new URLSearchParams(location.search).get('adresse');if(q){$('addr').value=q;setTimeout(()=>load(q),50);}}
+{let q=null;try{q=sessionStorage.getItem('qs-pending');sessionStorage.removeItem('qs-pending');}catch(e){}
+ const u=new URLSearchParams(location.search);if(!q&&u.get('adresse'))q=u.get('adresse');if(u.has('adresse'))history.replaceState(null,'',location.pathname);
+ if(q){$('addr').value=q;setTimeout(()=>load(q),50);}}
 
+/* ---------- simplified UI: steps, steppers, automatic LiDAR summary ---------- */
+function fmtH(h){const m=Math.round(h*60);const H=Math.floor(m/60),M=m%60;return H?`${H} h ${String(M).padStart(2,'0')}`:`${M} min`;}
+function floorName(f){return f===0?'Rez-de-chaussée':f===1?'1er étage':`${f}e étage`;}
+function refreshWinUI(){
+  const sel=$('facade'), o=sel.options[sel.selectedIndex]; const n=sel.options.length;
+  if(o){const parts=o.textContent.split(' · ');$('facLabel').innerHTML=`${parts[0]}<small>${(+sel.value+1)}/${n} · ${parts.slice(1).join(' · ')}</small>`;}
+  const f=+$('floor').value||0; const u=S.building&&S.building.userData; const maxF=u?Math.max(0,(u.floors||Math.round(u.h/3))-1):40;
+  $('floorLabel').innerHTML=`${floorName(f)}<small>${u?`${(u.floors||'?')} niveaux · ${Math.round(u.h)} m`:''}</small>`;
+  $('floorDown').disabled=f<=0; $('floorUp').disabled=f>=maxF;
+}
+let sumT=null, sumTok=0;
+function scheduleSummary(){ if(!S.win)return; clearTimeout(sumT); $('results').hidden=false; $('calcBadge').classList.add('busy'); $('calcText').textContent='Calcul en cours…'; sumT=setTimeout(runSummary,280); }
+async function runSummary(){
+  const tok=++sumTok; const w=S.win; if(!w||!w.pos)return;
+  let sk=null; try{sk=await fetchSkyline();}catch(e){}
+  if(tok!==sumTok||S.win!==w)return;
+  if(sk){sk.floor=w.floor;S.skyline=sk;drawSkyline(sk);} else {S.skyline=null;skyLine.visible=false;}
+  const L=!!S.skyline; let tot=0,nd=0;
+  for(let doy=1;doy<=365;doy+=7){const md=dayOfYearToMD(S.year,doy);const lit=analyzeDay(S.year,md.m,md.d,10);tot+=lit.filter(Boolean).length/6;nd++;}
+  const kd=[[12,21],[3,20],[6,21]].map(([m,d])=>analyzeDay(S.year,m,d,5).filter(Boolean).length*5/60);
+  if(tok!==sumTok)return;
+  const avg=tot/nd; const m=Math.round(avg*60);
+  $('avgBig').innerHTML=`${Math.floor(m/60)}<small>h</small>${String(m%60).padStart(2,'0')}`;
+  $('kdDec').textContent=fmtH(kd[0]); $('kdMar').textContent=fmtH(kd[1]); $('kdJun').textContent=fmtH(kd[2]);
+  $('calcBadge').classList.remove('busy'); $('calcText').textContent=L?'Horizon mesuré au LiDAR HD':'Calcul sur la maquette (LiDAR indisponible ici)';
+  // blind façade: a taller wall right in front across the central view
+  let blind=false; if(sk){const mid=(sk.az.length-1)/2;let c=0,n=0;for(let i=0;i<sk.az.length;i++){if(Math.abs(i-mid)>12)continue;n++;const hh=sk.hits[i];if(hh&&hh.d<=3.5&&sk.hor[i]>60*RAD)c++;}blind=n&&c/n>0.7;}
+  $('blindWarn').hidden=!blind; if(blind)$('blindWarn').textContent='Un mur plus haut que la fenêtre est collé à cette façade : elle est probablement aveugle (mur mitoyen). Essayez une autre façade.';
+  S.blind=blind; renderStrip();
+}
+$('facade').addEventListener('change',()=>{refreshWinUI();scheduleSummary();});
+$('facPrev').addEventListener('click',()=>{refreshWinUI();scheduleSummary();});
+$('facNext').addEventListener('click',()=>{refreshWinUI();scheduleSummary();});
+$('floorDown').addEventListener('click',()=>{const f=Math.max(0,(+$('floor').value||0)-1);$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
+$('floorUp').addEventListener('click',()=>{const f=(+$('floor').value||0)+1;$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
+$('along').addEventListener('change',scheduleSummary);
+$('clearWin').addEventListener('click',()=>{$('stepPick').hidden=false;$('winBox').hidden=true;$('blindWarn').hidden=true;});
+$('grab').addEventListener('click',()=>{$('sheet').classList.toggle('collapsed');});
+$('timePill').addEventListener('click',()=>{const b=$('bottom');b.hidden=!b.hidden;$('timePill').setAttribute('aria-expanded',String(!b.hidden));});
+$('infoBtn').addEventListener('click',()=>{const b=$('info');b.hidden=!b.hidden;$('infoBtn').setAttribute('aria-expanded',String(!b.hidden));});
+$('themeBtn').addEventListener('click',()=>{const r=document.documentElement;const cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');const nx=cur==='dark'?'light':'dark';r.dataset.theme=nx;try{localStorage.setItem('qs-theme',nx);}catch(e){}});
+$('wipe').addEventListener('click',()=>{try{['qs-addr','qs-report','qs-pending'].forEach(k=>{localStorage.removeItem(k);sessionStorage.removeItem(k);});}catch(e){}$('addr').value='';toast('Données effacées de cet appareil');});
 /* ---------- render loop ---------- */
 let lastT=performance.now();
 function frame(now){
