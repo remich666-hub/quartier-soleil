@@ -602,12 +602,23 @@ async function fetchTerrain(lat,lon){
 function groundZ(x,y){const R=S.lidarR||{};const ok=v=>typeof v==='number'&&isFinite(v)&&v>-500;
   let sf=R.mnsFine&&R.mnsFine.at(x,y); if(!ok(sf))sf=R.mns&&R.mns.at(x,y); const h=R.mnh&&R.mnh.at(x,y);
   return ok(sf)&&ok(h)?sf-Math.max(0,h)-S.alt0:terrainZ(x,y);}
-function facGround(f){ // ground level in front of a façade (median of 6 samples 1.5–2.5 m out)
-  if(f._gz!==undefined&&f._gzK===S.groundKey)return f._gz; const v=[];
-  [0.25,0.5,0.75].forEach(t=>{const p=pointAlong(f,t);[1.5,2.5].forEach(o=>v.push(groundZ(p.x+f.normal.x*o,p.y+f.normal.y*o)));});
-  v.sort((a,b)=>a-b); f._gz=(v[2]+v[3])/2; f._gzK=S.groundKey; return f._gz;}
-function wallGround(w){const mx=(w.a.x+w.b.x)/2,my=(w.a.y+w.b.y)/2;const g=Math.max(groundZ(mx+w.nx*1.5,my+w.ny*1.5),groundZ(mx+w.nx*2.5,my+w.ny*2.5));
+function groundSample(x,y){const R=S.lidarR||{};const ok=v=>typeof v==='number'&&isFinite(v)&&v>-500;
+  let sf=R.mnsFine&&R.mnsFine.at(x,y); if(!ok(sf))sf=R.mns&&R.mns.at(x,y); const h=R.mnh&&R.mnh.at(x,y);
+  return ok(sf)&&ok(h)?{z:sf-Math.max(0,h)-S.alt0,bare:h<0.8}:{z:terrainZ(x,y),bare:false};}
+// ground in front of a wall point: 2–4 m out (IGN outlines can sit 1–2 m off the laser, so closer samples may land on the roof),
+// keeping only samples where the laser sees bare ground when there are some
+function groundAt(p,n){const s=[2,2.75,3.5,4.25].map(o=>groundSample(p.x+n.x*o,p.y+n.y*o));const b=s.filter(q=>q.bare);const v=(b.length?b:s).map(q=>q.z).sort((a,c)=>a-c);return v[Math.floor(v.length/2)];}
+function facGround(f){ // typical street level along a façade (median), and the highest one (used to forbid any buried window)
+  if(f._gz!==undefined&&f._gzK===S.groundKey)return f._gz;
+  const v=[0.1,0.3,0.5,0.7,0.9].map(t=>groundAt(pointAlong(f,t),f.normal)); const o=v.slice().sort((a,b)=>a-b);
+  f._gz=o[2]; f._gzMax=o[4]; f._gzK=S.groundKey; return f._gz;}
+function facGroundMax(f){facGround(f);return f._gzMax;}
+function wallGround(w){const m={x:(w.a.x+w.b.x)/2,y:(w.a.y+w.b.y)/2};const g=groundAt(m,{x:w.nx,y:w.ny});
   return Math.max(w.zBase,Math.min(w.zBase+Math.max(0,(w.h||6)-3),g));}
+const WIN_CLEAR=1.2; // a window centre always stands at least this high above the street in front of it
+function streetLevel(obj,fi){ // index of the first level above the street of façade fi (0 unless the street is higher than the base)
+  const u=obj.userData,f=u.facades[fi]; if(!f||facGround(f)-u.zBase<=1.2)return 0; const bc=blindMap(obj)[fi]||[]; const k=bc.findIndex(b=>b!==2); return k<0?0:k;}
+function relFloorName(obj,fi,k){const si=streetLevel(obj,fi);return floorName(k-si)+(si>0&&k===si?' (rue haute)':'');}
 function selectRefresh(){const b=S.building;if(!b)return;const i=S.win?b.userData.facades.indexOf(S.win.facade):-1;if(i>=0)chooseFacade(i);else refreshWinUI();}
 function onGroundData(){S.groundKey=(S.groundKey||0)+1; if(S.gfWalls)buildGroundFloors(S.gfWalls); if(S.building){try{selectRefresh();}catch(e){}}}
 function terrainZ(x,y){ // metres above alt0, bilinear
@@ -1117,7 +1128,7 @@ function pick(e){
   }
   $('facade').value=String(idx); chooseFacade(idx);
   if(S.building!==prevB)frameBuilding();
-  if(!(wall&&bl[idx]&&S.win&&bl[idx][S.win.floor]))toast(`Façade ${idx+1}/${fac.length} · ${floorName(S.win.floor).toLowerCase()}`);
+  if(!(wall&&bl[idx]&&S.win&&bl[idx][S.win.floor]))toast(`Façade ${idx+1}/${fac.length} · ${relFloorName(obj,idx,S.win.floor).toLowerCase()}`);
   if(prevB!==obj)pushNav('building');
   if(prevB!==obj&&S.win){const b=obj.geometry.boundingSphere||(obj.geometry.computeBoundingSphere(),obj.geometry.boundingSphere);if(b.center.length()>RECENTER_D)recenterOn(obj);}
   if(isPhone())$('sheet').classList.add('collapsed'); // keep the map visible while aiming at the window
@@ -1157,7 +1168,7 @@ function blindMap(obj){
     const tops=[0.2,0.5,0.8].map(t=>{const p=pointAlong(f,t);
       downRay.set(new THREE.Vector3(p.x+f.normal.x*0.8,p.y+f.normal.y*0.8,u.zBase+u.h+300),down);downRay.far=1000;
       const h=downRay.intersectObjects(others,true); return h.length?h[0].point.z:-1e9;});
-    const gz=facGround(f); const out=[]; for(let k=0;k<nF;k++){const z=u.zBase+k*sh+1.5; out.push(z<gz+0.6?2:(tops.every(t=>t>z+0.3)?1:0));} return out;
+    const gz=facGroundMax(f); const out=[]; for(let k=0;k<nF;k++){const z=u.zBase+k*sh+1.5; out.push(z<gz+WIN_CLEAR?2:(tops.every(t=>t>z+0.3)?1:0));} return out;
   });
   u._blindN=S.meshes.length; return u._blind;
 }
@@ -1272,11 +1283,15 @@ function placeMarker(){
   const t=w.along*f.len; let acc=0,pt=null;
   for(const s of f.segs){if(acc+s.len>=t){const k=(t-acc)/s.len;pt=new THREE.Vector2(s.a.x+(s.b.x-s.a.x)*k,s.a.y+(s.b.y-s.a.y)*k);break;}acc+=s.len;}
   if(!pt)pt=f.mid;
-  const ud=w.obj.userData,sh=ud.floors&&ud.h?Math.max(2.5,Math.min(3.6,ud.h/ud.floors)):3;const z=ud.zBase+w.floor*sh+1.5;
+  const ud=w.obj.userData,sh=ud.floors&&ud.h?Math.max(2.5,Math.min(3.6,ud.h/ud.floors)):3;
+  { // never a window in or under the ground: lift it to the first level clear of the street right in front of it
+    const gl=groundAt(pt,w.normal), nF=nFloors(ud); let k=w.floor; while(k<nF-1&&ud.zBase+k*sh+1.5<gl+WIN_CLEAR)k++;
+    if(k!==w.floor){w.floor=k;$('floor').value=k;setTimeout(refreshWinUI,0);} }
+  const z=Math.max(ud.zBase+w.floor*sh+1.5,groundAt(pt,w.normal)+WIN_CLEAR);
   const p=new THREE.Vector3(pt.x,pt.y,z).addScaledVector(w.normal,0.45);
   w.pos=p; marker.position.copy(p); markerArrow.position.copy(p); markerArrow.setDirection(w.normal); skyLine.position.copy(p); if(S.skyline&&(w.floor!==S.skyline.floor)){S.skyline=null;skyLine.visible=false;skyLine.userData.ready=false;}
   // outline the selected façade: its base, its top and the chosen floor line
-  const zb=w.obj.userData.zBase, zt=zb+w.obj.userData.h, zf=z, pts=[];
+  const zb=Math.max(w.obj.userData.zBase,Math.min(facGround(f),w.obj.userData.zBase+w.obj.userData.h-1)), zt=w.obj.userData.zBase+w.obj.userData.h, zf=z, pts=[];
   f.segs.forEach(s=>{[zb,zf,zt].forEach(zz=>{pts.push(new THREE.Vector3(s.a.x+w.normal.x*0.3,s.a.y+w.normal.y*0.3,zz),new THREE.Vector3(s.b.x+w.normal.x*0.3,s.b.y+w.normal.y*0.3,zz));});});
   const s0=f.segs[0],sN=f.segs[f.segs.length-1]; [s0.a,sN.b].forEach(q=>pts.push(new THREE.Vector3(q.x+w.normal.x*0.3,q.y+w.normal.y*0.3,zb),new THREE.Vector3(q.x+w.normal.x*0.3,q.y+w.normal.y*0.3,zt)));
   facadeLine.geometry.dispose(); facadeLine.geometry=new THREE.BufferGeometry().setFromPoints(pts);
@@ -1426,7 +1441,7 @@ async function reportData(){
   const climate=await fetchClimate();
   const real=climate?months.map((r,i)=>climate.frac[i]!=null?+(r.h*climate.frac[i]).toFixed(2):null):null;
   return {v:1,generated:new Date().toISOString(),address:S.label,lat:+(S.bLat||S.lat).toFixed(6),lon:+(S.bLon||S.lon).toFixed(6),alt:Math.round(S.alt0),
-    window:{az:+f.az.toFixed(0),dir:DIRS[Math.round(f.az/45)%8],floor:w.floor,heightAboveGround:+(w.pos.z-u.zBase).toFixed(1),facadeLen:+f.len.toFixed(0),building:{h:+u.h.toFixed(1),ridge:u.ridge?+u.ridge.toFixed(1):null,floors:u.floors||null,usage:u.usage||null}},
+    window:{az:+f.az.toFixed(0),dir:DIRS[Math.round(f.az/45)%8],floor:w.floor-streetLevel(w.obj,u.facades.indexOf(f)),heightAboveGround:+(w.pos.z-Math.max(u.zBase,facGround(f))).toFixed(1),facadeLen:+f.len.toFixed(0),building:{h:+u.h.toFixed(1),ridge:u.ridge?+u.ridge.toFixed(1):null,floors:u.floors||null,usage:u.usage||null}},
     lidar:L, blind, year:Y, annual:{h:+(tot/nd).toFixed(2),free:+(ftot/nd).toFixed(2),hYear:Math.round(tot/nd*365)}, months, matrix, keyDates:kd, paths, sky, obstacles,
     climate:climate?{frac:climate.frac.map(v=>v!=null?+v.toFixed(2):null),src:climate.src,realMonths:real,realAnnual:+(real.reduce((a,b)=>a+(b||0),0)/12).toFixed(2)}:null};
 }
@@ -1945,8 +1960,8 @@ function refreshWinUI(){
   const sel=$('facade'), o=sel.options[sel.selectedIndex]; const n=sel.options.length;
   if(o){const parts=o.textContent.split(' · ');$('facLabel').innerHTML=`${parts[0]}<small>${(+sel.value+1)}/${n} · ${parts.slice(1).join(' · ')}</small>`;}
   const f=+$('floor').value||0; const u=S.building&&S.building.userData; const maxF=u?Math.max(0,(u.floors||Math.round(u.h/3))-1):40;
-  let street=''; if(S.win&&u){const fc=S.win.facade,gz=facGround(fc),bc=blindMap(S.building)[u.facades.indexOf(fc)]||[];const first=bc.findIndex(b=>b!==2);if(gz-u.zBase>1.2&&f===first)street=' · niveau rue';}
-  $('floorLabel').innerHTML=`${floorName(f)}<small>${u?`${(u.floors||'?')} niveaux · ${Math.round(u.h)} m${street}`:''}</small>`;
+  const fi=S.win&&u?u.facades.indexOf(S.win.facade):-1, si=fi>=0?streetLevel(S.building,fi):0, nF=u?nFloors(u):0;
+  $('floorLabel').innerHTML=`${fi>=0?relFloorName(S.building,fi,f):floorName(f)}<small>${u?`${si>0?`${nF-si} niveaux côté rue`:`${(u.floors||'?')} niveaux`} · ${Math.round(u.h)} m`:''}</small>`;
   $('floorDown').disabled=f<=0||(!!S.win&&stepFloor(f,-1)===f); $('floorUp').disabled=f>=maxF||(!!S.win&&stepFloor(f,1)===f);
   if(/^Quartier chargé/.test($('status').textContent))$('status').textContent='Quartier chargé.';
 }
