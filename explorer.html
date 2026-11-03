@@ -892,7 +892,7 @@ async function fetchLidarRaster(kind,R,res){
 }
 function startLidar(){ // launched right after geocoding, in parallel with buildings
   const c=p=>p.catch(()=>null);
-  S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1)),cloud:fetchCloud(isPhone()?70:120).catch(err=>{console.warn('LiDAR cloud',err);S.cloudErr=String(err&&err.stack||err);return null;})};
+  S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1)),cloud:fetchCloud(isPhone()?55:80).catch(err=>{console.warn('LiDAR cloud',err);S.cloudErr=String(err&&err.stack||err);return null;})};
 }
 async function lidarHeights(pts){
   const M=S.lidarP&&await S.lidarP.mnh; if(M)return pts.map(p=>M.max(p.x,p.y,1));
@@ -1612,7 +1612,7 @@ function carveFootprint(u,cloud,others){
 async function lidarBuildings(){
   const tok=refineToken; if(!S.lidarP||S.lidarRun===tok)return; S.lidarRun=tok;
   const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(tok!==refineToken||(!Ff&&!Fc))return;
-  const cloud=await Promise.race([S.lidarP.cloud||null,new Promise(r=>setTimeout(()=>r(null),60000))]); if(tok!==refineToken)return; let nCarved=0; S.counts.cloud=cloud?'ok':'absent';
+  const cloud=await Promise.race([S.lidarP.cloud||null,new Promise(r=>setTimeout(()=>r(null),90000))]); if(tok!==refineToken)return; let nCarved=0; S.counts.cloud=cloud?'ok':'absent';
   const others=S.meshes.map(m=>{const r=m.userData.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});return {rings:m.userData.rings,x0,x1,y0,y1};});
   const green=orthoGreen(); const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
   const gone=new Set(),added=[]; let n=0,tc=performance.now();const t0=tc;
