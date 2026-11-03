@@ -544,7 +544,7 @@ async function buildParcels(lat,lon){
   const M=2*(DETAIL_R+40), cv=document.createElement('canvas'); cv.width=cv.height=M; const cg=cv.getContext('2d'); cg.fillStyle='#000';
   S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;cg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>{const X=q.x+M/2,Y=M/2-q.y;i?cg.lineTo(X,Y):cg.moveTo(X,Y);});cg.closePath();});cg.fill('evenodd');});
   const occ=cg.getImageData(0,0,M,M).data; const built=(x,y)=>{const X=Math.floor(x+M/2),Y=Math.floor(M/2-y);if(X<0||Y<0||X>=M||Y>=M)return false;return occ[(Y*M+X)*4+3]>100;};
-  const cG=new THREE.Color(0xb3cc9a), cM=new THREE.Color(0xc8c3ba), cLot=new THREE.Color(PLAN_GROUND), P=[],N=[],C=[],L=[],BP=[],BN=[]; let nParc=0;
+  const cG=new THREE.Color(0xb3cc9a), cM=new THREE.Color(0xc8c3ba), cLot=new THREE.Color(PLAN_GROUND), cF=new THREE.Color(0xd9d5c3), P=[],N=[],C=[],L=[],BP=[],BN=[]; let nParc=0;
   feats.forEach(f=>{const g=f.geometry;const polys=g.type==='Polygon'?[g.coordinates]:(g.type==='MultiPolygon'?g.coordinates:[]);
     polys.forEach(poly=>{if(!poly[0]||poly[0].length<4)return;const outer=ringToLocal(poly[0]);const holes=[];for(let i=1;i<poly.length;i++)holes.push(ringToLocal(poly[i]));
       let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;outer.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});
@@ -559,7 +559,7 @@ async function buildParcels(lat,lon){
         const e=green(x,y); const tall=MH&&MH.at?MH.at(x,y):null; if(e>12||(tall!=null&&tall>1.2))ng++;}
       const open=n-nb; let col;
       if(open*st*st<25||open<0.12*n)col=cLot; // almost fully built: a plain lot
-      else{const gr=ng/open, t=Math.min(1,Math.max(0,(gr-0.2)/0.5)); col=cM.clone().lerp(cG,t*t*(3-2*t));}
+      else{const gr=ng/open, t=Math.min(1,Math.max(0,(gr-0.2)/0.5)); col=(open*st*st>3000?cF:cM).clone().lerp(cG,t*t*(3-2*t));} // big open lots are fields or meadows, not paving
       const shape=new THREE.Shape(outer);holes.forEach(h=>shape.holes.push(new THREE.Path(h)));const sg=new THREE.ShapeGeometry(shape);const pos=sg.attributes.position,idx=sg.index;
       const T=[];for(let i=0;i<idx.count;i+=3)T.push([0,1,2].map(d=>{const k=idx.getX(i+d);return [pos.getX(k),pos.getY(k)];}));
       nParc++; const n0=P.length; drapeTris(T,0.08,P,N); for(let k=n0;k<P.length;k+=3)C.push(col.r,col.g,col.b); sg.dispose();});});
