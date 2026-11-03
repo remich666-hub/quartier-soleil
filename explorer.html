@@ -1386,7 +1386,8 @@ function partModel(pts,rings){
   if(tv>0){let sA=0,qA=0;const sT=mean*n,qT=hs.reduce((s,v)=>s+v*v,0);for(let k=1;k<n;k++){sA+=hs[k-1];qA+=hs[k-1]*hs[k-1];const w=(qA-sA*sA/k)+((qT-qA)-(sT-sA)*(sT-sA)/(n-k));if(!bi||w<bi.w)bi={w,k};}}
   if(bi&&1-bi.w/tv>0.88&&top-eave>=2.2){const big=bi.k>=n/2?hs.slice(0,bi.k):hs.slice(bi.k);return {h:Math.max(2.5,qtl(big,0.5)),rise:0};}
   const r0=rings[0];let per=0;for(let i=0;i<r0.length;i++)per+=r0[i].distanceTo(r0[(i+1)%r0.length]);const maxRise=1.1*Math.abs(areaOf(r0))/per;
-  const pitched=top-eave>=2.2&&rings.length===1&&convexity(r0)>0.8;
+  const thr=Math.min(2.2,Math.max(1.0,0.2*Math.sqrt(Math.abs(areaOf(r0)))));
+  const pitched=top-eave>=thr&&rings.length===1;
   if(pitched)return {h:Math.max(2.5,eave),rise:Math.min(9,top-eave,maxRise)};
   return {h:Math.max(2.5,top-eave>=2.2?(eave+top)/2:med),rise:0};
 }
@@ -1397,7 +1398,11 @@ function makeBlock(src,rings,model,roofSets){
   const mesh=new THREE.Mesh(geo,matsFor(u.usage,false));mesh.position.z=u.zBase-SINK;mesh.castShadow=true;mesh.receiveShadow=true;
   const keepFloors=u.floors&&Math.abs(u.h-h)<3;
   mesh.userData={h,floors:keepFloors?u.floors:Math.max(1,Math.round(h/3)),usage:u.usage,zBase:u.zBase,roofKey:u.roofKey,facades:facadesOf(outer),rings:[outer].concat(holes),lidar:true,shift:u.shift,church:u.church};
-  if(model.rise>0){const s=roofSets[u.roofKey||'autre']||roofSets.autre;if(addRoof(s,outer,u.zBase+h,u.zBase+h+model.rise))mesh.userData.ridge=h+model.rise;}
+  if(model.rise>0){const s=roofSets[u.roofKey||'autre']||roofSets.autre;
+    if(convexity(outer)>0.8){if(addRoof(s,outer,u.zBase+h,u.zBase+h+model.rise))mesh.userData.ridge=h+model.rise;}
+    else{ // L, T, U shapes: one hip roof per wing (maximal rectangles inside the footprint), same pitch everywhere, like a real compound roof
+      const R=rectDecomp(outer); if(R.length){const main=R[0],slope=Math.min(1,model.rise/Math.max(1.5,main.w/2));let top=0;
+        R.forEach(r=>{const rise=Math.min(model.rise,slope*r.w/2);if(addRoof(s,r.ring,u.zBase+h,u.zBase+h+rise))top=Math.max(top,rise);});if(top)mesh.userData.ridge=h+top;}}}
   const eg=new THREE.EdgesGeometry(geo,25),arr=eg.attributes.position.array,off=new Float32Array(arr.length);for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+u.zBase-SINK;}mesh.userData.edgeArr=off;eg.dispose();
   geo.computeBoundingBox();geo.computeBoundingSphere();return mesh;
 }
@@ -1405,6 +1410,28 @@ function domAngle(r){let sx=0,sy=0;for(let i=0;i<r.length;i++){const a=r[i],b=r[
 /* Towers, upper storeys, roof structures: parts that stand clearly above the rest of the footprint.
    A wall makes the height jump at once (≥ 1.4 m within 1 m), a roof slope does not: only real steps are kept.
    Each one becomes a rectangle aligned on the building's walls, stacked on the main volume. */
+function rectDecomp(ring){ // up to 4 maximal rectangles aligned on the walls that together cover the footprint
+  const a=domAngle(ring),ca=Math.cos(a),sa=Math.sin(a),st=0.5;let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;
+  ring.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
+  const nu=Math.ceil((u1-u0)/st),nv=Math.ceil((v1-v0)/st);if(nu<3||nv<3||nu*nv>120000)return [];
+  const In=new Uint8Array(nu*nv),cov=new Uint8Array(nu*nv);let nIn=0;
+  for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const U=u0+(i+0.5)*st,V=v0+(j+0.5)*st;if(pointInPoly(U*ca-V*sa,U*sa+V*ca,ring)){In[j*nu+i]=1;nIn++;}}
+  const out=[];let left=nIn;
+  for(let it=0;it<4&&left>0.08*nIn;it++){
+    // largest rectangle of uncovered inside cells (histogram method)
+    const hh=new Int32Array(nu);let best=null;
+    for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hh[i]=(In[j*nu+i]&&!cov[j*nu+i])?hh[i]+1:0;
+      const stk=[];for(let i=0;i<=nu;i++){const cur=i<nu?hh[i]:0;let s=i;while(stk.length&&stk[stk.length-1][1]>=cur){const [si,sh]=stk.pop();const ar=sh*(i-si);if(sh&&(!best||ar>best.ar))best={ar,i0:si,i1:i-1,j0:j-sh+1,j1:j};s=si;}stk.push([s,cur]);}}
+    if(!best||best.ar*st*st<6)break;
+    // grow it over already covered cells while it stays inside: wings overlap, so their roofs meet like a real L roof
+    const full=(i0,i1,j0,j1)=>{if(i0<0||j0<0||i1>=nu||j1>=nv)return false;for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)if(!In[j*nu+i])return false;return true;};
+    let {i0,i1,j0,j1}=best,g=true;while(g){g=false;if(full(i1+1,i1+1,j0,j1)){i1++;g=true;}if(full(i0-1,i0-1,j0,j1)){i0--;g=true;}if(full(i0,i1,j1+1,j1+1)){j1++;g=true;}if(full(i0,i1,j0-1,j0-1)){j0--;g=true;}}
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const k=j*nu+i;if(!cov[k]){cov[k]=1;left--;}}
+    const W=(U,V)=>new THREE.Vector2(U*ca-V*sa,U*sa+V*ca);const U0=u0+i0*st,U1=u0+(i1+1)*st,V0=v0+j0*st,V1=v0+(j1+1)*st;
+    out.push({ring:[W(U0,V0),W(U1,V0),W(U1,V1),W(U0,V1)],w:Math.min(U1-U0,V1-V0)});
+  }
+  return out;
+}
 function findTowers(rings,u,F,green){
   const r0=rings[0],a=domAngle(r0),ca=Math.cos(a),sa=Math.sin(a),sh=u.shift||{dx:0,dy:0},st=0.5,cA=st*st;
   let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; r0.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
