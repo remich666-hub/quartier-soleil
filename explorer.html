@@ -404,13 +404,14 @@ el.addEventListener('pointermove',e=>{
   if(!drag||e.pointerId!==drag.id||pinch)return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
   if(Math.abs(e.clientX-drag.x0)+Math.abs(e.clientY-drag.y0)>(e.pointerType==='touch'?14:4))moved=true;
   if(cam.mode==='window'){cam.yaw=Math.max(-1.35,Math.min(1.35,cam.yaw+dx*0.004));cam.pitch=Math.max(-0.7,Math.min(1.2,cam.pitch+dy*0.004));drag.x=e.clientX;drag.y=e.clientY;applyCam();return;}
-  if(drag.b===2||drag.shift){const k=cam.dist*0.0016;const right=new THREE.Vector3(Math.cos(cam.theta),-Math.sin(cam.theta),0);const fwd=new THREE.Vector3(-Math.sin(cam.theta),-Math.cos(cam.theta),0);cam.target.addScaledVector(right,-dx*k).addScaledVector(fwd,-dy*k);}
+  if(drag.b===2||drag.b===1||drag.shift){const k=cam.dist*0.0016;const right=new THREE.Vector3(Math.cos(cam.theta),-Math.sin(cam.theta),0);const fwd=new THREE.Vector3(-Math.sin(cam.theta),-Math.cos(cam.theta),0);cam.target.addScaledVector(right,-dx*k).addScaledVector(fwd,-dy*k);}
   else{cam.theta+=dx*0.006;cam.phi=Math.max(0.08,Math.min(1.5,cam.phi+dy*0.006));}
   drag.x=e.clientX;drag.y=e.clientY;applyCam();
 });
 el.addEventListener('pointerup',e=>{if(!drag||e.pointerId!==drag.id)return;if(!moved&&drag.b===0&&cam.mode==='orbit'&&!pinch)pick(e);drag=null;});
 el.addEventListener('pointercancel',()=>{drag=null;});
 el.addEventListener('contextmenu',e=>e.preventDefault());
+el.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault();}); el.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault();});
 el.addEventListener('wheel',e=>{e.preventDefault();if(cam.mode==='window'){cam.hfov=Math.max(30,Math.min(110,(cam.hfov||82)+Math.sign(e.deltaY)*5));setFov();return;}cam.dist=Math.max(30,Math.min(2600,cam.dist*(1+Math.sign(e.deltaY)*0.12)));applyCam();},{passive:false});
 el.addEventListener('touchstart',e=>{if(e.touches.length===2){pinch=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}},{passive:true});
 el.addEventListener('touchend',e=>{if(e.touches.length<2)setTimeout(()=>{pinch=null;},80);},{passive:true});
@@ -488,7 +489,7 @@ function orthoLayer(mesh,mat,lat,lon,z,R,fallback,segs,onDone){
 function loadOrtho(lat,lon){
   orthoLayer(ground,groundMat,lat,lon,17,3,0xe9e6df,28);          // 7×7 tiles ≈ 1.4 km, 80 cm/px
   orthoLayer(inner,innerMat,lat,lon,19,isPhone()?4:5,0,40,(raw,w,e,n,s)=>{ // 9×9 or 11×11 tiles ≈ 450–550 m, 20 cm/px
-    if(!raw)return; S.rawOrtho={raw,w,e,n,s}; try{lidarRoofMat();}catch(_){} try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
+    if(!raw)return; S.rawOrtho={raw,w,e,n,s};  try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
   });
   inner.position.z=ground.position.z+0.06;
 }
@@ -737,7 +738,7 @@ function buildScene(features){
       fitWallUVs(geo,h);
       const mesh=new THREE.Mesh(geo,matsFor(usage,false));
       mesh.position.z=zBase-SINK; mesh.castShadow=true; mesh.receiveShadow=true;
-      mesh.userData={h,floors:p.nombre_d_etages,usage,zBase,facades:facadesOf(outer),rings:[outer].concat(holes)};
+      mesh.userData={h,floors:p.nombre_d_etages,usage,zBase,roofKey,facades:facadesOf(outer),rings:[outer].concat(holes)};
       if(rise>0){let done=false;const ra=roofSets[roofKey].P.length;if(!holes.length&&convexity(outer)>0.8)done=addRoof(roofSets[roofKey],outer,zBase+h,zBase+h+rise);if(done)mesh.userData.roofRef={key:roofKey,a:ra,b:roofSets[roofKey].P.length};
         if(!done){const g2=new THREE.ExtrudeGeometry(shape,{depth:rise+0.02,bevelEnabled:false});const m2=new THREE.Mesh(g2,ROOF[roofKey]);m2.position.z=zBase+h-0.01;m2.castShadow=m2.receiveShadow=true;scene.add(m2);roofMeshes.push(m2);mesh.userData.roofMesh=m2;}
         mesh.userData.ridge=h+rise;}
@@ -753,7 +754,7 @@ function buildScene(features){
     });
   });
   if(best){best.material=matsFor(best.userData.usage,true);S.target=best;}
-  S.roofSets=roofSets; S.roofSetMeshes=[]; S.roofEdgeParts=buildRoofSets(new Set()); edgeArrays.push(...S.roofEdgeParts);
+  S.roofSets=roofSets; S.roofSkip=new Set(); S.roofSetMeshes=[]; S.roofEdgeParts=buildRoofSets(new Set()); edgeArrays.push(...S.roofEdgeParts);
   buildGroundFloors(walls);
   let total=0; edgeArrays.forEach(a=>total+=a.length); const all=new Float32Array(total); let o=0; edgeArrays.forEach(a=>{all.set(a,o);o+=a.length;});
   const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.BufferAttribute(all,3));
@@ -1331,103 +1332,100 @@ try{const a=localStorage.getItem('qs-addr');if(a)$('addr').value=a;}catch(e){}
 
 /* ---------- buildings measured by the LiDAR HD (within LB_R): each IGN footprint keeps its clean outline, but its walls rise to the
    real height and its roof is draped on the laser surface (real pitches, terraces, courtyards), coloured from the orthophoto ---------- */
-const LB_R=200; let lidarRoofMatC=null;
-function washed(raw){const c=document.createElement('canvas');c.width=raw.width;c.height=raw.height;const g=c.getContext('2d');try{g.filter='saturate(0.72)';}catch(_){}g.drawImage(raw,0,0);g.filter='none';g.globalAlpha=0.36;g.fillStyle='#fbf7f0';g.fillRect(0,0,c.width,c.height);return c;}
-function lidarRoofMat(){
-  if(!lidarRoofMatC)lidarRoofMatC=new THREE.MeshLambertMaterial({color:0xe2ddd2});
-  const RO=S.rawOrtho, M=lidarRoofMatC;
-  if(RO&&M.userData.raw!==RO.raw){const t=new THREE.CanvasTexture(washed(RO.raw));t.encoding=THREE.sRGBEncoding;t.anisotropy=4;
-    t.repeat.set(1/(RO.e-RO.w),1/(RO.n-RO.s));t.offset.set(-RO.w/(RO.e-RO.w),-RO.s/(RO.n-RO.s)); // UVs are local metres
-    if(M.map)M.map.dispose();M.map=t;M.color.set(0xffffff);M.userData.raw=RO.raw;M.needsUpdate=true;}
-  return M;
-}
-function baseMats(m){return m.userData.mats||matsFor(m.userData.usage,false);}
-function clipCell(poly,x0,x1,y0,y1){ // Sutherland–Hodgman against an axis-aligned cell; points created on a cell side get that side's exact value
-  let out=poly;
-  for(const [ax,v,sg] of [[0,x0,1],[0,x1,-1],[1,y0,1],[1,y1,-1]]){if(out.length<3)return [];const inp=out;out=[];
-    const ins=p=>((ax?p.y:p.x)-v)*sg>=-1e-9;
-    for(let i=0;i<inp.length;i++){const p=inp[i],q=inp[(i+1)%inp.length],pi=ins(p),qi=ins(q);
-      if(pi)out.push(p);
-      if(pi!==qi){const pa=ax?p.y:p.x,qa=ax?q.y:q.x,t=(v-pa)/(qa-pa);out.push(ax?{x:p.x+(q.x-p.x)*t,y:v}:{x:v,y:p.y+(q.y-p.y)*t});}}}
-  return out.length>=3?out:[];
-}
+const LB_R=200;
+function baseMats(m){return matsFor(m.userData.usage,false);}
 const areaOf=r=>{let s=0;for(let i=0,j=r.length-1;i<r.length;j=i++)s+=(r[j].x-r[i].x)*(r[j].y+r[i].y);return s/2;};
-function orientRing(r,ccw){const q=r.map(p=>({x:p.x,y:p.y}));if(q.length>1&&Math.hypot(q[0].x-q[q.length-1].x,q[0].y-q[q.length-1].y)<0.01)q.pop();if((areaOf(q)>0)!==ccw)q.reverse();return q;}
-function lidarGeometry(m,F,cell){
-  const u=m.userData, r0=u.rings[0], zb=u.zBase, sh=u.shift||{dx:0,dy:0};
-  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; r0.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});
-  const inR=(x,y)=>{if(!pointInPoly(x,y,r0))return false;for(let k=1;k<u.rings.length;k++)if(pointInPoly(x,y,u.rings[k]))return false;return true;};
-  const raw=(x,y)=>{const v=F.at(x+sh.dx,y+sh.dy);return v==null?null:v-S.alt0;};
-  // what the laser sees inside the footprint
-  const st=Math.max(0.6,Math.sqrt((x1-x0)*(y1-y0)/700)); const vals=[]; let nin=0;
-  for(let x=x0+st/2;x<x1;x+=st)for(let y=y0+st/2;y<y1;y+=st)if(inR(x,y)){nin++;const v=raw(x,y);if(v!=null&&v>zb+2)vals.push(v);}
-  if(vals.length<3||vals.length<0.45*nin)return null; // no laser return over this footprint (demolished, data gap): keep the IGN volume
-  vals.sort((a,b)=>a-b); const q=f=>vals[Math.min(vals.length-1,Math.floor(f*(vals.length-1)))];
-  const lo=q(0.08),med=q(0.5),hi=q(0.92),flat=(q(0.85)-q(0.15))<1.2;
-  const cache=new Map();
-  const zIn=(x,y)=>{const a=[];for(const rad of [0.8,1.6]){for(let ox=-rad;ox<=rad+1e-6;ox+=rad/2)for(let oy=-rad;oy<=rad+1e-6;oy+=rad/2){if(!inR(x+ox,y+oy))continue;const v=raw(x+ox,y+oy);if(v!=null&&v>zb+2)a.push(v);}if(a.length>=6)break;}
-    if(!a.length)return med;a.sort((p,q)=>p-q);return Math.min(hi,Math.max(lo,a[a.length>>1]));};
-  const outer=orientRing(r0,true), holes=u.rings.slice(1).map(r=>orientRing(r,false));
-  // eave line: each façade gets a height profile sampled 0.9 m inside and median-filtered along the wall (no saw teeth)
-  const prof=[]; if(!flat)[outer].concat(holes).forEach(r=>r.forEach((A,i)=>{const B=r[(i+1)%r.length];const L=Math.hypot(B.x-A.x,B.y-A.y);if(L<1e-3)return;
-    const nx=-(B.y-A.y)/L,ny=(B.x-A.x)/L,N=Math.max(1,Math.ceil(L/0.5)),zs=[];
-    for(let k=0;k<=N;k++){const t=k/N;zs.push(zIn(A.x+(B.x-A.x)*t+nx*0.9,A.y+(B.y-A.y)*t+ny*0.9));}
-    const f=zs.map((_,k)=>{const w=zs.slice(Math.max(0,k-3),k+4).sort((p,q)=>p-q);return w[w.length>>1];});
-    prof.push({A,B,L,N,f});}));
-  const zEdge=(x,y)=>{for(const e of prof){const dx=e.B.x-e.A.x,dy=e.B.y-e.A.y;const t=((x-e.A.x)*dx+(y-e.A.y)*dy)/(e.L*e.L);if(t<-1e-6||t>1+1e-6)continue;
-      if(Math.abs((x-e.A.x)*dy-(y-e.A.y)*dx)/e.L>1e-5)continue;const s=Math.min(e.N,Math.max(0,t*e.N)),k=Math.min(e.N-1,Math.floor(s)),w=s-k;return e.f[k]*(1-w)+e.f[k+1]*w;}return null;};
-  const zAt=(x,y)=>{if(flat)return med;const key=x.toFixed(3)+','+y.toFixed(3);let z=cache.get(key);if(z!==undefined)return z;
-    z=zEdge(x,y);if(z==null)z=zIn(x,y);cache.set(key,z);return z;};
-  const RP=[],RN=[],RU=[],WP=[],WN=[],WU=[],EL=[]; const BOT=zb-SINK;
-  const wall=(a,b,X0,X1,Y0,Y1)=>{
-    if((a.x===X0&&b.x===X0)||(a.x===X1&&b.x===X1)||(a.y===Y0&&b.y===Y0)||(a.y===Y1&&b.y===Y1))return; // cell side, not a façade
-    const dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy);if(L<1e-4)return; const nx=dy/L,ny=-dx/L, ux=dx/L,uy=dy/L;
-    const za=zAt(a.x,a.y),zb2=zAt(b.x,b.y), ua=a.x*ux+a.y*uy, ub=b.x*ux+b.y*uy;
-    [[a,BOT,ua],[b,BOT,ub],[b,zb2,ub],[a,BOT,ua],[b,zb2,ub],[a,za,ua]].forEach(([p,z,uu])=>{WP.push(p.x,p.y,z);WN.push(nx,ny,0);WU.push(uu,z-zb);});
-    EL.push(a.x,a.y,za,b.x,b.y,zb2);};
-  const v2=p=>new THREE.Vector2(p.x,p.y);
-  for(let X0=Math.floor(x0/cell)*cell;X0<x1;X0+=cell)for(let Y0=Math.floor(y0/cell)*cell;Y0<y1;Y0+=cell){const X1=X0+cell,Y1=Y0+cell;
-    const o=clipCell(outer,X0,X1,Y0,Y1); if(!o.length)continue; const ao=Math.abs(areaOf(o)); if(ao<1e-4)continue;
-    const hs=holes.map(r=>clipCell(r,X0,X1,Y0,Y1)).filter(r=>r.length&&Math.abs(areaOf(r))>1e-4);
-    if(hs.some(r=>Math.abs(areaOf(r))>=ao-1e-4)){hs.forEach(r=>r.forEach((p,i)=>wall(p,r[(i+1)%r.length],X0,X1,Y0,Y1)));continue;}
-    const C=o.map(v2),Hs=hs.map(r=>r.map(v2)); let tris; try{tris=THREE.ShapeUtils.triangulateShape(C,Hs);}catch(_){continue;}
-    const all=C.concat(...Hs);
-    tris.forEach(t=>{let [A,B,D]=t.map(i=>all[i]);if(!A||!B||!D)return;if((B.x-A.x)*(D.y-A.y)-(B.y-A.y)*(D.x-A.x)<0){const T=B;B=D;D=T;}
-      const za=zAt(A.x,A.y),zB=zAt(B.x,B.y),zD=zAt(D.x,D.y);
-      const e1x=B.x-A.x,e1y=B.y-A.y,e1z=zB-za,e2x=D.x-A.x,e2y=D.y-A.y,e2z=zD-za;let nx=e1y*e2z-e1z*e2y,ny=e1z*e2x-e1x*e2z,nz=e1x*e2y-e1y*e2x;const nl=Math.hypot(nx,ny,nz)||1;nx/=nl;ny/=nl;nz/=nl;
-      [[A,za],[B,zB],[D,zD]].forEach(([p,z])=>{RP.push(p.x,p.y,z);RN.push(nx,ny,nz);RU.push(p.x,p.y);});});
-    o.forEach((p,i)=>wall(p,o[(i+1)%o.length],X0,X1,Y0,Y1)); hs.forEach(r=>r.forEach((p,i)=>wall(p,r[(i+1)%r.length],X0,X1,Y0,Y1)));
-  }
-  if(!RP.length)return null;
-  // corners
-  [outer].concat(holes).forEach(r=>r.forEach((p,i)=>{const a=r[(i+r.length-1)%r.length],b=r[(i+1)%r.length];const t1=Math.atan2(p.y-a.y,p.x-a.x),t2=Math.atan2(b.y-p.y,b.x-p.x);let d=Math.abs(t2-t1);if(d>Math.PI)d=2*Math.PI-d;if(d>0.5)EL.push(p.x,p.y,zb,p.x,p.y,zAt(p.x,p.y));}));
-  const g=new THREE.BufferGeometry(); const nR=RP.length/3,nW=WP.length/3;
-  g.setAttribute('position',new THREE.Float32BufferAttribute(RP.concat(WP),3));g.setAttribute('normal',new THREE.Float32BufferAttribute(RN.concat(WN),3));g.setAttribute('uv',new THREE.Float32BufferAttribute(RU.concat(WU),2));
-  g.addGroup(0,nR,0);g.addGroup(nR,nW,1);g.computeBoundingBox();g.computeBoundingSphere();
-  return {g,edges:new Float32Array(EL),eave:lo-zb,top:hi-zb};
+function clipHalf(poly,a,b,c){ // part of a ring where a·x+b·y+c ≥ 0
+  const out=[];for(let i=0;i<poly.length;i++){const p=poly[i],q=poly[(i+1)%poly.length],sp=a*p.x+b*p.y+c,sq=a*q.x+b*q.y+c;
+    if(sp>=0)out.push(p); if((sp>=0)!==(sq>=0)){const t=sp/(sp-sq);out.push(new THREE.Vector2(p.x+(q.x-p.x)*t,p.y+(q.y-p.y)*t));}}
+  const r=[];out.forEach(p=>{const l=r[r.length-1];if(!l||l.distanceTo(p)>0.05)r.push(p);});if(r.length>2&&r[0].distanceTo(r[r.length-1])<0.05)r.pop();
+  return r.length>=3&&Math.abs(areaOf(r))>1?r:null;
+}
+const qtl=(s,f)=>s[Math.min(s.length-1,Math.max(0,Math.floor(f*(s.length-1))))];
+function orthoGreen(){ // vegetation index (2G−R−B) from the orthophoto; trees over roofs must not raise them
+  const RO=S.rawOrtho; if(!RO)return ()=>-99; if(S._green&&S._green.raw===RO.raw)return S._green.f;
+  const W=RO.raw.width,mpp=(RO.e-RO.w)/W,d=RO.raw.getContext('2d').getImageData(0,0,W,RO.raw.height).data;
+  const f=(x,y)=>{const px=Math.round((x-RO.w)/mpp),py=Math.round((RO.n-y)/mpp);if(px<0||py<0||px>=W||py>=RO.raw.height)return -99;const k=(py*W+px)*4;return 2*d[k+1]-d[k]-d[k+2];};
+  S._green={raw:RO.raw,f};return f;
+}
+/* The laser tells how tall each footprint really is; the model stays a clean architect's maquette:
+   1) heights inside the IGN footprint (laid on the laser roof), trees and spikes removed;
+   2) when the laser shows two clear levels (a 6-storey block + its 1-storey courtyard annex), the footprint is cut by one straight line;
+   3) each part = straight walls up to its eave, flat roof, or a simple pitched roof when the laser clearly shows one. */
+function lidarSamples(u,F,green){
+  const r0=u.rings[0],sh=u.shift||{dx:0,dy:0}; let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; r0.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});
+  const st=(x1-x0)*(y1-y0)>3000?1:0.5; const pts=[]; let nin=0;
+  for(let x=x0+st/2;x<x1;x+=st)for(let y=y0+st/2;y<y1;y+=st){if(!pointInPoly(x,y,r0))continue;let hole=false;for(let k=1;k<u.rings.length;k++)if(pointInPoly(x,y,u.rings[k])){hole=true;break;}if(hole)continue;
+    nin++;const v=F.at(x+sh.dx,y+sh.dy);if(v==null)continue;const hh=v-S.alt0-u.zBase;if(hh<2)continue;if(green(x+sh.dx,y+sh.dy)>12)continue;pts.push({x,y,h:hh});}
+  return {pts,nin,cell:st*st};
+}
+function splitByLevel(rings,pts,cell,depth){
+  const parts=[{rings,pts}]; if(depth>=2||pts.length*cell<40)return parts;
+  const hs=pts.map(p=>p.h).sort((a,b)=>a-b),n=hs.length; const pre=[0];hs.forEach(v=>pre.push(pre[pre.length-1]+v));const pre2=[0];hs.forEach(v=>pre2.push(pre2[pre2.length-1]+v*v));
+  let best=null;for(let k=Math.ceil(n*0.12);k<=Math.floor(n*0.88);k++){const sA=pre[k],sB=pre[n]-pre[k],qA=pre2[k],qB=pre2[n]-pre2[k];const v=(qA-sA*sA/k)+(qB-sB*sB/(n-k));if(!best||v<best.v)best={v,t:(hs[k-1]+hs[k])/2,k};}
+  if(!best)return parts; const A=pts.filter(p=>p.h<best.t),B=pts.filter(p=>p.h>=best.t);
+  const mA=qtl(A.map(p=>p.h).sort((a,b)=>a-b),0.5),mB=qtl(B.map(p=>p.h).sort((a,b)=>a-b),0.5);
+  if(mB-mA<3.5||A.length*cell<18||B.length*cell<18)return parts;
+  const cA=A.reduce((s,p)=>[s[0]+p.x/A.length,s[1]+p.y/A.length],[0,0]),cB=B.reduce((s,p)=>[s[0]+p.x/B.length,s[1]+p.y/B.length],[0,0]);
+  let wx=cB[0]-cA[0],wy=cB[1]-cA[1];const wl=Math.hypot(wx,wy);if(wl<1.5)return parts;wx/=wl;wy/=wl;
+  // best straight cut perpendicular to the A→B direction, tried at a few angles
+  let cut=null;for(let da=-0.5;da<=0.5001;da+=0.125){const cs=Math.cos(da),sn=Math.sin(da),ax=wx*cs-wy*sn,ay=wx*sn+wy*cs;
+    const pr=pts.map(p=>({s:p.x*ax+p.y*ay,b:p.h>=best.t})).sort((a,b)=>a.s-b.s);const totB=B.length;let aL=0,bL=0;
+    for(let i=0;i<pr.length;i++){if(pr[i].b)bL++;else aL++;const acc=(aL+(totB-bL))/pr.length;if(!cut||acc>cut.acc)cut={acc,ax,ay,c:(pr[i].s+(pr[i+1]?pr[i+1].s:pr[i].s))/2};}}
+  if(!cut||cut.acc<0.86)return parts;
+  const side=(sg)=>{const o=clipHalf(rings[0],sg*cut.ax,sg*cut.ay,-sg*cut.c);if(!o)return null;const hl=rings.slice(1).map(r=>clipHalf(r,sg*cut.ax,sg*cut.ay,-sg*cut.c)).filter(Boolean);
+    return {rings:[o].concat(hl),pts:pts.filter(p=>sg*(p.x*cut.ax+p.y*cut.ay-cut.c)>=0)};};
+  const lo=side(-1),hi=side(1); if(!lo||!hi||lo.pts.length*cell<12||hi.pts.length*cell<12)return parts;
+  return splitByLevel(lo.rings,lo.pts,cell,depth+1).concat(splitByLevel(hi.rings,hi.pts,cell,depth+1));
+}
+function partModel(pts,rings){
+  const hs=pts.map(p=>p.h).sort((a,b)=>a-b); if(hs.length<4)return null;
+  const eave=qtl(hs,0.15),med=qtl(hs,0.5),top=qtl(hs,0.92); const pitched=top-eave>=2.2&&rings.length===1&&convexity(rings[0])>0.8;
+  if(pitched)return {h:Math.max(2.5,eave),rise:Math.min(9,top-eave)};
+  return {h:Math.max(2.5,top-eave>=2.2?(eave+top)/2:med),rise:0};
+}
+function makeBlock(src,rings,model,roofSets){
+  const u=src.userData,outer=rings[0],holes=rings.slice(1),h=model.h;
+  const shape=new THREE.Shape(outer);holes.forEach(hr=>shape.holes.push(new THREE.Path(hr)));
+  const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});fitWallUVs(geo,h);
+  const mesh=new THREE.Mesh(geo,matsFor(u.usage,false));mesh.position.z=u.zBase-SINK;mesh.castShadow=true;mesh.receiveShadow=true;
+  const keepFloors=u.floors&&Math.abs(u.h-h)<3;
+  mesh.userData={h,floors:keepFloors?u.floors:Math.max(1,Math.round(h/3)),usage:u.usage,zBase:u.zBase,roofKey:u.roofKey,facades:facadesOf(outer),rings:[outer].concat(holes),lidar:true,shift:u.shift,church:u.church};
+  if(model.rise>0){const s=roofSets[u.roofKey||'autre']||roofSets.autre;if(addRoof(s,outer,u.zBase+h,u.zBase+h+model.rise))mesh.userData.ridge=h+model.rise;}
+  const eg=new THREE.EdgesGeometry(geo,25),arr=eg.attributes.position.array,off=new Float32Array(arr.length);for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+u.zBase-SINK;}mesh.userData.edgeArr=off;eg.dispose();
+  geo.computeBoundingBox();geo.computeBoundingSphere();return mesh;
 }
 async function lidarBuildings(){
-  const tok=refineToken; if(!S.lidarP)return; const [Ff,Fc]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns]); if(tok!==refineToken||(!Ff&&!Fc))return;
-  const MHr=await S.lidarP.mnh; const cell=isPhone()?1.5:1, roofMat=lidarRoofMat(); const skip=new Set(), gone=new Set(); let n=0, tc=performance.now(); const t0=tc;
-  const list=S.meshes.slice().map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
+  const tok=refineToken; if(!S.lidarP||S.lidarRun===tok)return; S.lidarRun=tok;
+  const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(tok!==refineToken||(!Ff&&!Fc))return;
+  const green=orthoGreen(); const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
+  const gone=new Set(),added=[]; let n=0,tc=performance.now();const t0=tc;
+  const list=S.meshes.filter(m=>!m.userData.lidar).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
   for(const m of list){
     if(performance.now()-tc>25){await new Promise(r=>setTimeout(r,0));tc=performance.now();if(tok!==refineToken)return;}
-    const u=m.userData; if(u.lidar)continue; let ext=0; u.rings[0].forEach(p=>{ext=Math.max(ext,Math.abs(p.x),Math.abs(p.y));}); if(ext>LB_R)continue;
-    const F=(Ff&&ext<Ff.R-2)?Ff:Fc; if(!F)continue;
-    if(!u.shift&&MHr&&ext<90)u.shift=registerFootprint(m,MHr); // lay the footprint on the laser roof before sampling heights
-    const r=lidarGeometry(m,F,cell); if(!r)continue;
-    m.geometry.dispose(); m.geometry=r.g; m.position.z=0; u.lidar=true; u.edgeArr=r.edges; u.mats=[roofMat,matsFor(u.usage,false)[1]];
-    if(Math.abs(r.eave-u.h)>3){u.h=Math.max(3,r.eave);u.floors=Math.max(1,Math.round(u.h/3));} u.ridge=Math.max(r.top,u.h);
-    m.material=(m===S.target||m===S.selMesh)?matsFor(u.usage,true):u.mats;
-    if(u.roofRef)skip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]); if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh.geometry.dispose();gone.add(u.roofMesh);}
+    const u=m.userData;let ext=0;u.rings[0].forEach(p=>{ext=Math.max(ext,Math.abs(p.x),Math.abs(p.y));});if(ext>LB_R)continue;
+    const F=(Ff&&ext<Ff.R-2)?Ff:Fc;if(!F)continue;
+    if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
+    const smp=lidarSamples(u,F,green); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
+    const parts=splitByLevel(u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;}),smp.pts,smp.cell,0);
+    const blocks=[];for(const pt of parts){const md=partModel(pt.pts,pt.rings);if(md)blocks.push(makeBlock(m,pt.rings,md,roofSets));}
+    if(!blocks.length)continue;
+    buildingsGroup.remove(m);m.geometry.dispose();gone.add(m);
+    if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh.geometry.dispose();gone.add(u.roofMesh);}
+    const near=(p)=>blocks.reduce((b,x)=>{const d=x.geometry.boundingSphere.center.distanceTo(new THREE.Vector3(p.x,p.y,x.geometry.boundingSphere.center.z));return !b||d<b.d?{x,d}:b;},null).x;
+    blocks.forEach(b=>{buildingsGroup.add(b);added.push(b);});
+    if(m===S.target){S.target=near({x:0,y:0});S.target.material=matsFor(S.target.userData.usage,true);}
+    if(m===S.building||m===S.selMesh){const nb=near(S.win&&S.win.pos?S.win.pos:{x:0,y:0});if(m===S.building)S.building=nb;if(m===S.selMesh)S.selMesh=nb;nb.material=matsFor(nb.userData.usage,true);}
     n++;
   }
   if(tok!==refineToken)return;
-  (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);}); S.roofSetMeshes=[];
-  roofMeshes=roofMeshes.filter(m=>!gone.has(m)); S.roofEdgeParts=buildRoofSets(skip);
-  rebuildEdges(); S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(S.roofSetMeshes); S.lidarBuilt=n>0;
-  S.counts=Object.assign(S.counts||{},{lidarBuildings:n}); console.log('LiDAR buildings',n,Math.round(performance.now()-t0)+' ms');
-  if(S.win&&S.lastSky)try{drawShell(S.lastSky);}catch(_){}
+  S.meshes=S.meshes.filter(m=>!gone.has(m)).concat(added);
+  // pitched roofs: IGN ones of replaced buildings dropped, laser-confirmed ones added
+  Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];const a=d.P.length;d.P.push(...s.P);d.N.push(...s.N);});
+  (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
+  roofMeshes=roofMeshes.filter(m=>!gone.has(m));S.roofEdgeParts=buildRoofSets(S.roofSkip);
+  rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0;
+  S.counts=Object.assign(S.counts||{},{lidarBuildings:n});console.log('LiDAR buildings',n,'→',added.length,'blocs',Math.round(performance.now()-t0)+' ms');
 }
 function rebuildEdges(){
   if(edgeLines){scene.remove(edgeLines);edgeLines.geometry.dispose();edgeLines=null;}
