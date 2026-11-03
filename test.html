@@ -2011,7 +2011,7 @@ async function lidarBuildings(){
       // tree crowns over roofs; whatever rises above that ceiling is foliage, never a storey: towers are dropped, volumes clipped.
       if(u.zTop!=null&&u.zTop>u.zBase+2){const lim=u.zTop-u.zBase+0.8;
         for(let i=vols.length-1;i>=0;i--){const v=vols[i],md=v.md,top=md.h+(md.rise||0);if(top<=lim)continue;
-          if(v.tower){vols.splice(i,1);continue;}
+          if(v.tower&&md.h>lim-0.5){vols.splice(i,1);continue;} // a "tower" taller than the whole building is a crown
           const over=top-lim; if((md.rise||0)>over)md.rise-=over; else{md.rise=Math.min(md.rise||0,Math.max(0,lim-2.5));md.h=Math.max(2.5,lim-md.rise);} md.pts=null;}
         if(!vols.length)continue;}
       // storeys: the IGN count belongs to the main volume (largest footprint); the others are counted from it, ~3 m a storey
