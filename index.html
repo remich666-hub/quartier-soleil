@@ -1027,6 +1027,67 @@ $('lidar').addEventListener('click',async()=>{
   $('lidarText').textContent=`LiDAR HD (${sk.n} points) : dans l'axe de la fenêtre, le ciel est bouché jusqu'à ${(sk.hor[ai]/RAD).toFixed(0)}°${front?` par un obstacle à ${front.d.toFixed(0)} m (sommet à ${front.z.toFixed(1)} m)`:''}. Soleil direct moyen : maquette ${avgM.toFixed(1)} h/j, LiDAR ${avgL.toFixed(1)} h/j. La ligne orange dans la vue fenêtre est l'horizon mesuré.`;
   drawChart(rowsL); fillTable(rowsL); verdict(rowsL); renderStrip();
 });
+/* ---------- report data (everything the paid report shows, computed from the window) ---------- */
+async function fetchClimate(){ // share of clear-sky direct sun actually received, per month (satellite DNI 2019-2024)
+  try{const c=new AbortController();setTimeout(()=>c.abort(),30000);
+    const r=await fetch(`https://satellite-api.open-meteo.com/v1/archive?latitude=${S.lat.toFixed(3)}&longitude=${S.lon.toFixed(3)}&start_date=2019-01-01&end_date=2024-12-31&hourly=direct_normal_irradiance&timezone=Europe%2FParis`,{signal:c.signal});
+    const j=await r.json();const T=j.hourly.time,V=j.hourly.direct_normal_irradiance;const B={};
+    T.forEach((t,i)=>{const v=V[i];if(v==null)return;const k=(+t.slice(5,7))+':'+(+t.slice(11,13));(B[k]=B[k]||[]).push(v);});
+    const fr=[];for(let m=1;m<=12;m++){let s=0,cs=0;for(let hh=0;hh<24;hh++){const a=B[m+':'+hh];if(!a)continue;const so=[...a].sort((x,y)=>x-y);const p=so[Math.floor(so.length*0.95)];if(p<50)continue;s+=a.reduce((x,y)=>x+y,0);cs+=p*a.length;}fr.push(cs?s/cs:null);}
+    return {frac:fr,src:'Open-Meteo, rayonnement direct mesuré par satellite 2019-2024'};
+  }catch(e){return null;}
+}
+function rangesOf(lit,step){const out=[];let a=-1;lit.forEach((v,i)=>{if(v&&a<0)a=i;if(!v&&a>=0){out.push([a*step,i*step]);a=-1;}});if(a>=0)out.push([a*step,lit.length*step]);return out.map(([x,y])=>[fmtTime(x),fmtTime(y)]);}
+async function reportData(){
+  const w=S.win; if(!w||!w.pos)throw new Error('Choisissez d\'abord une fenêtre');
+  if(!S.skyline||S.skyline.floor!==w.floor){const sk=await fetchSkyline();if(sk){sk.floor=w.floor;S.skyline=sk;}}
+  const L=!!S.skyline, Y=S.year, u=w.obj.userData, f=w.facade;
+  const months=yearRows(L).map(r=>({m:r.m,h:+r.h.toFixed(2),free:+r.fh.toFixed(2)}));
+  // month × time-of-day matrix on the 15th: 2 sun on the window, 1 sun up and facing but hidden, 0 otherwise
+  const matrix=[];for(let m=1;m<=12;m++){const row=[];for(let t=0;t<1440;t+=10){const inst=localToInstant(Y,m,15,Math.floor(t/60),t%60);const sp=sunPos(inst,S.lat,S.lon);const facing=sp.alt>0.005&&sunVec(sp).dot(w.normal)>0.02;row.push(!facing?0:(sunHits(w.pos,w.normal,inst,L)?2:1));}matrix.push(row.join(''));}
+  // key dates
+  const kd=[['Solstice d\'hiver',12,21],['Équinoxe',3,20],['Solstice d\'été',6,21]].map(([label,m,d])=>{const lit=analyzeDay(Y,m,d,5);const free=unobstructedDay(Y,m,d,5);
+    let sr=null,ss=null;for(let t=0;t<1440;t+=5){const sp=sunPos(localToInstant(Y,m,d,Math.floor(t/60),t%60),S.lat,S.lon);if(sp.alt>0.005){if(sr==null)sr=t;ss=t;}}
+    return {label,m,d,h:+(lit.filter(Boolean).length*5/60).toFixed(2),free:+(free.filter(Boolean).length*5/60).toFixed(2),ranges:rangesOf(lit,5),sunrise:fmtTime(sr),sunset:fmtTime(ss+5)};});
+  // yearly mean over every 4th day
+  let tot=0,ftot=0,nd=0;for(let doy=1;doy<=365;doy+=4){const md=dayOfYearToMD(Y,doy);const lit=analyzeDay(Y,md.m,md.d,10);const fr=unobstructedDay(Y,md.m,md.d,10);tot+=lit.filter(Boolean).length/6;ftot+=fr.filter(Boolean).length/6;nd++;}
+  // sun paths (21st of each month) in degrees, for the solar mask
+  const paths=[];for(let m=1;m<=12;m++){const pts=[];for(let t=0;t<=1440;t+=10){const sp=sunPos(localToInstant(Y,m,21,Math.floor(t/60),t%60),S.lat,S.lon);if(sp.alt>-0.02)pts.push([+(sp.az/RAD).toFixed(1),+(sp.alt/RAD).toFixed(1),t]);}paths.push({m,pts});}
+  // skyline + obstacles
+  let sky=null,obstacles=[];
+  if(S.skyline){const sk=S.skyline;const MH=S.lidarP&&await S.lidarP.mnh;
+    const typeAt=(x,y)=>{for(const m of S.meshes){const rs=m.userData.rings;if(rs&&rs[0]&&pointInPoly(x,y,rs[0]))return {type:'bâtiment',h:m.userData.ridge||m.userData.h};}const v=MH?MH.max(x,y,1):null;return v!=null&&v>1.2?{type:'végétation',h:v}:{type:'relief',h:null};};
+    const items=sk.az.map((az,i)=>{const hit=sk.hits[i];const deg=sk.hor[i]/RAD;if(!hit)return {az:az/RAD,deg};const x=w.pos.x+Math.sin(az)*hit.d,y=w.pos.y+Math.cos(az)*hit.d;const t=typeAt(x,y);return {az:az/RAD,deg,d:hit.d,z:hit.z,type:t.type,h:t.h};});
+    sky={az:items.map(i=>+(((i.az%360)+360)%360).toFixed(1)),deg:items.map(i=>+i.deg.toFixed(1)),type:items.map(i=>i.type||'')};
+    // group consecutive azimuths that hide sky (>4°) and share a type
+    let cur=null;items.forEach((it,i)=>{const on=it.deg>4&&it.type;if(on&&cur&&cur.type===it.type&&Math.abs(it.d-cur.dLast)<Math.max(8,cur.dLast*0.5)){cur.i1=i;cur.list.push(it);cur.dLast=it.d;}else{if(cur)obstacles.push(cur);cur=on?{type:it.type,i0:i,i1:i,list:[it],dLast:it.d}:null;}});if(cur)obstacles.push(cur);
+    obstacles=obstacles.map(o=>{const top=o.list.reduce((a,b)=>b.deg>a.deg?b:a);const az0=sk.az[o.i0]/RAD,az1=sk.az[o.i1]/RAD;const mid=((((az0+az1)/2)%360)+360)%360;
+      // hours of direct sun this obstacle takes away per year (every 4th day, 10 min)
+      let lost=0;for(let doy=1;doy<=365;doy+=4){const md=dayOfYearToMD(Y,doy);for(let t=0;t<1440;t+=10){const sp=sunPos(localToInstant(Y,md.m,md.d,Math.floor(t/60),t%60),S.lat,S.lon);if(sp.alt<=0.005||sunVec(sp).dot(w.normal)<=0.02)continue;const a=sp.az/RAD;let da=((a-az0)%360+360)%360,span=((az1-az0)%360+360)%360;if(da>span+1.25)continue;if(sp.alt<=horizonAt(sk,sp.az))lost+=10/60*4;}}
+      return {type:o.type,dir:DIRS[Math.round(mid/45)%8],az0:+az0.toFixed(0),az1:+az1.toFixed(0),deg:+top.deg.toFixed(0),d:+top.d.toFixed(0),h:top.h!=null?+top.h.toFixed(1):null,lostH:Math.round(lost)};}).filter(o=>o.lostH>=5||o.deg>=12).sort((a,b)=>b.lostH-a.lostH).slice(0,6);
+  }
+  const climate=await fetchClimate();
+  const real=climate?months.map((r,i)=>climate.frac[i]!=null?+(r.h*climate.frac[i]).toFixed(2):null):null;
+  return {v:1,generated:new Date().toISOString(),address:S.label,lat:+S.lat.toFixed(6),lon:+S.lon.toFixed(6),alt:Math.round(S.alt0),
+    window:{az:+f.az.toFixed(0),dir:DIRS[Math.round(f.az/45)%8],floor:w.floor,heightAboveGround:+(w.pos.z-u.zBase).toFixed(1),facadeLen:+f.len.toFixed(0),building:{h:+u.h.toFixed(1),ridge:u.ridge?+u.ridge.toFixed(1):null,floors:u.floors||null,usage:u.usage||null}},
+    lidar:L, year:Y, annual:{h:+(tot/nd).toFixed(2),free:+(ftot/nd).toFixed(2),hYear:Math.round(tot/nd*365)}, months, matrix, keyDates:kd, paths, sky, obstacles,
+    climate:climate?{frac:climate.frac.map(v=>v!=null?+v.toFixed(2):null),src:climate.src,realMonths:real,realAnnual:+(real.reduce((a,b)=>a+(b||0),0)/12).toFixed(2)}:null};
+}
+async function captureViews(){ // aerial view of the building + views from the window at the key dates (JPEG data URLs)
+  const w=S.win; if(!w)return {}; const keep={doy:S.doy,minute:S.minute,mode:cam.mode,theta:cam.theta,phi:cam.phi,dist:cam.dist,target:cam.target.clone()};
+  const W=1200,H=760; const prev=new THREE.Vector2(); renderer.getSize(prev); const pr=renderer.getPixelRatio(); renderer.setPixelRatio(1); renderer.setSize(W,H,false); camera.aspect=W/H; setFov();
+  const shot=()=>{renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.82);};
+  const setT=(m,d,min)=>{S.doy=Math.round((Date.UTC(S.year,m-1,d)-Date.UTC(S.year,0,1))/86400000)+1;S.minute=min;update();};
+  const out={views:[]};
+  if(cam.mode==='window')setMode('orbit'); marker.visible=false;markerArrow.visible=false;facadeLine.visible=true;
+  setT(3,20,15*60); const bb=w.obj.geometry.boundingBox; cam.target.set((bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2,u0()); cam.dist=Math.max(70,Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y)*2.6); cam.phi=0.62; cam.theta=Math.atan2(w.normal.x,w.normal.y)+0.5; applyCam(); out.aerial=shot();
+  function u0(){return w.obj.userData.zBase+w.obj.userData.h*0.4;}
+  setMode('window'); cam.pitch=0.12;
+  for(const [m,d,min] of [[12,21,12*60+30],[3,20,13*60],[6,21,13*60+30]]){setT(m,d,min);applyCam();out.views.push(shot());}
+  setMode(keep.mode); Object.assign(cam,{theta:keep.theta,phi:keep.phi,dist:keep.dist}); cam.target.copy(keep.target); S.doy=keep.doy;S.minute=keep.minute;
+  renderer.setPixelRatio(pr); renderer.setSize(prev.x,prev.y,false); resize(); setFov(); applyCam(); update();
+  return out;
+}
 /* ---------- sun analysis ---------- */
 function sunHits(pos,normal,inst,useLidar){
   const sp=sunPos(inst,S.lat,S.lon); if(sp.alt<=0.005)return false;
@@ -1167,7 +1228,7 @@ function frame(now){
   renderer.render(scene,camera); requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.QS={S,scene,cam,selectBuilding,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown}};
+window.QS={S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown}};
 update(); load($('addr').value);
 })();
 </script>
