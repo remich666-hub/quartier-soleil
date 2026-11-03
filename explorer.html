@@ -852,7 +852,7 @@ function buildScene(features){
   roofMeshes.forEach(m=>{scene.remove(m);m.geometry.dispose();}); roofMeshes=[];
   const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
   S.meshes=[]; S.target=null; S.building=null;
-  const edgeArrays=[], walls=[], ctxList=[]; let best=null,bestD=1e9;
+  const edgeArrays=[], walls=[], ctxList=[], cands=[]; let best=null,bestD=1e9;
   features.forEach(f=>{
     const p=f.properties; let h=p.hauteur; if(typeof h!=='number'||h<=0){const n=p.nombre_d_etages;h=(typeof n==='number'&&n>0)?n*3+1:6;}
     const sol=(typeof p.altitude_minimale_sol==='number'&&p.altitude_minimale_sol>-50)?p.altitude_minimale_sol:null;
@@ -888,8 +888,12 @@ function buildScene(features){
       const eg=new THREE.EdgesGeometry(geo,25); const arr=eg.attributes.position.array; const off=new Float32Array(arr.length); for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+zBase-SINK;} edgeArrays.push(off); mesh.userData.edgeArr=off; eg.dispose();
       geo.computeBoundingBox(); const bb=geo.boundingBox; const d=Math.hypot((bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2);
       if(bb.min.x<=0&&bb.max.x>=0&&bb.min.y<=0&&bb.max.y>=0&&bestD>-1){best=mesh;bestD=-1;} else if(d<bestD){best=mesh;bestD=d;}
+      if(!far){const de=pointInPoly(0,0,outer)?0:distToRing(0,0,outer); if(de<40)cands.push({mesh,de,area:Math.abs(areaOf(outer)),usage,h});}
     });
   });
+  // the address point often falls on the street or on a carport: prefer the main dwelling nearby over annexes
+  {const annex=c=>(!c.usage||/Indiff|Annexe/i.test(c.usage))&&(c.area<60||c.h<3); const sc=c=>c.de-Math.min(8,Math.sqrt(c.area)/3)-(/sidentiel/.test(c.usage)?4:0);
+   const cur=cands.find(c=>c.mesh===best); if(!cur||annex(cur)||cur.de>0){const ok=cands.filter(c=>!annex(c)).sort((a,b)=>sc(a)-sc(b)); if(ok.length&&(!cur||annex(cur)||sc(ok[0])<sc(cur)))best=ok[0].mesh;}}
   if(best){best.material=matsFor(best.userData.usage,true);S.target=best;}
   S.roofSets=roofSets; S.roofSkip=new Set(); S.roofSetMeshes=[]; S.roofEdgeParts=buildRoofSets(new Set()); edgeArrays.push(...S.roofEdgeParts);
   buildGroundFloors(walls); buildContext(ctxList);
@@ -1841,7 +1845,7 @@ async function lidarBuildings(){
       if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh.geometry.dispose();gone.add(u.roofMesh);}
       const nearB=(p)=>blocks.filter(b=>!b.userData.tower).concat(blocks).reduce((b,x)=>{const d=x.geometry.boundingSphere.center.distanceTo(new THREE.Vector3(p.x,p.y,x.geometry.boundingSphere.center.z));return !b||d<b.d?{x,d}:b;},null).x;
       blocks.forEach(b=>{buildingsGroup.add(b);added.push(b);b.children.forEach(c=>added.push(c));});
-      if(m===S.target){S.target=nearB({x:0,y:0});hiLater.push(S.target);}
+      if(m===S.target){const main=blocks.filter(b=>!b.userData.tower).sort((p,q)=>Math.abs(areaOf(q.userData.rings[0]))-Math.abs(areaOf(p.userData.rings[0])))[0];S.target=main||nearB({x:0,y:0});hiLater.push(S.target);}
       if(m===S.building||m===S.selMesh){const nb=nearB(S.win&&S.win.pos?S.win.pos:{x:0,y:0});if(m===S.building)S.building=nb;if(m===S.selMesh)S.selMesh=nb;hiLater.push(nb);}
       n++;
     }
