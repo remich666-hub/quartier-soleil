@@ -2009,6 +2009,7 @@ async function lidarBuildings(){
         if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){m2.pts=F===Ff?t.pts:null;vols.push({rings:[t.ring],md:m2,tower:true});}});}
       // Hard ceiling: the IGN's highest roof point of this building (photogrammetry on the building itself). The laser also sees
       // tree crowns over roofs; whatever rises above that ceiling is foliage, never a storey: towers are dropped, volumes clipped.
+      if(window.__qsdbg&&m.geometry.boundingSphere.center.length()<40)window.__qsdbg.push({c:[Math.round(m.geometry.boundingSphere.center.x),Math.round(m.geometry.boundingSphere.center.y)],zTop:u.zTop,zBase:u.zBase,vols:vols.map(v=>[+v.md.h.toFixed(1),+(v.md.rise||0).toFixed(1),!!v.tower])});
       if(u.zTop!=null&&u.zTop>u.zBase+2){const lim=u.zTop-u.zBase+0.8;
         for(let i=vols.length-1;i>=0;i--){const v=vols[i],md=v.md,top=md.h+(md.rise||0);if(top<=lim)continue;
           if(v.tower&&md.h>lim-0.5){vols.splice(i,1);continue;} // a "tower" taller than the whole building is a crown
