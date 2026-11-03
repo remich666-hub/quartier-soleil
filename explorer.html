@@ -428,7 +428,7 @@ el.addEventListener('pointermove',e=>{
   if(Math.abs(e.clientX-drag.x0)+Math.abs(e.clientY-drag.y0)>(e.pointerType==='touch'?14:4))moved=true;
   if(cam.mode==='window'){cam.yaw=Math.max(-1.35,Math.min(1.35,cam.yaw+dx*0.004));cam.pitch=Math.max(-0.7,Math.min(1.2,cam.pitch+dy*0.004));drag.x=e.clientX;drag.y=e.clientY;applyCam();return;}
   if(drag.b===2||drag.b===1||drag.shift){const k=cam.dist*0.0016;const right=new THREE.Vector3(Math.cos(cam.theta),-Math.sin(cam.theta),0);const fwd=new THREE.Vector3(-Math.sin(cam.theta),-Math.cos(cam.theta),0);const sg=drag.b===1?1:-1;cam.target.addScaledVector(right,sg*dx*k).addScaledVector(fwd,sg*dy*k);}
-  else{cam.theta+=dx*0.006;cam.phi=Math.max(0.08,Math.min(1.5,cam.phi+dy*0.006));}
+  else{const sg=e.pointerType==='touch'?-1:1;cam.theta+=sg*dx*0.006;cam.phi=Math.max(0.08,Math.min(1.5,cam.phi+sg*dy*0.006));}
   drag.x=e.clientX;drag.y=e.clientY;applyCam();
 });
 el.addEventListener('pointerup',e=>{if(!drag||e.pointerId!==drag.id)return;if(!moved&&drag.b===0&&cam.mode==='orbit'&&!pinch)pick(e);drag=null;});
@@ -830,11 +830,12 @@ function addRoof(sets,ring,zEave,zRidge){
   return true;
 }
 const DETAIL_R=200, CONTEXT_R=450; let ctxMesh=null;
-const ctxMat=new THREE.MeshLambertMaterial({color:0xe9e7e1});
-ctxMat.onBeforeCompile=sh=>{sh.uniforms.qsSky=skyUni.ground;
+const ctxMat=new THREE.MeshLambertMaterial({color:0xe9e7e1,transparent:true});
+ctxMat.onBeforeCompile=sh=>{
   sh.vertexShader='varying vec2 vQsW;\n'+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n vQsW=(modelMatrix*vec4(transformed,1.0)).xy;');
-  sh.fragmentShader='uniform vec3 qsSky; varying vec2 vQsW;\n'+sh.fragmentShader.replace('#include <fog_fragment>','#include <fog_fragment>\n gl_FragColor.rgb=mix(gl_FragColor.rgb,qsSky,0.38+0.62*smoothstep('+DETAIL_R+'.0,'+(CONTEXT_R+20)+'.0,length(vQsW)));');};
-ctxMat.customProgramCacheKey=()=>'qsctx';
+  // light beige ghosts that fade out with distance, whatever the hour (never tinted by the night sky)
+  sh.fragmentShader='varying vec2 vQsW;\n'+sh.fragmentShader.replace('#include <fog_fragment>','#include <fog_fragment>\n float qsT=clamp((length(vQsW)-'+DETAIL_R+'.0)/'+(CONTEXT_R+20-DETAIL_R)+'.0,0.0,1.0); gl_FragColor.rgb=mix(gl_FragColor.rgb,vec3(0.925,0.905,0.865),0.55); gl_FragColor.a=0.8*(1.0-qsT*qsT*(3.0-2.0*qsT));');};
+ctxMat.customProgramCacheKey=()=>'qsctx2';
 function buildContext(list){ // the wider neighbourhood: plain blocks merged into one mesh (one draw call), fading into the sky
   if(ctxMesh){scene.remove(ctxMesh);ctxMesh.geometry.dispose();ctxMesh=null;} if(!list.length)return;
   const P=[],N=[];
@@ -842,7 +843,7 @@ function buildContext(list){ // the wider neighbourhood: plain blocks merged int
     const pa=g.attributes.position.array,na=g.attributes.normal.array;const z0=zBase-SINK;
     for(let i=0;i<pa.length;i+=3){P.push(pa[i],pa[i+1],pa[i+2]+z0);N.push(na[i],na[i+1],na[i+2]);} g.dispose();});
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
-  ctxMesh=new THREE.Mesh(g,ctxMat); ctxMesh.castShadow=false; ctxMesh.receiveShadow=false; scene.add(ctxMesh);
+  ctxMesh=new THREE.Mesh(g,ctxMat); ctxMesh.castShadow=false; ctxMesh.receiveShadow=false; ctxMesh.renderOrder=3; scene.add(ctxMesh);
 }
 function buildScene(features){
   while(buildingsGroup.children.length){const m=buildingsGroup.children.pop();m.geometry.dispose();}
