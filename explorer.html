@@ -416,9 +416,12 @@ el.addEventListener('pointercancel',()=>{drag=null;});
 el.addEventListener('contextmenu',e=>e.preventDefault());
 el.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault();}); el.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault();});
 el.addEventListener('wheel',e=>{e.preventDefault();if(cam.mode==='window'){cam.hfov=Math.max(30,Math.min(110,(cam.hfov||82)+Math.sign(e.deltaY)*5));setFov();return;}cam.dist=Math.max(30,Math.min(2600,cam.dist*(1+Math.sign(e.deltaY)*0.12)));applyCam();},{passive:false});
-el.addEventListener('touchstart',e=>{if(e.touches.length===2){pinch=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}},{passive:true});
+let pmid=null; const mid2=t=>({x:(t[0].clientX+t[1].clientX)/2,y:(t[0].clientY+t[1].clientY)/2});
+el.addEventListener('touchstart',e=>{if(e.touches.length===2){pinch=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);pmid=mid2(e.touches);}},{passive:true});
 el.addEventListener('touchend',e=>{if(e.touches.length<2)setTimeout(()=>{pinch=null;},80);},{passive:true});
-el.addEventListener('touchmove',e=>{if(e.touches.length===2&&pinch){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(cam.mode==='window'){cam.hfov=Math.max(30,Math.min(110,(cam.hfov||82)*pinch/d));setFov();}else{cam.dist=Math.max(30,Math.min(2600,cam.dist*pinch/d));applyCam();}pinch=d;}},{passive:true});
+el.addEventListener('touchmove',e=>{if(e.touches.length===2&&pinch){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(cam.mode==='window'){cam.hfov=Math.max(30,Math.min(110,(cam.hfov||82)*pinch/d));setFov();}else{cam.dist=Math.max(30,Math.min(2600,cam.dist*pinch/d));
+    // two fingers moving together slide the map (same feel as a right-drag)
+    const m=mid2(e.touches);if(pmid){const dx=m.x-pmid.x,dy=m.y-pmid.y,k=cam.dist*0.0016;const right=new THREE.Vector3(Math.cos(cam.theta),-Math.sin(cam.theta),0);const fwd=new THREE.Vector3(-Math.sin(cam.theta),-Math.cos(cam.theta),0);cam.target.addScaledVector(right,-dx*k).addScaledVector(fwd,-dy*k);}pmid=m;applyCam();}pinch=d;}},{passive:true});
 function resize(){const w=view.clientWidth,h=view.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
 window.addEventListener('resize',()=>{resize();if(cam.mode==='window')setFov();}); resize(); applyCam();
 function showTab(name){ if(name==='bottom'){$('sheet').classList.add('collapsed');} else $('sheet').classList.remove('collapsed'); }
