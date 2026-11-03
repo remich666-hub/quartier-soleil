@@ -389,7 +389,7 @@ function setMode(mode){
   cam.mode=mode; const win=mode==='window';
   cam.hfov=82; camera.near=win?0.3:1; setFov();
   if(win){cam.baseYaw=Math.atan2(S.win.normal.x,S.win.normal.y);cam.yaw=0;cam.pitch=0.05;}
-  marker.visible=!win&&!!S.win; markerArrow.visible=!win&&!!S.win; facadeLine.visible=!win&&!!S.win;
+  marker.visible=!win&&!!S.win; markerArrow.visible=!win&&!!S.win; facadeLine.visible=!win&&!!S.win; if(lidarShell)lidarShell.visible=win;
   $('viewWin').textContent=win?'Retour à la maquette':'Vue depuis la fenêtre'; if(!win)$('sheet').classList.remove('collapsed');
   $('winHintText').textContent=win?'Vous êtes à la fenêtre. Glissez pour regarder autour ; l\'arc jaune est la course du soleil ce jour-là. Onglet Temps pour faire défiler l\'heure.':'Choisissez la façade, l\'étage et la position, puis calculez.';
   if(win&&isPhone())showTab('bottom');
@@ -991,7 +991,7 @@ function selectBuilding(obj){
 function chooseFacade(idx){
   const obj=S.building; if(!obj)return; const f=obj.userData.facades[idx]; if(!f)return;
   S.win={obj,facade:f,floor:Math.max(0,Math.min(40,+$('floor').value||0)),along:(+$('along').value||50)/100,normal:f.normal.clone()};
-  S.skyline=null; skyLine.visible=false; $('lidarText').textContent='';
+  S.skyline=null; skyLine.visible=false; if(lidarShell)lidarShell.visible=false; $('lidarText').textContent='';
   placeMarker(); refreshWinUI(); scheduleSummary();
 }
 function placeMarker(){
@@ -1078,7 +1078,20 @@ function horizonAt(sk,az){ // interpolated horizon angle for an azimuth; outside
   let best=-1;let bd=1e9;for(let i=0;i<sk.az.length;i++){let d=Math.abs(((az-sk.az[i])+Math.PI)%(2*Math.PI)-Math.PI);if(d<bd){bd=d;best=i;}}
   return bd>3*RAD?Math.PI/2:sk.hor[best];
 }
-function drawSkyline(sk){
+// LiDAR shell: the measured obstacles around the window as a surface, so the window view shows walls the IGN footprints miss
+const shellMat=new THREE.MeshLambertMaterial({color:0xd9d0c2,side:THREE.DoubleSide,transparent:true,opacity:0.92});
+let lidarShell=null;
+function drawShell(sk){
+  if(lidarShell){scene.remove(lidarShell);lidarShell.geometry.dispose();lidarShell=null;}
+  const w=S.win; if(!w||!sk)return; const sh=sk.shift||{dx:0,dy:0}; const P=[]; const z0=-w.pos.z-0.3;
+  for(let i=0;i<sk.az.length-1;i++){const a=sk.hits[i],b=sk.hits[i+1];if(!a||!b)continue;if(sk.hor[i]<0.02&&sk.hor[i+1]<0.02)continue;
+    const pa=[sh.dx+Math.sin(sk.az[i])*a.d,sh.dy+Math.cos(sk.az[i])*a.d],pb=[sh.dx+Math.sin(sk.az[i+1])*b.d,sh.dy+Math.cos(sk.az[i+1])*b.d];
+    const ta=a.z-w.pos.z,tb=b.z-w.pos.z;
+    P.push(pa[0],pa[1],z0, pb[0],pb[1],z0, pb[0],pb[1],tb, pa[0],pa[1],z0, pb[0],pb[1],tb, pa[0],pa[1],ta);}
+  if(!P.length)return; const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.computeVertexNormals();
+  lidarShell=new THREE.Mesh(g,shellMat);lidarShell.position.copy(w.pos);lidarShell.visible=cam.mode==='window';lidarShell.renderOrder=2;scene.add(lidarShell);
+}
+function drawSkyline(sk){ drawShell(sk);
   const pts=[];const R=300;sk.az.forEach((az,i)=>{const h=sk.hor[i];pts.push(new THREE.Vector3(Math.sin(az)*R,Math.cos(az)*R,Math.tan(Math.min(h,1.3))*R));});
   skyLine.geometry.dispose();skyLine.geometry=new THREE.BufferGeometry().setFromPoints(pts);skyLine.visible=true;
 }
@@ -1135,7 +1148,7 @@ async function reportData(){
     obstacles=obstacles.map(o=>{const top=o.list.reduce((a,b)=>b.deg>a.deg?b:a);const az0=sk.az[o.i0]/RAD,az1=sk.az[o.i1]/RAD;const mid=((((az0+az1)/2)%360)+360)%360;
       // hours of direct sun this obstacle takes away per year (every 4th day, 10 min)
       let lost=0;for(let doy=1;doy<=365;doy+=4){const md=dayOfYearToMD(Y,doy);for(let t=0;t<1440;t+=10){const sp=sunPos(localToInstant(Y,md.m,md.d,Math.floor(t/60),t%60),S.lat,S.lon);if(sp.alt<=0.005||sunVec(sp).dot(w.normal)<=0.02)continue;const a=sp.az/RAD;let da=((a-az0)%360+360)%360,span=((az1-az0)%360+360)%360;if(da>span+1.25)continue;if(sp.alt<=horizonAt(sk,sp.az))lost+=10/60*4;}}
-      const nz=a=>Math.round(((a%360)+360)%360);return {type:o.type,dir:DIRS[Math.round(mid/45)%8],az0:nz(az0),az1:nz(az1),deg:+top.deg.toFixed(0),d:+top.d.toFixed(0),h:top.h!=null?+top.h.toFixed(1):null,lostH:Math.round(lost)};}).filter(o=>o.lostH>=5||o.deg>=12).sort((a,b)=>b.lostH-a.lostH).slice(0,6);
+      const nz=a=>Math.round(((a%360)+360)%360);return {type:o.type,dir:DIRS[Math.round(mid/45)%8],az0:nz(az0),az1:nz(az1),deg:+top.deg.toFixed(0),d:+top.d.toFixed(0),h:top.z!=null?+Math.max(0,top.z).toFixed(1):(top.h!=null?+top.h.toFixed(1):null),lostH:Math.round(lost)};}).filter(o=>o.lostH>=5||o.deg>=12).sort((a,b)=>b.lostH-a.lostH).slice(0,6);
   }
   let blind=false; if(S.skyline){const sk=S.skyline,mid=(sk.az.length-1)/2;let c=0,n=0;for(let i=0;i<sk.az.length;i++){if(Math.abs(i-mid)>12)continue;n++;const hh=sk.hits[i];if(hh&&hh.d<=3.5&&sk.hor[i]>60*RAD)c++;}blind=n>0&&c/n>0.7;}
   const climate=await fetchClimate();
