@@ -1006,8 +1006,8 @@ async function fetchSkyline(){
   const F=S.lidarP&&await S.lidarP.mnsFine, C=S.lidarP&&await S.lidarP.mns, MH=S.lidarP&&await S.lidarP.mnh;
   if(F||C){ // rasters: instant. First register the IGN footprint on the LiDAR roof (they can be 1–2 m apart), then sample from the shifted window
     const sh=MH?registerFootprint(w.obj,MH):{dx:0,dy:0};
-    const ownD=(x,y)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||distToRing(q.x,q.y,r)<0.8);};
-    const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+Math.sin(az)*d,y=w.pos.y+sh.dy+Math.cos(az)*d;if(d<8&&ownD(x,y))return;pts2.push({ai,d,x,y});}));
+    const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8));};
+    const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+Math.sin(az)*d,y=w.pos.y+sh.dy+Math.cos(az)*d;if(d<8&&ownD(x,y,d))return;pts2.push({ai,d,x,y});}));
     pts2.forEach(p=>{let z=null;if(F&&p.d<115)z=F.at(p.x,p.y);if(z==null&&C)z=C.at(p.x,p.y);if(z==null)return;got++;const ang=Math.atan2(z-winZ,p.d);if(ang>hor[p.ai]){hor[p.ai]=ang;hits[p.ai]={d:p.d,z:z-S.alt0};}});
     if(got>=pts2.length*0.5)return {az:AZ,hor,hits,n:got,shift:sh};
     got=0;hor.fill(-0.2);hits.fill(null);
