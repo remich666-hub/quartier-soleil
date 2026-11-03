@@ -1162,7 +1162,8 @@ function introMove(){
     d1=Math.max(d1,Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y)*3);}
   const th1=-0.8, a={t:new THREE.Vector3(c.x*0.3,c.y*0.3,0),th:th1+0.62,ph:1.45,d:isPhone()?1100:950};
   cam.target.copy(a.t);cam.theta=a.th;cam.phi=a.ph;cam.dist=a.d;
-  camTw={t0:performance.now(),dur:3600,ease:'quint',a,b:{t:c,th:th1,ph:0.78,d:d1},onEnd:()=>pulseAt(c)};
+  let done; S.introP=new Promise(r=>done=r);
+  camTw={t0:performance.now(),hold:true,dur:3600,ease:'quint',a,b:{t:c,th:th1,ph:0.78,d:d1},onEnd:()=>{pulseAt(c);done();}};
 }
 function pulseAt(c){ // a ring that spreads on the ground around the address: "it's here"
   if(introRing){scene.remove(introRing);introRing.geometry.dispose();}
@@ -1544,7 +1545,8 @@ async function load(q,at){
     treeSets.ign=vegZoneSpots(veg).filter(t=>Math.hypot(t.x!=null?t.x:t[0],t.y!=null?t.y:t[1])<DETAIL_R+40); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}); S.wx=wx; if(!wx)toast('Météo indisponible');
     try{applyFade();}catch(err){console.error('fade',err);}
     buildParcels(g.lat,g.lon);
-    S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building; lidarBuildings();
+    S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building;
+    if(S.introP){const p=S.introP;S.introP=null;await Promise.race([p,new Promise(r=>setTimeout(r,4500))]);} lidarBuildings();
     try{localStorage.setItem('qs-addr',q);}catch(e){}
   }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;}
   $('go').disabled=false; update();
@@ -1906,6 +1908,7 @@ function frame(now){
   const dt=Math.min(0.1,(now-lastT)/1000); lastT=now;
   if(S.playing){S.minute=(S.minute+dt*60)%1440;$('time').value=Math.round(S.minute/5)*5;update();}
   if(rain.visible){const p=rain.geometry.attributes.position.array;const sp=(rain.userData.speed||3.5)*60*dt;for(let i=0;i<RAIN_N;i++){p[i*3+2]-=sp;if(p[i*3+2]<0)p[i*3+2]=150;}rain.geometry.attributes.position.needsUpdate=true;rain.position.set(camera.position.x,camera.position.y,0);}
+  if(camTw&&camTw.hold){if(S.loading)camTw.t0=now;else camTw.hold=false;}
   if(camTw){const k=Math.max(0,Math.min(1,(now-camTw.t0)/camTw.dur)),e=camTw.ease==='quint'?k*k*k*(k*(k*6-15)+10):(k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2),a=camTw.a,b=camTw.b;
     cam.target.lerpVectors(a.t,b.t,e);cam.theta=a.th+(b.th-a.th)*e;cam.phi=a.ph+(b.ph-a.ph)*e;
     cam.dist=camTw.ease==='quint'?Math.exp(Math.log(a.d)+(Math.log(b.d)-Math.log(a.d))*e):a.d+(b.d-a.d)*e; applyCam();
