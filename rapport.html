@@ -129,7 +129,7 @@ th.n{text-align:right;white-space:nowrap}
 <body>
 <div class="toolbar" id="toolbar" hidden>
   <span class="note" id="tbNote">Exemple de rapport, calculé sur une maison réelle de (exemple)</span>
-  <a class="btn primary" href="./" style="display:inline-flex;align-items:center;text-decoration:none">Calculer pour mon adresse</a>
+  <a class="btn primary" href="explorer.html" style="display:inline-flex;align-items:center;text-decoration:none">Calculer pour mon adresse</a>
 </div>
 <div id="doc"><p class="loading">Préparation du rapport…</p></div>
 
@@ -290,7 +290,7 @@ function render(R){
 (async()=>{
   const q=new URLSearchParams(location.search); let R=null;
   if(!q.get('ex')){try{const s=localStorage.getItem('qs-report');if(s)R=JSON.parse(s);}catch(e){}}
-  if(!R){const ex=(q.get('ex')||'exemple').replace(/[^a-z0-9-]/g,'');try{R=await (await fetch(`exemples/${ex}.json`)).json();$('#toolbar').hidden=false;}catch(e){$('#doc').innerHTML='<p class="loading">Rapport introuvable.</p>';return;}}
+  if(!R){const ex=(q.get('ex')||'exemple').replace(/[^a-z0-9-]/g,'');try{R=await (await fetch(`exemples/${ex}.json`)).json();if(!q.get('embed'))$('#toolbar').hidden=false;else document.body.style.paddingTop='16px';}catch(e){$('#doc').innerHTML='<p class="loading">Rapport introuvable.</p>';return;}}
   if(document.fonts&&document.fonts.ready)await document.fonts.ready;
   render(R);
 })();
