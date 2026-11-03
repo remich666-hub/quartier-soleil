@@ -404,7 +404,7 @@ el.addEventListener('pointermove',e=>{
   if(!drag||e.pointerId!==drag.id||pinch)return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
   if(Math.abs(e.clientX-drag.x0)+Math.abs(e.clientY-drag.y0)>(e.pointerType==='touch'?14:4))moved=true;
   if(cam.mode==='window'){cam.yaw=Math.max(-1.35,Math.min(1.35,cam.yaw+dx*0.004));cam.pitch=Math.max(-0.7,Math.min(1.2,cam.pitch+dy*0.004));drag.x=e.clientX;drag.y=e.clientY;applyCam();return;}
-  if(drag.b===2||drag.b===1||drag.shift){const k=cam.dist*0.0016;const right=new THREE.Vector3(Math.cos(cam.theta),-Math.sin(cam.theta),0);const fwd=new THREE.Vector3(-Math.sin(cam.theta),-Math.cos(cam.theta),0);cam.target.addScaledVector(right,-dx*k).addScaledVector(fwd,-dy*k);}
+  if(drag.b===2||drag.b===1||drag.shift){const k=cam.dist*0.0016;const right=new THREE.Vector3(Math.cos(cam.theta),-Math.sin(cam.theta),0);const fwd=new THREE.Vector3(-Math.sin(cam.theta),-Math.cos(cam.theta),0);const sg=drag.b===1?1:-1;cam.target.addScaledVector(right,sg*dx*k).addScaledVector(fwd,sg*dy*k);}
   else{cam.theta+=dx*0.006;cam.phi=Math.max(0.08,Math.min(1.5,cam.phi+dy*0.006));}
   drag.x=e.clientX;drag.y=e.clientY;applyCam();
 });
