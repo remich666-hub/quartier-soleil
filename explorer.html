@@ -1730,7 +1730,7 @@ function laserOnlyBuildings(cloud){
     const total=left;
     for(let it=0;it<4&&left>total*0.15;it++){const hh=new Int32Array(nu);let bst=null;
       for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hh[i]=M[j*nu+i]?hh[i]+1:0;const stk=[];for(let i=0;i<=nu;i++){const cur=i<nu?hh[i]:0;let s0=i;while(stk.length&&stk[stk.length-1][1]>=cur){const [si,sh2]=stk.pop();const ar=sh2*(i-si);if(sh2&&(!bst||ar>bst.ar))bst={ar,i0:si,i1:i-1,j0:j-sh2+1,j1:j};s0=si;}stk.push([s0,cur]);}}
-      const minA=reg.pocket?0.75:3,minS=reg.pocket?0.5:2;
+      const minA=reg.pocket?0.9:3,minS=reg.pocket?0.95:2;
       if(!bst||bst.ar*st*st<minA)break;const {i0,i1,j0,j1}=bst;const zs=[];if((i1-i0+1)*st<minS||(j1-j0+1)*st<minS){for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const k=j*nu+i;if(M[k]){M[k]=0;left--;}}continue;}
       for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const k=j*nu+i;if(M[k]){zs.push(Hm[k]);M[k]=0;left--;}}
       zs.sort((p,q)=>p-q);const ring=[W(u0+i0*st,v0+j0*st),W(u0+(i1+1)*st,v0+j0*st),W(u0+(i1+1)*st,v0+(j1+1)*st),W(u0+i0*st,v0+(j1+1)*st)];
