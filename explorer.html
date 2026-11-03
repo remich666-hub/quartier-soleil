@@ -1874,6 +1874,9 @@ function findTowers(rings,u,F,green){
         [[1,0],[-1,0],[0,1],[0,-1]].forEach(([di,dj])=>{const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv||lab[nj*nu+ni]===id)return;const fi=ci+2*di,fj=cj+2*dj;if(fi<0||fj<0||fi>=nu||fj>=nv)return;const f=fj*nu+fi;if(lab[f]===id||!(H[f]===H[f]))return;dh.push(H[c]-H[f]);});});
       if(dh.length<6)continue; dh.sort((p,q)=>p-q); if(qtl(dh,0.5)<1.4)continue;
       const fill=cells.length/((i1-i0+1)*(j1-j0+1)); if(fill<0.55)continue;
+      // a tree crown over the roof is not a tower: roofs are smooth at 50 cm (median step ≈ 0.1 m), foliage is rough (≥ 0.4 m)
+      {const set=new Set(cells),st2=[];cells.forEach(c=>{const ci=c%nu;if(ci+1<nu&&set.has(c+1))st2.push(Math.abs(H[c]-H[c+1]));if(set.has(c+nu))st2.push(Math.abs(H[c]-H[c+nu]));});
+       if(st2.length>=10){st2.sort((p,q)=>p-q);if(st2[st2.length>>1]>0.3)continue;}}
       cells.forEach(c=>used[c]=1); towers.push({cells,i0,i1,j0,j1});
     }
   }
