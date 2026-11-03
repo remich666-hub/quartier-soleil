@@ -503,7 +503,7 @@ function applyGroundMode(){
 let planLayer=null;
 function loadOrtho(lat,lon){
   orthoLayer(ground,groundMat,lat,lon,17,3,0xe9e6df,28);          // 7×7 tiles ≈ 1.4 km, 80 cm/px
-  orthoLayer(inner,innerMat,lat,lon,19,3,0,40,(raw,w,e,n,s)=>{ // 9×9 or 11×11 tiles ≈ 450–550 m, 20 cm/px
+  orthoLayer(inner,innerMat,lat,lon,19,3,0,40,(raw,w,e,n,s)=>{ // 7×7 tiles ≈ 350 m, 20 cm/px: enough to find the trees and hedges around the address
     if(!raw)return; S.rawOrtho={raw,w,e,n,s};  try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
   });
   inner.position.z=ground.position.z+0.06;
