@@ -1547,7 +1547,7 @@ async function fetchCloud(R){
       await new Promise(res=>setTimeout(res,0));}};
     await work(); // one chunk at a time: the LAZ decoder's memory is shared
   }
-  console.log('LiDAR cloud',urls.length,'tile(s)',total,'pts',Math.round(performance.now()-t0)+' ms');
+  console.log('LiDAR cloud',urls.length,'tile(s)',total,'pts',Math.round(performance.now()-t0)+' ms'); S.cloudInfo={tiles:urls.length,pts:total,ms:Math.round(performance.now()-t0)};
   return {R:R2,N,cell,z6,gnd,pc,at(x,y){const i=Math.floor((x+R2)/cell),j=Math.floor((R2-y)/cell);return (i<0||j<0||i>=N||j>=N)?-1:j*N+i;}};
 }
 /* Carve what the IGN outline misses: light wells, set-backs, notches. Only cells where the laser hits the ground (or a much lower cover)
@@ -1612,7 +1612,7 @@ function carveFootprint(u,cloud,others){
 async function lidarBuildings(){
   const tok=refineToken; if(!S.lidarP||S.lidarRun===tok)return; S.lidarRun=tok;
   const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(tok!==refineToken||(!Ff&&!Fc))return;
-  const cloud=await Promise.race([S.lidarP.cloud||null,new Promise(r=>setTimeout(()=>r(null),25000))]); if(tok!==refineToken)return; let nCarved=0;
+  const cloud=await Promise.race([S.lidarP.cloud||null,new Promise(r=>setTimeout(()=>r(null),60000))]); if(tok!==refineToken)return; let nCarved=0; S.counts.cloud=cloud?'ok':'absent';
   const others=S.meshes.map(m=>{const r=m.userData.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});return {rings:m.userData.rings,x0,x1,y0,y1};});
   const green=orthoGreen(); const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
   const gone=new Set(),added=[]; let n=0,tc=performance.now();const t0=tc;
