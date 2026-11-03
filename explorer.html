@@ -1300,7 +1300,7 @@ async function load(q){
     const [alt,feats,terrain]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000),fetchTerrain(g.lat,g.lon).catch(()=>null)]);
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
-    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; if(dsm){scene.remove(dsm.mesh);dsm.mesh.geometry.dispose();dsm=null;applyClip();} if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
+    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; if(dsm){scene.remove(dsm.mesh);dsm.mesh.geometry.dispose();scene.remove(dsm.wmesh);dsm.wmesh.geometry.dispose();dsm=null;applyClip();} if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     buildScene(feats); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
@@ -1330,7 +1330,7 @@ function applyClip(){const a=DSM_R-1;const planes=dsm?[new THREE.Plane(new THREE
   clipMats().forEach(m=>{m.clippingPlanes=planes.length?planes:null;m.clipIntersection=true;m.clipShadows=true;m.needsUpdate=true;});}
 async function buildDSM(){
   const tok=refineToken; const F=S.lidarP&&await S.lidarP.mnsFine; if(!F||tok!==refineToken)return;
-  if(dsm){scene.remove(dsm.mesh);dsm.mesh.geometry.dispose();dsm=null;}
+  if(dsm){scene.remove(dsm.mesh);dsm.mesh.geometry.dispose();scene.remove(dsm.wmesh);dsm.wmesh.geometry.dispose();dsm=null;}
   const s=isPhone()?1:0.5, R=DSM_R, n=Math.round(2*R/s)+1;
   // footprint mask (dilated 1.5 m): only laser points on buildings are used, not trees or cars
   const c=document.createElement('canvas');c.width=c.height=n;const g=c.getContext('2d');g.fillStyle='#fff';g.strokeStyle='#fff';g.lineWidth=3/s;g.lineJoin='round';
@@ -1339,23 +1339,30 @@ async function buildDSM(){
   const P=new Float32Array(n*n*3),U=new Float32Array(n*n*2),Z=new Float32Array(n*n),G=new Float32Array(n*n),B=new Uint8Array(n*n);
   const RO=S.rawOrtho;
   for(let j=0;j<n;j++)for(let i=0;i<n;i++){const k=j*n+i,x=-R+i*s,y=R-j*s;const gz=terrainZ(x,y);const zs=F.at(x,y);let z=gz;
-    if(zs!=null&&md[k*4]>127){const hz=zs-S.alt0;if(hz-gz>2.2){z=hz;B[k]=1;}}
+    if(zs!=null&&md[k*4]>127){const hz=zs-S.alt0;if(hz-gz>2.5){z=hz;B[k]=1;}}
     Z[k]=z;G[k]=gz;P[k*3]=x;P[k*3+1]=y;P[k*3+2]=z;if(RO){U[k*2]=(x-RO.w)/(RO.e-RO.w);U[k*2+1]=(y-RO.s)/(RO.n-RO.s);}}
-  const roof=[],wall=[];const tri=(a,b,c2)=>{const ax=P[a*3],ay=P[a*3+1],az=P[a*3+2],bx=P[b*3]-ax,by=P[b*3+1]-ay,bz=P[b*3+2]-az,cx=P[c2*3]-ax,cy=P[c2*3+1]-ay,cz=P[c2*3+2]-az;
-    const nx=by*cz-bz*cy,ny=bz*cx-bx*cz,nz=bx*cy-by*cx;const L=Math.hypot(nx,ny,nz)||1;(Math.abs(nz/L)>0.55?roof:wall).push(a,b,c2);};
-  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i,b=a+1,c2=a+n,d=c2+1;if(!(B[a]|B[b]|B[c2]|B[d]))continue;tri(a,c2,b);tri(b,c2,d);}
+  // roofs: smooth surface over cells whose 4 corners are on a building; walls: vertical, along the outline of that region
+  const full=new Uint8Array(n*n); for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i;full[a]=B[a]&B[a+1]&B[a+n]&B[a+n+1];}
+  const roof=[]; const WP=[];
+  const wq=(a,b)=>{const ax=P[a*3],ay=P[a*3+1],bx=P[b*3],by=P[b*3+1];WP.push(ax,ay,G[a]-0.3, bx,by,G[b]-0.3, bx,by,Z[b], ax,ay,G[a]-0.3, bx,by,Z[b], ax,ay,Z[a]);};
+  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i;if(!full[a])continue;const b=a+1,c2=a+n,d=c2+1;roof.push(a,c2,b,b,c2,d);
+    if(j===0||!full[a-n])wq(b,a); if(j===n-2||!full[a+n])wq(c2,d); if(i===0||!full[a-1])wq(a,c2); if(i===n-2||!full[a+1])wq(d,b);}
+  const wall=[];
   if(!roof.length)return;
   const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(P,3));geo.setAttribute('uv',new THREE.BufferAttribute(U,2));
-  const idx=roof.concat(wall);geo.setIndex(idx);geo.addGroup(0,roof.length,0);geo.addGroup(roof.length,wall.length,1);geo.computeVertexNormals();
-  const roofMat=new THREE.MeshLambertMaterial({color:0xffffff,flatShading:true}); if(RO){const t=new THREE.CanvasTexture(RO.raw);t.encoding=THREE.sRGBEncoding;t.anisotropy=4;roofMat.map=t;}
+  geo.setIndex(roof);geo.computeVertexNormals();
+  const roofMat=new THREE.MeshLambertMaterial({color:0xffffff,flatShading:true}); if(RO){const t=new THREE.CanvasTexture(washed(RO.raw));t.encoding=THREE.sRGBEncoding;t.anisotropy=4;roofMat.map=t;}
   const wallMat=new THREE.MeshLambertMaterial({color:0xf1ece4,flatShading:true});
-  const mesh=new THREE.Mesh(geo,[roofMat,wallMat]);mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);
-  dsm={mesh,n,s,R,Z,G,B,hole:new Set()};
+  const mesh=new THREE.Mesh(geo,roofMat);mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);
+  const wg=new THREE.BufferGeometry();wg.setAttribute('position',new THREE.Float32BufferAttribute(WP,3));wg.computeVertexNormals();
+  const wmesh=new THREE.Mesh(wg,wallMat);wmesh.castShadow=true;wmesh.receiveShadow=true;scene.add(wmesh);
+  dsm={mesh,wmesh,wallMat,n,s,R,Z,G,B,full,hole:new Set()};
   applyClip(); updateDSMHole();
   S.obstacles=S.obstacles||[];
 }
+function washed(raw){const c=document.createElement('canvas');c.width=raw.width;c.height=raw.height;const g=c.getContext('2d');g.drawImage(raw,0,0);g.globalAlpha=0.28;g.fillStyle='#fbf7f0';g.fillRect(0,0,c.width,c.height);return c;}
 function dsmSetOrtho(){if(!dsm||!S.rawOrtho)return;const RO=S.rawOrtho,U=dsm.mesh.geometry.attributes.uv;const {n,s,R}=dsm;for(let j=0;j<n;j++)for(let i=0;i<n;i++){const k=j*n+i,x=-R+i*s,y=R-j*s;U.array[k*2]=(x-RO.w)/(RO.e-RO.w);U.array[k*2+1]=(y-RO.s)/(RO.n-RO.s);}U.needsUpdate=true;
-  const t=new THREE.CanvasTexture(RO.raw);t.encoding=THREE.sRGBEncoding;t.anisotropy=4;dsm.mesh.material[0].map=t;dsm.mesh.material[0].needsUpdate=true;}
+  const t=new THREE.CanvasTexture(washed(RO.raw));t.encoding=THREE.sRGBEncoding;t.anisotropy=4;dsm.mesh.material[0].map=t;dsm.mesh.material[0].needsUpdate=true;}
 async function updateDSMHole(){ // the highlighted buildings are drawn from IGN volumes (they carry the façades and windows), so their laser copy is lowered under ground
   if(!dsm)return; const MH=S.lidarP&&await S.lidarP.mnh; const {n,s,R,Z,G,B}=dsm; const pos=dsm.mesh.geometry.attributes.position;
   const objs=[S.target,S.building].filter(Boolean); const next=new Set();
