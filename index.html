@@ -1056,7 +1056,8 @@ async function reportData(){
   // skyline + obstacles
   let sky=null,obstacles=[];
   if(S.skyline){const sk=S.skyline;const MH=S.lidarP&&await S.lidarP.mnh;
-    const typeAt=(x,y)=>{for(const m of S.meshes){const rs=m.userData.rings;if(rs&&rs[0]&&pointInPoly(x,y,rs[0]))return {type:'bâtiment',h:m.userData.ridge||m.userData.h};}const v=MH?MH.max(x,y,1):null;return v!=null&&v>1.2?{type:'végétation',h:v}:{type:'relief',h:null};};
+    const near=(x,y,ring)=>{if(pointInPoly(x,y,ring))return true;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[j],b=ring[i];const dx=b.x-a.x,dy=b.y-a.y;const L2=dx*dx+dy*dy||1;let t=((x-a.x)*dx+(y-a.y)*dy)/L2;t=Math.max(0,Math.min(1,t));if(Math.hypot(a.x+t*dx-x,a.y+t*dy-y)<1.5)return true;}return false;};
+    const typeAt=(x,y)=>{for(const m of S.meshes){const rs=m.userData.rings;if(rs&&rs.some(r=>near(x,y,r)))return {type:m===w.obj?'votre bâtiment':'bâtiment',h:m.userData.ridge||m.userData.h};}const v=MH?MH.max(x,y,1):null;return v!=null&&v>1.2?{type:'végétation',h:v}:{type:'relief',h:null};};
     const items=sk.az.map((az,i)=>{const hit=sk.hits[i];const deg=sk.hor[i]/RAD;if(!hit)return {az:az/RAD,deg};const x=w.pos.x+Math.sin(az)*hit.d,y=w.pos.y+Math.cos(az)*hit.d;const t=typeAt(x,y);return {az:az/RAD,deg,d:hit.d,z:hit.z,type:t.type,h:t.h};});
     sky={az:items.map(i=>+(((i.az%360)+360)%360).toFixed(1)),deg:items.map(i=>+i.deg.toFixed(1)),type:items.map(i=>i.type||'')};
     // group consecutive azimuths that hide sky (>4°) and share a type
@@ -1064,7 +1065,7 @@ async function reportData(){
     obstacles=obstacles.map(o=>{const top=o.list.reduce((a,b)=>b.deg>a.deg?b:a);const az0=sk.az[o.i0]/RAD,az1=sk.az[o.i1]/RAD;const mid=((((az0+az1)/2)%360)+360)%360;
       // hours of direct sun this obstacle takes away per year (every 4th day, 10 min)
       let lost=0;for(let doy=1;doy<=365;doy+=4){const md=dayOfYearToMD(Y,doy);for(let t=0;t<1440;t+=10){const sp=sunPos(localToInstant(Y,md.m,md.d,Math.floor(t/60),t%60),S.lat,S.lon);if(sp.alt<=0.005||sunVec(sp).dot(w.normal)<=0.02)continue;const a=sp.az/RAD;let da=((a-az0)%360+360)%360,span=((az1-az0)%360+360)%360;if(da>span+1.25)continue;if(sp.alt<=horizonAt(sk,sp.az))lost+=10/60*4;}}
-      return {type:o.type,dir:DIRS[Math.round(mid/45)%8],az0:+az0.toFixed(0),az1:+az1.toFixed(0),deg:+top.deg.toFixed(0),d:+top.d.toFixed(0),h:top.h!=null?+top.h.toFixed(1):null,lostH:Math.round(lost)};}).filter(o=>o.lostH>=5||o.deg>=12).sort((a,b)=>b.lostH-a.lostH).slice(0,6);
+      const nz=a=>Math.round(((a%360)+360)%360);return {type:o.type,dir:DIRS[Math.round(mid/45)%8],az0:nz(az0),az1:nz(az1),deg:+top.deg.toFixed(0),d:+top.d.toFixed(0),h:top.h!=null?+top.h.toFixed(1):null,lostH:Math.round(lost)};}).filter(o=>o.lostH>=5||o.deg>=12).sort((a,b)=>b.lostH-a.lostH).slice(0,6);
   }
   const climate=await fetchClimate();
   const real=climate?months.map((r,i)=>climate.frac[i]!=null?+(r.h*climate.frac[i]).toFixed(2):null):null;
