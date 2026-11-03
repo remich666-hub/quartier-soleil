@@ -27,6 +27,7 @@ body{margin:0;background:var(--desk);color:var(--ink);font:400 14px/1.5 var(--sa
 img{max-width:100%;display:block}
 .toolbar{max-width:210mm;margin:0 auto 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .toolbar .note{color:var(--ink2);font-size:13px}
+.toolbar #tbNote{order:3;flex-basis:100%}
 .btn{font:500 14px/1 var(--sans);height:40px;padding:0 16px;border-radius:10px;border:1px solid var(--line2);background:var(--sheet);color:var(--ink);cursor:pointer;transition:background-color .15s var(--ease),border-color .15s var(--ease)}
 .btn:hover{background:var(--raised)}
 .btn.primary{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
@@ -235,7 +236,7 @@ function render(R){
   const winTxt=`Fenêtre en façade ${DIRL[W.dir]} (${W.az}°) · ${floorName(W.floor)} · ${fr(W.heightAboveGround)} m du sol`;
   const real=R.climate&&R.climate.realAnnual;
   const p1=`<div class="cover"><div class="kicker">Rapport d'ensoleillement</div><h1>${esc(R.address.replace(/ (\d{5})/,', $1'))}</h1><div class="win">${winTxt}</div></div>
-    ${R.images&&R.images.aerial?`<div class="shot"><img src="${R.images.aerial}" alt="Maquette 3D du bâtiment et de ses abords, ombres du 20 mars à 15 h"></div>`:''}
+    ${R.images&&R.images.aerial?`<div class="shot"><img src="${R.images.aerial}" alt="Maquette 3D du bâtiment et de ses abords, ombres du 20 mars à 15 h"></div>`:`<div class="chart" style="padding:12px 0">${heatmap(R)}</div>`}
     <div class="hero"><div><div class="big">${hmBig(R.annual.h)}</div><div class="big-cap">de soleil direct sur la fenêtre par jour, en moyenne sur l'année</div></div>
       <div class="stats">
         <div class="stat"><span class="l">Sans aucun obstacle</span><span class="v">${hm(R.annual.free)}</span></div>
