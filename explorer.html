@@ -298,7 +298,7 @@ const sunPath=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMater
 sunPath.frustumCulled=false; scene.add(sunPath); let pathKey='';
 
 /* ground + orthophoto (two layers: wide at z17, sharp at z19 near the address), rendered as a faded tracing-paper overlay */
-const PLAN_GROUND=0xe4e0d7; let photoMode=false; try{photoMode=localStorage.getItem('qs-photo')==='1';}catch(_){}
+const PLAN_GROUND=0xdcd7cc; let photoMode=false; try{photoMode=localStorage.getItem('qs-photo')==='1';}catch(_){}
 const groundMat=new THREE.MeshLambertMaterial({color:PLAN_GROUND});
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(1600,1600),groundMat); ground.receiveShadow=true; scene.add(ground);
 const innerMat=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0});
@@ -613,9 +613,9 @@ function buildPlan(veg,roads){
   planLayer=new THREE.Group(); scene.add(planLayer);
   const P=[],N=[]; surfaces(veg||[],0.1,P,N);
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
-    const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xd8e0cf}));m.receiveShadow=true;planLayer.add(m);}
+    const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xd0dac4}));m.receiveShadow=true;planLayer.add(m);}
   // street names laid flat on the longest straight stretch of each street, in the site's typeface
-  const nameOf=p=>p.nom_1_gauche||p.nom_1_droite||p.nom_collaboratif_gauche||p.nom_collaboratif_droite||p.cpx_toponyme_route_nommee||'';
+  const nameOf=p=>p.nom_voie_ban_gauche||p.nom_voie_ban_droite||p.nom_1_gauche||p.nom_1_droite||p.nom_collaboratif_gauche||p.nom_collaboratif_droite||p.cpx_toponyme_route_nommee||'';
   const best=new Map();
   (roads||[]).forEach(f=>{const p=f.properties;const nm=String(nameOf(p)||'').trim();if(!nm||+(p.position_par_rapport_au_sol??0)>0)return;const g=f.geometry;const lines=g.type==='LineString'?[g.coordinates]:(g.type==='MultiLineString'?g.coordinates:[]);
     const w=Math.max(4,(+p.largeur_de_chaussee)||((+p.nombre_de_voies)||1)*3.2);
@@ -625,7 +625,7 @@ function buildPlan(veg,roads){
   [...best.entries()].filter(([,s])=>s.L>=22).sort((x,y)=>y[1].score-x[1].score).slice(0,40).forEach(([nm,s])=>{
     const txt=nm.toUpperCase(); const c=document.createElement('canvas'),g=c.getContext('2d'),fs=56; g.font=`600 ${fs}px ${font}`;
     const sp=fs*0.12; let tw=0;for(const ch of txt)tw+=g.measureText(ch).width+sp; c.width=Math.ceil(tw+fs*0.6);c.height=Math.ceil(fs*1.5);
-    g.font=`600 ${fs}px ${font}`;g.fillStyle='#8c8478';g.textBaseline='middle';let x=fs*0.3;for(const ch of txt){g.fillText(ch,x,c.height/2);x+=g.measureText(ch).width+sp;}
+    g.font=`600 ${fs}px ${font}`;g.fillStyle='#7a7266';g.textBaseline='middle';let x=fs*0.3;for(const ch of txt){g.fillText(ch,x,c.height/2);x+=g.measureText(ch).width+sp;}
     let hgt=Math.min(3.2,s.w*0.55),wid=hgt*c.width/c.height; if(wid>s.L*0.85){hgt*=s.L*0.85/wid;wid=s.L*0.85;} if(hgt<1.4)return;
     const t=new THREE.CanvasTexture(c);t.anisotropy=8;t.encoding=THREE.sRGBEncoding;
     const m=new THREE.Mesh(new THREE.PlaneGeometry(wid,hgt),new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
@@ -637,7 +637,7 @@ function buildLayers(roads,hedges,walls,rails,water){
   blockers=blockers.filter(b=>!layerMeshes.includes(b)); layerMeshes.forEach(m=>{scene.remove(m);m.geometry.dispose();}); layerMeshes=[];
   let P=[],N=[];
   ribbons(roads.filter(f=>!(+(f.properties.position_par_rapport_au_sol??0)>0)),p=>Math.max(4,(+p.largeur_de_chaussee)||((+p.nombre_de_voies)||1)*3.2),0.18,P,N);
-  meshOf(P,N,new THREE.MeshLambertMaterial({color:0xf3f1ec}),false);
+  meshOf(P,N,new THREE.MeshLambertMaterial({color:0xf5f2ec}),false);
   P=[];N=[]; ribbons(rails,3.2,0.14,P,N); meshOf(P,N,new THREE.MeshLambertMaterial({color:0xc9c4bb}),false);
   P=[];N=[]; surfaces(water,0.16,P,N); meshOf(P,N,new THREE.MeshLambertMaterial({color:0xc4d3da}),false);
   P=[];N=[]; fences(hedges,1.6,p=>{const h=+p.hauteur;return (h>0.3&&h<12)?h:2.2;},P,N); const hm=meshOf(P,N,new THREE.MeshLambertMaterial({color:0x6f9468}),true); if(hm)blockers.push(hm);
