@@ -1379,6 +1379,7 @@ function splitByLevel(rings,pts,cell,depth){
   return splitByLevel(lo.rings,lo.pts,cell,depth+1).concat(splitByLevel(hi.rings,hi.pts,cell,depth+1));
 }
 function partModel(pts,rings){
+  {const inn=pts.filter(p=>distToRing(p.x,p.y,rings[0])>=0.8);if(inn.length>=Math.max(4,pts.length*0.4))pts=inn;} // edge cells mix wall and ground
   const hs=pts.map(p=>p.h).sort((a,b)=>a-b); if(hs.length<4)return null;
   const eave=qtl(hs,0.15),med=qtl(hs,0.5),top=qtl(hs,0.92);
   // two flat levels mixed in one footprint (not cut) look like a slope in the numbers: detect them (2-means explains almost all variance)
