@@ -91,8 +91,9 @@ td.n{text-align:right;font-family:var(--mono);white-space:nowrap}
 th.n{text-align:right;white-space:nowrap}
 .tag{display:inline-flex;align-items:center;gap:6px}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
-.views{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.views{display:grid;grid-template-columns:1fr;gap:16px}
 .views figure{margin:0}
+.views .shot{aspect-ratio:1200/520}
 .views figcaption{font-size:12px;color:var(--ink2);margin-top:6px}
 .views figcaption b{font-weight:500;color:var(--ink)}
 .method{columns:2;column-gap:28px}
@@ -206,7 +207,7 @@ function maskChart(R){
   // sun paths: Dec, Jan/Nov, Feb/Oct, Mar/Sep, Apr/Aug, May/Jul, Jun
   [12,1,2,3,4,5,6].forEach(m=>{const p=R.paths.find(q=>q.m===m);if(!p)return;let seg=[],on=null;const flush=()=>{if(seg.length>1)s+=`<polyline points="${seg.join(' ')}" fill="none" stroke="${on?css('--sun'):css('--shade-ink')}" stroke-width="${on?2.2:1.2}" ${on?'':'stroke-dasharray="3 3"'} stroke-linecap="round"/>`;};
     p.pts.forEach(([a,e])=>{const d=((a-az0+540)%360)-180;if(e<0||Math.abs(d)>95){flush();seg=[];on=null;return;}const vis=Math.abs(d)<90&&e>horAt(a);if(on!==null&&vis!==on){const pt0=x(a).toFixed(1)+','+y(e).toFixed(1);seg.push(pt0);flush();seg=[pt0];}on=vis;seg.push(x(a).toFixed(1)+','+y(e).toFixed(1));});flush();
-    const peak=p.pts.reduce((b,c)=>c[1]>b[1]?c:b);const dp=((peak[0]-az0+540)%360)-180;if(Math.abs(dp)<80&&[12,3,6].includes(m))s+=`<text x="${x(peak[0])+4}" y="${y(peak[1])-5}" font-size="9.5" fill="${css('--ink2')}">${{12:'21 décembre',3:'21 mars et 21 septembre',6:'21 juin'}[m]}</text>`;});
+    const lp=p.pts.reduce((b,c)=>{const dd=Math.abs((((c[0]-az0+540)%360)-180)-(m===6?-38:m===3?-30:-22));return dd<b.dd?{dd,c}:b;},{dd:1e9,c:null}).c;if(lp&&[12,3,6].includes(m))s+=`<text x="${x(lp[0])}" y="${y(lp[1])-6}" text-anchor="middle" font-size="9.5" fill="${css('--ink2')}">${{12:'21 décembre',3:'21 mars et 21 septembre',6:'21 juin'}[m]}</text>`;});
   s+=`<rect x="${pl}" y="${pt}" width="${W-pl-pr}" height="${H-pt-pb}" fill="none" stroke="${css('--line2')}"/>`;
   return s+'</svg>';
 }
@@ -262,8 +263,8 @@ function render(R){
     <p class="lead">Chaque ligne est un mois, de 4 h à 22 h. En orange, le soleil frappe la vitre. En gris, il est levé et face à la fenêtre, mais caché par un obstacle.</p>
     <div class="chart">${heatmap(R)}</div>
     <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil sur la fenêtre</span><span><i class="sw" style="background:var(--shade)"></i>Soleil caché par un obstacle</span><span><i class="sw" style="background:var(--raised)"></i>Soleil absent ou derrière la façade</span></div>
-    ${views.length?`<div class="figure" style="margin-top:8px"><h3>La vue depuis la fenêtre</h3><p class="small">Reconstitution 3D à partir des données IGN, à hauteur de la fenêtre. La ligne orange est l'horizon mesuré au LiDAR.</p>
-      <div class="views">${views.map((v,i)=>`<figure><div class="shot"><img src="${v}" alt="Vue depuis la fenêtre le ${vlab[i][0]}"></div><figcaption><b>${vlab[i][0]}</b> · ${vlab[i][1]}</figcaption></figure>`).join('')}</div></div>`:''}`;
+    ${views.length?`<div class="figure" style="margin-top:8px"><h3>La vue depuis la fenêtre</h3><p class="small">Reconstitution 3D à partir des données IGN, à hauteur de la fenêtre. La ligne orange est l'horizon mesuré au LiDAR, le disque le soleil à l'heure indiquée.</p>
+      <div class="views">${views.map((v,i)=>i===1?'':`<figure><div class="shot"><img src="${v}" alt="Vue depuis la fenêtre le ${vlab[i][0]}"></div><figcaption><b>${vlab[i][0]}</b> · ${vlab[i][1]} · l'arc pointillé est la course du soleil ce jour-là</figcaption></figure>`).join('')}</div></div>`:''}`;
   const p5=`<div><div class="kicker">Méthode</div><h2>Comment ces chiffres sont calculés</h2></div>
     <div class="method">
       <div><h3>La position du soleil</h3><p>Calculée pour l'adresse exacte, toutes les 5 à 10 minutes, avec l'algorithme astronomique de la NOAA et l'heure légale française (heure d'été comprise).</p></div>

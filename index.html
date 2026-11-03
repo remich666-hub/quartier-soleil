@@ -1100,7 +1100,7 @@ async function captureViews(){ // aerial view of the building + views from the w
   if(cam.mode==='window')setMode('orbit'); marker.visible=false;markerArrow.visible=false;facadeLine.visible=true;
   setT(3,20,15*60); const bb=w.obj.geometry.boundingBox; cam.target.set((bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2,u0()); cam.dist=Math.max(48,Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y)*1.9); cam.phi=0.68; cam.theta=Math.atan2(w.normal.x,w.normal.y)+0.5; applyCam(); out.aerial=shot();
   function u0(){return w.obj.userData.zBase+w.obj.userData.h*0.4;}
-  setMode('window'); cam.pitch=0.12;
+  if(S.skyline)drawSkyline(S.skyline); renderer.setSize(1200,520,false); camera.aspect=1200/520; setMode('window'); cam.pitch=0.16; setFov();
   for(const [m,d,min] of [[12,21,12*60+30],[3,20,13*60],[6,21,13*60+30]]){setT(m,d,min);applyCam();out.views.push(shot());}
   setMode(keep.mode); Object.assign(cam,{theta:keep.theta,phi:keep.phi,dist:keep.dist}); cam.target.copy(keep.target); S.doy=keep.doy;S.minute=keep.minute;
   renderer.setPixelRatio(pr); renderer.setSize(prev.x,prev.y,false); resize(); setFov(); applyCam(); update();
