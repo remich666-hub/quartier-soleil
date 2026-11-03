@@ -1707,6 +1707,17 @@ function laserOnlyBuildings(cloud){
   for(let s=0;s<N*N;s++){if(!O[s]||lab[s]>=0)continue;const cells=[s];lab[s]=++id;
     for(let q=0;q<cells.length;q++){const k=cells[q],ci=k%N,cj=(k/N)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=N||nj>=N)continue;const n2=nj*N+ni;if(O[n2]&&lab[n2]<0&&Math.abs(T[n2]-T[k])<1.2){lab[n2]=id;cells.push(n2);}}}
     if(cells.length*cell*cell<3)continue; out.push({id,cells});}
+  // small low pockets (the floor of a narrow light well, a sunken terrace): kept even if tiny or thin, but only when the roof around
+  // stands at least 2 m higher — an eave overhang sits at the roof's own height and is still dropped
+  const used=new Uint8Array(N*N);out.forEach(r=>r.cells.forEach(k=>used[k]=1));
+  const PK=new Uint8Array(N*N);
+  for(let j=3;j<N-3;j++)for(let i=3;i<N-3;i++){const k=j*N+i;if(!C[k]||used[k])continue;const z=T[k];const hi=[];
+    for(let b=-3;b<=3;b++)for(let a=-3;a<=3;a++){const q=k+b*N+a;if(occ[q*4]>127&&z6[q]>-1e8)hi.push(z6[q]);}
+    if(hi.length<6)continue;hi.sort((p,q)=>p-q);if(hi[hi.length>>1]>=z+2)PK[k]=1;}
+  const lab2=new Int32Array(N*N).fill(-1);
+  for(let s=0;s<N*N;s++){if(!PK[s]||lab2[s]>=0)continue;const cells=[s];lab2[s]=1;
+    for(let q=0;q<cells.length;q++){const k=cells[q],ci=k%N,cj=(k/N)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const n2=(cj+dj)*N+ci+di;if(PK[n2]&&lab2[n2]<0&&Math.abs(T[n2]-T[k])<1.2){lab2[n2]=1;cells.push(n2);}}}
+    if(cells.length*cell*cell<1)continue; const nid=++id; cells.forEach(k=>lab[k]=nid); out.push({id:nid,cells,pocket:true});}
   const blocks=[];
   out.forEach(reg=>{
     let sx=0,sy=0;reg.cells.forEach(k=>{sx+=-R+(k%N+0.5)*cell;sy+=R-(((k/N)|0)+0.5)*cell;});sx/=reg.cells.length;sy/=reg.cells.length;
@@ -1719,16 +1730,17 @@ function laserOnlyBuildings(cloud){
     const total=left;
     for(let it=0;it<4&&left>total*0.15;it++){const hh=new Int32Array(nu);let bst=null;
       for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hh[i]=M[j*nu+i]?hh[i]+1:0;const stk=[];for(let i=0;i<=nu;i++){const cur=i<nu?hh[i]:0;let s0=i;while(stk.length&&stk[stk.length-1][1]>=cur){const [si,sh2]=stk.pop();const ar=sh2*(i-si);if(sh2&&(!bst||ar>bst.ar))bst={ar,i0:si,i1:i-1,j0:j-sh2+1,j1:j};s0=si;}stk.push([s0,cur]);}}
-      if(!bst||bst.ar*st*st<3)break;const {i0,i1,j0,j1}=bst;const zs=[];if((i1-i0+1)*st<2||(j1-j0+1)*st<2){for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const k=j*nu+i;if(M[k]){M[k]=0;left--;}}continue;}
+      const minA=reg.pocket?0.75:3,minS=reg.pocket?0.5:2;
+      if(!bst||bst.ar*st*st<minA)break;const {i0,i1,j0,j1}=bst;const zs=[];if((i1-i0+1)*st<minS||(j1-j0+1)*st<minS){for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const k=j*nu+i;if(M[k]){M[k]=0;left--;}}continue;}
       for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const k=j*nu+i;if(M[k]){zs.push(Hm[k]);M[k]=0;left--;}}
       zs.sort((p,q)=>p-q);const ring=[W(u0+i0*st,v0+j0*st),W(u0+(i1+1)*st,v0+j0*st),W(u0+(i1+1)*st,v0+(j1+1)*st),W(u0+i0*st,v0+(j1+1)*st)];
       let cx=0,cy=0;ring.forEach(p=>{cx+=p.x;cy+=p.y;});cx/=4;cy/=4;const zb=terrainZ(cx,cy),top=zs[zs.length>>1]-zb;if(top<2)continue;
-      blocks.push({ring:ring.map(p=>new THREE.Vector2(p.x,p.y)),h:top,zb});}
+      blocks.push({ring:ring.map(p=>new THREE.Vector2(p.x,p.y)),h:top,zb,pocket:!!reg.pocket});}
   });
   const made=[];
   blocks.forEach(b=>{const shape=new THREE.Shape(b.ring);const geo=new THREE.ExtrudeGeometry(shape,{depth:b.h+SINK,bevelEnabled:false});const fl=Math.max(1,Math.floor((b.h-0.5)/2.9+0.35));fitWallUVs(geo,b.h,fl);
     const m=new THREE.Mesh(geo,matsFor('',false));m.position.z=b.zb-SINK;m.castShadow=true;m.receiveShadow=true;
-    m.userData={h:b.h,floors:fl,usage:'',zBase:b.zb,facades:facadesOf(b.ring),rings:[b.ring],lidar:true,laserOnly:true};
+    m.userData={h:b.h,floors:fl,usage:'',zBase:b.zb,facades:facadesOf(b.ring),rings:[b.ring],lidar:true,laserOnly:true,pocket:b.pocket};
     const eg=new THREE.EdgesGeometry(geo,25),arr=eg.attributes.position.array,off=new Float32Array(arr.length);for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+b.zb-SINK;}m.userData.edgeArr=off;eg.dispose();
     geo.computeBoundingBox();geo.computeBoundingSphere();buildingsGroup.add(m);made.push(m);});
   return made;
