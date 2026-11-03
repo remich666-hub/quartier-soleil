@@ -432,7 +432,8 @@ function orthoLayer(mesh,mat,lat,lon,z,R,fallback,segs,onDone){
   mesh.position.x=(east+west)/2; mesh.position.y=(north+south)/2; if(S.terrain)displace(mesh,segs);
   mat.map=tex; mat.color.set(0xffffff); mat.opacity=1; mat.needsUpdate=true;
   let ok=0,fail=0; const total=(2*R+1)**2;
-  const done=()=>{if(ok+fail===total&&onDone)onDone(ok?raw:null,west,east,north,south);};
+  const st={ok:0,fail:0,total,z}; (S.orthoState=S.orthoState||[]).push(st);
+  const done=()=>{st.ok=ok;st.fail=fail;if(ok+fail===total&&onDone){console.log('ortho layer done',z,ok,fail);try{onDone(ok?raw:null,west,east,north,south);}catch(err){console.error('onDone',err);}}};
   for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
     gpf(`https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/jpeg`)
       .then(r=>{if(!r.ok)throw new Error('tile');return r.blob();}).then(b=>createImageBitmap(b)).then(img=>{const px=(x-x0)*256,py=(y-y0)*256;if(raw)raw.getContext('2d').drawImage(img,px,py);try{g.filter='saturate(0.25) brightness(1.1) contrast(0.9)';}catch(_){}g.drawImage(img,px,py);try{g.filter='none';}catch(_){}g.fillStyle='rgba(243,240,233,0.42)';g.fillRect(px,py,256,256);tex.needsUpdate=true;ok++;done();})
@@ -1066,7 +1067,7 @@ async function load(q){
     const [alt,feats,terrain]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000),fetchTerrain(g.lat,g.lon).catch(()=>null)]);
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
-    S.alt0=alt0; S.terrain=terrain; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
+    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     buildScene(feats); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
