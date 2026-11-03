@@ -311,8 +311,8 @@ const wallTex=(()=>{const W=140,H=120;const c=document.createElement('canvas');c
 /* Wall UVs: a whole number of 3 m floors fits the height (no row cut by the roof) and a whole number of 3.5 m bays fits each wall
    between its two corners (no window cut at a corner). Geometry is extruded SINK metres below ground so slopes never show a gap. */
 const SINK=2.5;
-function fitWallUVs(geo,h){
-  const bands=Math.max(1,Math.round(h/3)); const k=(bands*3)/h; const uv=geo.attributes.uv, pos=geo.attributes.position; const grp=geo.groups&&geo.groups[1];
+function fitWallUVs(geo,h,floors){
+  const bands=floors||Math.max(1,Math.round(h/3)); const k=(bands*3)/h; const uv=geo.attributes.uv, pos=geo.attributes.position; const grp=geo.groups&&geo.groups[1];
   if(!uv||!grp)return;
   for(let s=grp.start;s<grp.start+grp.count;s+=6){ // ExtrudeGeometry writes 6 vertices (2 triangles) per wall segment
     const x0=pos.getX(s),y0=pos.getY(s); let x1=x0,y1=y0;
@@ -1011,7 +1011,7 @@ function placeMarker(){
   const t=w.along*f.len; let acc=0,pt=null;
   for(const s of f.segs){if(acc+s.len>=t){const k=(t-acc)/s.len;pt=new THREE.Vector2(s.a.x+(s.b.x-s.a.x)*k,s.a.y+(s.b.y-s.a.y)*k);break;}acc+=s.len;}
   if(!pt)pt=f.mid;
-  const z=w.obj.userData.zBase+w.floor*3+1.5;
+  const ud=w.obj.userData,sh=ud.floors&&ud.h?Math.max(2.5,Math.min(3.6,ud.h/ud.floors)):3;const z=ud.zBase+w.floor*sh+1.5;
   const p=new THREE.Vector3(pt.x,pt.y,z).addScaledVector(w.normal,0.45);
   w.pos=p; marker.position.copy(p); markerArrow.position.copy(p); markerArrow.setDirection(w.normal); skyLine.position.copy(p); if(S.skyline&&(w.floor!==S.skyline.floor)){S.skyline=null;skyLine.visible=false;}
   // outline the selected façade: its base, its top and the chosen floor line
@@ -1397,10 +1397,9 @@ function partModel(pts,rings){
 function makeBlock(src,rings,model,roofSets){
   const u=src.userData,outer=rings[0],holes=rings.slice(1),h=model.h;
   const shape=new THREE.Shape(outer);holes.forEach(hr=>shape.holes.push(new THREE.Path(hr)));
-  const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});fitWallUVs(geo,h);
+  const floors=model.floors||Math.max(1,Math.round(h/3));const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});fitWallUVs(geo,h,floors);
   const mesh=new THREE.Mesh(geo,matsFor(u.usage,false));mesh.position.z=u.zBase-SINK;mesh.castShadow=true;mesh.receiveShadow=true;
-  const keepFloors=u.floors&&Math.abs(u.h-h)<3;
-  mesh.userData={h,floors:keepFloors?u.floors:Math.max(1,Math.round(h/3)),usage:u.usage,zBase:u.zBase,roofKey:u.roofKey,facades:facadesOf(outer),rings:[outer].concat(holes),lidar:true,shift:u.shift,church:u.church};
+  mesh.userData={h,floors,usage:u.usage,zBase:u.zBase,roofKey:u.roofKey,facades:facadesOf(outer),rings:[outer].concat(holes),lidar:true,shift:u.shift,church:u.church};
   if(model.rise>0){const s=roofSets[u.roofKey||'autre']||roofSets.autre;
     if(convexity(outer)>0.8){if(addRoof(s,outer,u.zBase+h,u.zBase+h+model.rise))mesh.userData.ridge=h+model.rise;}
     else{ // L, T, U shapes: one hip roof per wing (maximal rectangles inside the footprint), same pitch everywhere, like a real compound roof
@@ -1480,8 +1479,12 @@ async function lidarBuildings(){
     if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
     const smp=lidarSamples(u,F,green); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
     const parts=splitByLevel(u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;}),smp.pts,smp.cell,0);
-    const blocks=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const md=partModel(tw&&tw.base.length>=8?tw.base:pt.pts,pt.rings);if(!md)continue;blocks.push(makeBlock(m,pt.rings,md,roofSets));
-      if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){const b=makeBlock(m,[t.ring],m2,roofSets);b.userData.tower=true;blocks.push(b);}});}
+    const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const md=partModel(tw&&tw.base.length>=8?tw.base:pt.pts,pt.rings);if(!md)continue;vols.push({rings:pt.rings,md});
+      if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8)vols.push({rings:[t.ring],md:m2,tower:true});});}
+    // storeys: the IGN count belongs to the tallest volume, lower volumes get their share; without a plausible IGN count, ~2.9 m per storey
+    const hmax=Math.max(0,...vols.map(v=>v.md.h)),F0=u.floors;
+    vols.forEach(v=>{const hb=v.md.h;v.md.floors=(F0>0&&hmax/F0>=2.3&&hmax/F0<=4.6)?Math.max(1,Math.round(F0*hb/hmax)):Math.max(1,Math.floor((hb-0.5)/2.9+0.35));});
+    const blocks=vols.map(v=>{const b=makeBlock(m,v.rings,v.md,roofSets);if(v.tower)b.userData.tower=true;return b;});
     if(!blocks.length)continue;
     buildingsGroup.remove(m);m.geometry.dispose();gone.add(m);
     if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh.geometry.dispose();gone.add(u.roofMesh);}
