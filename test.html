@@ -1947,7 +1947,9 @@ function findTowers(rings,u,F,green){
       if(dh.length<6)continue; dh.sort((p,q)=>p-q); if(qtl(dh,0.5)<1.4)continue;
       const fill=cells.length/((i1-i0+1)*(j1-j0+1)); if(fill<0.55)continue;
       // a tree crown over the roof is not a tower: roofs are smooth at 50 cm (median step ≈ 0.1 m), foliage is rough (≥ 0.4 m)
-      {const set=new Set(cells),st2=[];cells.forEach(c=>{const ci=c%nu;if(ci+1<nu&&set.has(c+1))st2.push(Math.abs(H[c]-H[c+1]));if(set.has(c+nu))st2.push(Math.abs(H[c]-H[c+nu]));});
+      // measured on the raw laser surface over the whole rectangle (the vegetation filter above would hide the crown's ragged edges)
+      {const st2=[];for(let jj=j0;jj<=j1;jj++)for(let ii=i0;ii<=i1;ii++){const k=jj*nu+ii,x=XY[k*2]+sh.dx,y=XY[k*2+1]+sh.dy;if(!pointInPoly(x-sh.dx,y-sh.dy,r0))continue;
+         const a0=F.at(x,y),a1=F.at(x+st,y),a2=F.at(x,y+st);if(a0==null||a1==null||a2==null)continue;st2.push(Math.abs(a0-a1),Math.abs(a0-a2));}
        if(st2.length>=10){st2.sort((p,q)=>p-q);if(st2[st2.length>>1]>0.3||st2[Math.floor(st2.length*0.75)]>0.45)continue;}
        let gs=0,gn=0;cells.forEach(c=>{const e=green(XY[c*2]+sh.dx,XY[c*2+1]+sh.dy);if(e>-90){gs+=e;gn++;}}); if(gn>8&&gs/gn>8)continue;}
       cells.forEach(c=>used[c]=1); towers.push({cells,i0,i1,j0,j1});
