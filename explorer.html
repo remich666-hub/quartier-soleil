@@ -1386,8 +1386,10 @@ function partModel(pts,rings){
   if(tv>0){let sA=0,qA=0;const sT=mean*n,qT=hs.reduce((s,v)=>s+v*v,0);for(let k=1;k<n;k++){sA+=hs[k-1];qA+=hs[k-1]*hs[k-1];const w=(qA-sA*sA/k)+((qT-qA)-(sT-sA)*(sT-sA)/(n-k));if(!bi||w<bi.w)bi={w,k};}}
   if(bi&&1-bi.w/tv>0.88&&top-eave>=2.2){const big=bi.k>=n/2?hs.slice(0,bi.k):hs.slice(bi.k);return {h:Math.max(2.5,qtl(big,0.5)),rise:0};}
   const r0=rings[0];let per=0;for(let i=0;i<r0.length;i++)per+=r0[i].distanceTo(r0[(i+1)%r0.length]);const maxRise=1.1*Math.abs(areaOf(r0))/per;
-  const thr=Math.min(2.2,Math.max(1.0,0.2*Math.sqrt(Math.abs(areaOf(r0)))));
-  const pitched=top-eave>=thr&&rings.length===1;
+  // a pitched roof rises with the distance to the walls (even a low southern pitch); a flat roof with clutter does not
+  let sd=0,sh=0,sdd=0,shh=0,sdh=0;const m=pts.length;pts.forEach(p=>{const d=distToRing(p.x,p.y,r0);sd+=d;sh+=p.h;sdd+=d*d;shh+=p.h*p.h;sdh+=d*p.h;});
+  const cov=sdh/m-(sd/m)*(sh/m),vd=sdd/m-(sd/m)**2,vh=shh/m-(sh/m)**2,corr=vd>0&&vh>0?cov/Math.sqrt(vd*vh):0;
+  const pitched=rings.length===1&&((corr>0.55&&top-eave>=0.6)||top-eave>=2.2);
   if(pitched)return {h:Math.max(2.5,eave),rise:Math.min(9,top-eave,maxRise)};
   return {h:Math.max(2.5,top-eave>=2.2?(eave+top)/2:med),rise:0};
 }
