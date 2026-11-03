@@ -447,10 +447,11 @@ async function fetchTerrain(lat,lon){
   const N=15, R=720; const dLat=R/110574, dLon=R/(111320*Math.cos(lat*RAD));
   const pts=[]; for(let j=0;j<N;j++)for(let i=0;i<N;i++)pts.push([lon-dLon+2*dLon*i/(N-1),lat+dLat-2*dLat*j/(N-1)]);
   const z=new Array(pts.length).fill(null);
-  const B=45; const jobs=[];
+  const B=225; // one or two requests, sequential, with retry on 429
   for(let s=0;s<pts.length;s+=B){const sl=pts.slice(s,s+B);
-    jobs.push(fetch(`https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=${sl.map(p=>p[0].toFixed(6)).join('|')}&lat=${sl.map(p=>p[1].toFixed(6)).join('|')}&resource=ign_rge_alti_wld&zonly=true`).then(r=>r.json()).then(j=>{(j.elevations||[]).forEach((e,k)=>{const v=typeof e==='number'?e:(e&&e.z);if(typeof v==='number'&&v>-100)z[s+k]=v;});}).catch(()=>{}));}
-  await Promise.all(jobs);
+    for(let attempt=0;attempt<3;attempt++){try{const r=await fetch(`https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=${sl.map(p=>p[0].toFixed(6)).join('|')}&lat=${sl.map(p=>p[1].toFixed(6)).join('|')}&resource=ign_rge_alti_wld&zonly=true`);
+      if(r.status===429||r.status>=500){await new Promise(res=>setTimeout(res,1200*(attempt+1)));continue;}
+      const j=await r.json();(j.elevations||[]).forEach((e,k)=>{const v=typeof e==='number'?e:(e&&e.z);if(typeof v==='number'&&v>-100)z[s+k]=v;});break;}catch(e){}}}
   if(z.filter(v=>v!=null).length<pts.length*0.8)return null;
   for(let k=0;k<z.length;k++)if(z[k]==null)z[k]=z[k-1]??z[k+1]??0;
   const west=proj(lon-dLon,0)[0],east=proj(lon+dLon,0)[0],north=proj(0,lat+dLat)[1],south=proj(0,lat-dLat)[1];
