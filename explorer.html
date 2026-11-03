@@ -1613,7 +1613,10 @@ function carveFootprint(u,cloud,others){
    each becomes a plain block at its measured height, cut in rectangles aligned on the nearest building's walls. */
 function laserOnlyBuildings(cloud){
   const {N,cell,R,z6}=cloud; const c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d');g.fillStyle='#fff';g.strokeStyle='#fff';g.lineWidth=2;g.lineJoin='round';
-  S.meshes.forEach(m=>m.userData.rings.forEach((r,ri)=>{if(ri)return;g.beginPath();r.forEach((p,i)=>{const px=(p.x+R)/cell,py=(R-p.y)/cell;i?g.lineTo(px,py):g.moveTo(px,py);});g.closePath();g.fill();g.stroke();}));
+  const path=r=>{g.beginPath();r.forEach((p,i)=>{const px=(p.x+R)/cell,py=(R-p.y)/cell;i?g.lineTo(px,py):g.moveTo(px,py);});g.closePath();};
+  S.meshes.forEach(m=>{path(m.userData.rings[0]);g.fill();g.stroke();});
+  g.fillStyle='#000';S.meshes.forEach(m=>m.userData.rings.slice(1).forEach(r=>{path(r);g.fill();})); // courtyards stay free
+  g.lineWidth=2;g.strokeStyle='#fff';S.meshes.forEach(m=>m.userData.rings.slice(1).forEach(r=>{path(r);g.stroke();}));
   const occ=g.getImageData(0,0,N,N).data; const lim=R-6;
   const T=new Float32Array(N*N).fill(NaN),C=new Uint8Array(N*N);
   for(let j=0;j<N;j++)for(let i=0;i<N;i++){const k=j*N+i;if(occ[k*4]>127)continue;const x=-R+(i+0.5)*cell,y=R-(j+0.5)*cell;if(Math.abs(x)>lim||Math.abs(y)>lim)continue;const z=z6[k];if(!(z>-1e8))continue;const gz=terrainZ(x,y);if(z-gz<2)continue;T[k]=z;C[k]=1;}
