@@ -1380,8 +1380,14 @@ function splitByLevel(rings,pts,cell,depth){
 }
 function partModel(pts,rings){
   const hs=pts.map(p=>p.h).sort((a,b)=>a-b); if(hs.length<4)return null;
-  const eave=qtl(hs,0.15),med=qtl(hs,0.5),top=qtl(hs,0.92); const pitched=top-eave>=2.2&&rings.length===1&&convexity(rings[0])>0.8;
-  if(pitched)return {h:Math.max(2.5,eave),rise:Math.min(9,top-eave)};
+  const eave=qtl(hs,0.15),med=qtl(hs,0.5),top=qtl(hs,0.92);
+  // two flat levels mixed in one footprint (not cut) look like a slope in the numbers: detect them (2-means explains almost all variance)
+  const n=hs.length,mean=hs.reduce((s,v)=>s+v,0)/n,tv=hs.reduce((s,v)=>s+(v-mean)*(v-mean),0); let bi=null;
+  if(tv>0){let sA=0,qA=0;const sT=mean*n,qT=hs.reduce((s,v)=>s+v*v,0);for(let k=1;k<n;k++){sA+=hs[k-1];qA+=hs[k-1]*hs[k-1];const w=(qA-sA*sA/k)+((qT-qA)-(sT-sA)*(sT-sA)/(n-k));if(!bi||w<bi.w)bi={w,k};}}
+  if(bi&&1-bi.w/tv>0.88&&top-eave>=2.2){const big=bi.k>=n/2?hs.slice(0,bi.k):hs.slice(bi.k);return {h:Math.max(2.5,qtl(big,0.5)),rise:0};}
+  const r0=rings[0];let per=0;for(let i=0;i<r0.length;i++)per+=r0[i].distanceTo(r0[(i+1)%r0.length]);const maxRise=1.1*Math.abs(areaOf(r0))/per;
+  const pitched=top-eave>=2.2&&rings.length===1&&convexity(r0)>0.8;
+  if(pitched)return {h:Math.max(2.5,eave),rise:Math.min(9,top-eave,maxRise)};
   return {h:Math.max(2.5,top-eave>=2.2?(eave+top)/2:med),rise:0};
 }
 function makeBlock(src,rings,model,roofSets){
@@ -1427,6 +1433,7 @@ async function lidarBuildings(){
   rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0;
   S.counts=Object.assign(S.counts||{},{lidarBuildings:n});console.log('LiDAR buildings',n,'→',added.length,'blocs',Math.round(performance.now()-t0)+' ms');
 }
+window.__qs={S,get cam(){return cam;},scene};
 function rebuildEdges(){
   if(edgeLines){scene.remove(edgeLines);edgeLines.geometry.dispose();edgeLines=null;}
   const parts=S.meshes.map(m=>m.userData.edgeArr).filter(Boolean).concat(S.roofEdgeParts||[]);
