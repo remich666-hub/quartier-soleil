@@ -640,7 +640,7 @@ function buildLayers(roads,hedges,walls,rails,water){
   meshOf(P,N,new THREE.MeshLambertMaterial({color:0xf5f2ec}),false);
   P=[];N=[]; ribbons(rails,3.2,0.14,P,N); meshOf(P,N,new THREE.MeshLambertMaterial({color:0xc9c4bb}),false);
   P=[];N=[]; surfaces(water,0.16,P,N); meshOf(P,N,new THREE.MeshLambertMaterial({color:0xc4d3da}),false);
-  P=[];N=[]; fences(hedges,1.6,p=>{const h=+p.hauteur;return (h>0.3&&h<12)?h:2.2;},P,N); const hm=meshOf(P,N,new THREE.MeshLambertMaterial({color:0x6f9468}),true); if(hm)blockers.push(hm);
+  P=[];N=[]; fences(hedges,1.6,p=>{const h=+p.hauteur;return (h>0.3&&h<12)?h:2.2;},P,N); const hm=meshOf(P,N,new THREE.MeshLambertMaterial({color:0xa3bb98}),true); if(hm)blockers.push(hm);
   P=[];N=[]; fences(walls,0.35,p=>{const n=(p.nature||'').toLowerCase();if(/anti-bruit/.test(n))return 4;if(/sout[eè]nement/.test(n))return 1.2;if(/muret|parapet/.test(n))return 0.9;if(/^mur|rempart/.test(n))return 2.2;if(/cl[oô]ture|grillage|barri/.test(n))return 1.6;return 0;},P,N);
   const wm=meshOf(P,N,new THREE.MeshLambertMaterial({color:0xdcd6cb}),true); if(wm)blockers.push(wm);
   return {hedges:hedges.length,walls:walls.length};
@@ -921,7 +921,7 @@ function buildHedges(groups){ // groups: [{segs:[[a,b],...],h}]
     pushQuad(P,N,[b[0]-nx,b[1]-ny,zb-0.3],[b[0]+nx,b[1]+ny,zb-0.3],[b[0]+nx,b[1]+ny,zb+hh],[b[0]-nx,b[1]-ny,zb+hh],[dx/L,dy/L,0]);});});
   if(!P.length)return 0;
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
-  hedgeMesh=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0x6f9468}));hedgeMesh.castShadow=hedgeMesh.receiveShadow=true;scene.add(hedgeMesh);blockers.push(hedgeMesh);
+  hedgeMesh=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa3bb98}));hedgeMesh.castShadow=hedgeMesh.receiveShadow=true;scene.add(hedgeMesh);blockers.push(hedgeMesh);
   return groups.length;
 }
 function rebuildTrees(){
@@ -1333,7 +1333,7 @@ async function lidarVegGrid(){
     trees.push({x:-R+t.i*step,y:R-t.j*step,r,h:t.z,vs:0.9+Math.random()*0.3});});
   if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();const k=blockers.indexOf(lidarVegMesh);if(k>=0)blockers.splice(k,1);lidarVegMesh=null;}
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
-    lidarVegMesh=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0x6f9468}));lidarVegMesh.castShadow=lidarVegMesh.receiveShadow=true;scene.add(lidarVegMesh);blockers.push(lidarVegMesh);}
+    lidarVegMesh=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa3bb98}));lidarVegMesh.castShadow=lidarVegMesh.receiveShadow=true;scene.add(lidarVegMesh);blockers.push(lidarVegMesh);}
   treeSets.lidar=trees.concat(bushes); S.counts&&(S.counts.lidarVeg=nv); const nt=rebuildTrees(); buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[])); S.obstacles=S.meshes.concat(monuments,roofMeshes,blockers,structures,roadMeshes.length?[roadMeshes[0]]:[]); if(treeCrown)S.obstacles.push(treeCrown); if(!S.loading)status(loadedText(nt));
 }
 function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?` · végétation LiDAR HD (rayon ${CORE} m)`:c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
