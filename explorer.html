@@ -1623,7 +1623,7 @@ async function lidarBuildings(){
   rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0;
   S.counts=Object.assign(S.counts||{},{lidarBuildings:n});S.counts.carved=nCarved;console.log('LiDAR buildings',n,'→',added.length,'blocs, découpés au nuage de points:',nCarved,Math.round(performance.now()-t0)+' ms');
 }
-window.__qs={S,get cam(){return cam;},scene,partModel,findTowers,lidarSamples,orthoGreen,distToRing};
+window.__qs={S,get cam(){return cam;},scene,partModel,findTowers,lidarSamples,orthoGreen,distToRing,fetchCloud,carveFootprint,copcLibs};
 function rebuildEdges(){
   if(edgeLines){scene.remove(edgeLines);edgeLines.geometry.dispose();edgeLines=null;}
   const parts=S.meshes.map(m=>m.userData.edgeArr).filter(Boolean).concat(S.roofEdgeParts||[]);
