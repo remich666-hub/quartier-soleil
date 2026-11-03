@@ -402,6 +402,7 @@ function applyCam(){
   const z=cam.target.z+cam.dist*Math.sin(cam.phi);
   camera.position.set(x,y,z); camera.lookAt(cam.target);
 }
+let navPop=false;
 function setMode(mode){
   if(mode==='window'&&!(S.win&&S.win.pos))return;
   cam.mode=mode; const win=mode==='window';
@@ -411,6 +412,7 @@ function setMode(mode){
   $('viewWin').textContent=win?'Retour à la maquette':'Vue depuis la fenêtre'; if(!win)$('sheet').classList.remove('collapsed');
   $('winHintText').textContent=win?'Vous êtes à la fenêtre. Glissez pour regarder autour.':'Choisissez la façade, l\'étage et la position, puis calculez.';
   if(win&&isPhone())showTab('bottom');
+  camTw=null; if(win)pushNav('window'); else if(!navPop&&history.state&&history.state.qs==='window'){navPop=true;history.back();}
   applyCam(); update();
 }
 $('viewWin').addEventListener('click',()=>setMode(cam.mode==='window'?'orbit':'window'));
@@ -1001,19 +1003,74 @@ function pick(e){
   const r=el.getBoundingClientRect(); const m=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
   ray.setFromCamera(m,camera); ray.far=Infinity; const hits=ray.intersectObjects(S.meshes,false);
   if(!hits.length){toast('Touchez un bâtiment');return;}
-  const hit=hits[0]; const obj=hit.object; const prevB=S.building;
-  selectBuilding(obj);
-  const fac=obj.userData.facades;
-  let idx=0;
-  if(Math.abs(hit.face.normal.z)<0.3){ // wall hit: pick the matching façade
+  const hit=hits[0]; const obj=hit.object; const prevB=S.building, prevWin=S.win;
+  if(obj!==prevB)selectBuilding(obj);
+  const u=obj.userData, fac=u.facades, bl=blindMap(obj);
+  let idx=-1, wall=Math.abs(hit.face.normal.z)<0.3;
+  if(wall){ // wall hit: pick the matching façade, then aim the window where the finger landed
     const n=hit.face.normal.clone().transformDirection(obj.matrixWorld);
     let bestS=-2; fac.forEach((f,i)=>{const s=f.normal.dot(n)-f.mid.distanceTo(new THREE.Vector2(hit.point.x,hit.point.y))/400;if(s>bestS){bestS=s;idx=i;}});
+    const f=fac[idx], fl=Math.max(0,Math.min(nFloors(u)-1,Math.floor((hit.point.z-u.zBase)/storeyH(u))));
+    if(bl[idx][fl]){ // party wall: no window can exist here
+      toast('Façade mitoyenne : pas de fenêtre ici');
+      if(prevB===obj&&prevWin)return; idx=-1;
+    }else{
+      $('floor').value=fl; $('along').value=Math.round(100*alongOf(f,hit.point));
+    }
+  }
+  if(idx<0){ // roof hit or blind wall on a new building: first open façade
+    if(prevB===obj&&prevWin&&!wall)idx=fac.indexOf(prevWin.facade);
+    if(idx<0)idx=Math.max(0,bl.findIndex(a=>a.some(b=>!b)));
   }
   $('facade').value=String(idx); chooseFacade(idx);
   if(S.building!==prevB)frameBuilding();
-  toast(`Façade ${idx+1}/${fac.length} · étage ${S.win.floor}`);
+  if(!(wall&&bl[idx]&&S.win&&bl[idx][S.win.floor]))toast(`Façade ${idx+1}/${fac.length} · ${floorName(S.win.floor).toLowerCase()}`);
+  if(prevB!==obj)pushNav('building');
   if(isPhone())$('sheet').classList.add('collapsed'); // keep the map visible while aiming at the window
 }
+/* storey height and party walls (mitoyenneté): a floor of a façade is blind when a neighbour
+   rises in front of it, sampled 0.8 m out at 20 / 50 / 80 % of its length */
+const nFloors=u=>Math.max(1,u.floors||Math.round(u.h/3));
+const storeyH=u=>u.floors&&u.h?Math.max(2.5,Math.min(3.6,u.h/u.floors)):3;
+const downRay=new THREE.Raycaster();
+function blindMap(obj){
+  const u=obj.userData; if(u._blind&&u._blindN===S.meshes.length)return u._blind;
+  const others=S.meshes.filter(m=>m!==obj), nF=nFloors(u), sh=storeyH(u), down=new THREE.Vector3(0,0,-1);
+  u._blind=u.facades.map(f=>{
+    const tops=[0.2,0.5,0.8].map(t=>{const p=pointAlong(f,t);
+      downRay.set(new THREE.Vector3(p.x+f.normal.x*0.8,p.y+f.normal.y*0.8,u.zBase+u.h+300),down);downRay.far=1000;
+      const h=downRay.intersectObjects(others,true); return h.length?h[0].point.z:-1e9;});
+    const out=[]; for(let k=0;k<nF;k++){const z=u.zBase+k*sh+1.5; out.push(tops.every(t=>t>z+0.3));} return out;
+  });
+  u._blindN=S.meshes.length; return u._blind;
+}
+function pointAlong(f,a){const t=a*f.len;let acc=0;for(const s of f.segs){if(acc+s.len>=t){const k=(t-acc)/s.len;return new THREE.Vector2(s.a.x+(s.b.x-s.a.x)*k,s.a.y+(s.b.y-s.a.y)*k);}acc+=s.len;}return f.mid;}
+function alongOf(f,p){ // inverse of pointAlong: where a tapped point sits along the façade (5–95 %)
+  let acc=0,best=1e9,at=0.5;
+  f.segs.forEach(s=>{const dx=s.b.x-s.a.x,dy=s.b.y-s.a.y,k=Math.max(0,Math.min(1,((p.x-s.a.x)*dx+(p.y-s.a.y)*dy)/(s.len*s.len||1)));
+    const d=Math.hypot(s.a.x+dx*k-p.x,s.a.y+dy*k-p.y); if(d<best){best=d;at=(acc+k*s.len)/f.len;} acc+=s.len;});
+  return Math.max(0.05,Math.min(0.95,at));
+}
+function openFloor(fi,fl){ // nearest floor of façade fi that is not blind
+  const b=S.building&&blindMap(S.building)[fi]; if(!b||!b[fl])return fl;
+  for(let d=1;d<b.length;d++){if(fl-d>=0&&!b[fl-d])return fl-d;if(fl+d<b.length&&!b[fl+d])return fl+d;} return fl;
+}
+/* camera glides to face the chosen façade (orbit mode only) */
+let camTw=null;
+function flyToFacade(f){
+  if(cam.mode!=='orbit'||!S.win)return; const u=S.building.userData;
+  const p=pointAlong(f,0.5), z=u.zBase+S.win.floor*storeyH(u)+1.5;
+  let th=Math.atan2(f.normal.x,f.normal.y); while(th-cam.theta>Math.PI)th-=2*Math.PI; while(th-cam.theta<-Math.PI)th+=2*Math.PI;
+  camTw={t0:performance.now(),dur:650,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(p.x,p.y,z),th,ph:Math.min(cam.phi,0.5),d:Math.max(40,Math.min(cam.dist,90))}};
+}
+el.addEventListener('pointerdown',()=>{camTw=null;});
+el.addEventListener('wheel',()=>{camTw=null;},{passive:true});
+/* back gesture: leaves the window view, then the selection */
+function pushNav(k){try{if(!history.state||history.state.qs!==k)history.pushState({qs:k},'');}catch(_){}}
+window.addEventListener('popstate',()=>{
+  if(navPop){navPop=false;return;} navPop=true;
+  try{ if(cam.mode==='window')setMode('orbit'); else if(S.building)$('clearWin').click(); } finally{navPop=false;}
+});
 /* the address follows the building being studied (reverse geocoding on the national address base) */
 let revTok=0;
 async function addressOf(obj){
@@ -1034,7 +1091,9 @@ function selectBuilding(obj){
     const origin=new THREE.Vector3(f.mid.x,f.mid.y,u.zBase+4).addScaledVector(f.normal,0.5);
     const rc=new THREE.Raycaster(origin,f.normal,0,400); const hh=rc.intersectObjects(S.meshes.filter(x=>x!==obj),false);
     const vis=hh.length?`vis-à-vis à ${hh[0].distance.toFixed(0)} m`:'dégagé > 400 m';
-    o.textContent=`${DIRS[Math.round(f.az/45)%8]} ${f.az.toFixed(0)}° · ${f.len.toFixed(0)} m · ${vis}`;
+    const allBlind=blindMap(obj)[i].every(b=>b);
+    o.textContent=`${DIRS[Math.round(f.az/45)%8]} ${f.az.toFixed(0)}° · ${f.len.toFixed(0)} m · ${allBlind?'mitoyenne':vis}`;
+    if(allBlind)o.disabled=true;
     sel.appendChild(o);
   });
   const fl=Math.max(0,Math.min(40,Math.round(((u.floors||Math.round(u.h/3))-1)/2)));
@@ -1049,7 +1108,8 @@ function selectBuilding(obj){
 }
 function chooseFacade(idx){
   const obj=S.building; if(!obj)return; const f=obj.userData.facades[idx]; if(!f)return;
-  S.win={obj,facade:f,floor:Math.max(0,Math.min(40,+$('floor').value||0)),along:(+$('along').value||50)/100,normal:f.normal.clone()};
+  const of=openFloor(idx,Math.max(0,Math.min(40,+$('floor').value||0))); $('floor').value=of;
+  S.win={obj,facade:f,floor:of,along:(+$('along').value||50)/100,normal:f.normal.clone()};
   S.skyline=null; skyLine.visible=false; if(lidarShell)lidarShell.visible=false; $('lidarText').textContent='';
   placeMarker(); refreshWinUI(); scheduleSummary();
 }
@@ -1069,8 +1129,8 @@ function placeMarker(){
   facadeLine.geometry.dispose(); facadeLine.geometry=new THREE.BufferGeometry().setFromPoints(pts);
   if(cam.mode==='window'){applyCam();update();facadeLine.visible=false;}else{marker.visible=true;markerArrow.visible=true;facadeLine.visible=true;}
 }
-$('facade').addEventListener('change',e=>chooseFacade(+e.target.value));
-function stepFacade(d){const sel=$('facade');const n=sel.options.length;if(!n)return;const i=((+sel.value||0)+d+n)%n;sel.value=String(i);chooseFacade(i);const f=S.building.userData.facades[i];toast(`Façade ${i+1}/${n} · ${DIRS[Math.round(f.az/45)%8]} · ${f.len.toFixed(0)} m`);}
+$('facade').addEventListener('change',e=>{chooseFacade(+e.target.value);if(S.win)flyToFacade(S.win.facade);});
+function stepFacade(d){const sel=$('facade');const n=sel.options.length;if(!n)return;let i=+sel.value||0;for(let k=0;k<n;k++){i=(i+d+n)%n;if(!sel.options[i].disabled)break;}sel.value=String(i);chooseFacade(i);flyToFacade(S.building.userData.facades[i]);const f=S.building.userData.facades[i];toast(`Façade ${i+1}/${n} · ${DIRS[Math.round(f.az/45)%8]} · ${f.len.toFixed(0)} m`);}
 $('facPrev').addEventListener('click',()=>stepFacade(-1)); $('facNext').addEventListener('click',()=>stepFacade(1));
 function frameBuilding(){
   const obj=S.building; if(!obj||cam.mode!=='orbit')return; const bb=obj.geometry.boundingBox;
@@ -1080,7 +1140,7 @@ function frameBuilding(){
 $('frameB').addEventListener('click',frameBuilding);
 $('floor').addEventListener('input',()=>{if(S.win){S.win.floor=Math.max(0,Math.min(40,+$('floor').value||0));placeMarker();}});
 $('along').addEventListener('input',()=>{if(S.win){S.win.along=(+$('along').value)/100;placeMarker();}});
-$('clearWin').addEventListener('click',()=>{$('mini').hidden=true;if(cam.mode==='window')setMode('orbit');S.win=null;S.building=null;S.skyline=null;skyLine.visible=false;skyLine.userData.ready=false;marker.visible=false;markerArrow.visible=false;facadeLine.visible=false;$('winBox').hidden=true;$('results').hidden=true;$('viewWin').disabled=true;$('winHintText').textContent='Touchez un bâtiment dans la maquette pour choisir une façade.';});
+$('clearWin').addEventListener('click',()=>{camTw=null;if(!navPop&&history.state&&history.state.qs){navPop=true;history.go(history.state.qs==='window'?-2:-1);}$('mini').hidden=true;if(cam.mode==='window')setMode('orbit');S.win=null;S.building=null;S.skyline=null;skyLine.visible=false;skyLine.userData.ready=false;marker.visible=false;markerArrow.visible=false;facadeLine.visible=false;$('winBox').hidden=true;$('results').hidden=true;$('viewWin').disabled=true;$('winHintText').textContent='Touchez un bâtiment dans la maquette pour choisir une façade.';});
 
 /* ---------- LiDAR HD skyline from the window (IGN altimetry API, MNS at 50 cm) ---------- */
 const skyLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xd9731a,transparent:true,opacity:0.9,fog:false,depthTest:false}));
@@ -1679,7 +1739,7 @@ function refreshWinUI(){
   if(o){const parts=o.textContent.split(' · ');$('facLabel').innerHTML=`${parts[0]}<small>${(+sel.value+1)}/${n} · ${parts.slice(1).join(' · ')}</small>`;}
   const f=+$('floor').value||0; const u=S.building&&S.building.userData; const maxF=u?Math.max(0,(u.floors||Math.round(u.h/3))-1):40;
   $('floorLabel').innerHTML=`${floorName(f)}<small>${u?`${(u.floors||'?')} niveaux · ${Math.round(u.h)} m`:''}</small>`;
-  $('floorDown').disabled=f<=0; $('floorUp').disabled=f>=maxF;
+  $('floorDown').disabled=f<=0||(!!S.win&&stepFloor(f,-1)===f); $('floorUp').disabled=f>=maxF||(!!S.win&&stepFloor(f,1)===f);
   if(/^Quartier chargé/.test($('status').textContent))$('status').textContent='Quartier chargé.';
 }
 let sumT=null, sumTok=0;
@@ -1705,8 +1765,10 @@ async function runSummary(){
 $('facade').addEventListener('change',()=>{refreshWinUI();scheduleSummary();});
 $('facPrev').addEventListener('click',()=>{refreshWinUI();scheduleSummary();});
 $('facNext').addEventListener('click',()=>{refreshWinUI();scheduleSummary();});
-$('floorDown').addEventListener('click',()=>{const f=Math.max(0,(+$('floor').value||0)-1);$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
-$('floorUp').addEventListener('click',()=>{const f=(+$('floor').value||0)+1;$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
+const fIdx=()=>S.win?S.building.userData.facades.indexOf(S.win.facade):-1;
+function stepFloor(cur,d){const b=S.building&&fIdx()>=0?blindMap(S.building)[fIdx()]:null;let f=cur+d;if(b)while(f>=0&&f<b.length&&b[f])f+=d;return b&&(f<0||f>=b.length)?cur:Math.max(0,f);}
+$('floorDown').addEventListener('click',()=>{const f=stepFloor(+$('floor').value||0,-1);$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
+$('floorUp').addEventListener('click',()=>{const f=stepFloor(+$('floor').value||0,1);$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
 $('along').addEventListener('change',scheduleSummary);
 $('addrChange').addEventListener('click',()=>{$('stepAddr').hidden=false;$('addrDone').hidden=true;$('addr').focus();});
 $('clearWin').addEventListener('click',()=>{if(S.selMesh&&family(S.target).indexOf(S.selMesh)<0)setHi(S.selMesh,false);S.selMesh=null;$('stepPick').hidden=false;$('winBox').hidden=true;$('blindWarn').hidden=true;});
@@ -1726,6 +1788,9 @@ function frame(now){
   const dt=Math.min(0.1,(now-lastT)/1000); lastT=now;
   if(S.playing){S.minute=(S.minute+dt*60)%1440;$('time').value=Math.round(S.minute/5)*5;update();}
   if(rain.visible){const p=rain.geometry.attributes.position.array;const sp=(rain.userData.speed||3.5)*60*dt;for(let i=0;i<RAIN_N;i++){p[i*3+2]-=sp;if(p[i*3+2]<0)p[i*3+2]=150;}rain.geometry.attributes.position.needsUpdate=true;rain.position.set(camera.position.x,camera.position.y,0);}
+  if(camTw){const k=Math.min(1,(now-camTw.t0)/camTw.dur),e=k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,a=camTw.a,b=camTw.b;
+    cam.target.lerpVectors(a.t,b.t,e);cam.theta=a.th+(b.th-a.th)*e;cam.phi=a.ph+(b.ph-a.ph)*e;cam.dist=a.d+(b.d-a.d)*e;applyCam();if(k>=1)camTw=null;}
+  if(marker.visible){const ph=(now%1600)/1600,sc=(isPhone()?1.6:1.1)*(1+0.35*(0.5-0.5*Math.cos(ph*2*Math.PI)));marker.scale.setScalar(sc);}
   sky.position.copy(camera.position); sunPath.position.copy(camera.position); if(S.sunDir)sunDisc.position.copy(camera.position).addScaledVector(S.sunDir,2000);
   renderer.render(scene,camera); requestAnimationFrame(frame);
 }
