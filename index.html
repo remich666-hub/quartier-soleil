@@ -443,7 +443,7 @@ function orthoLayer(mesh,mat,lat,lon,z,R,fallback,segs,onDone){
 function loadOrtho(lat,lon){
   orthoLayer(ground,groundMat,lat,lon,17,3,0xe9e6df,28);          // 7×7 tiles ≈ 1.4 km, 80 cm/px
   orthoLayer(inner,innerMat,lat,lon,19,isPhone()?4:5,0,40,(raw,w,e,n,s)=>{ // 9×9 or 11×11 tiles ≈ 450–550 m, 20 cm/px
-    if(!raw)return; S.rawOrtho={raw,w,e,n,s}; try{const det=detectCanopy(raw,w,e,n,s);console.log('canopy',det.trees.length,det.hedges.length);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;const nt=rebuildTrees();S.counts&&(S.counts.orthoHedges=buildHedges((S.osmHedges||[]).concat(det.hedges)));if(S.counts)status(loadedText(nt));refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
+    if(!raw)return; S.rawOrtho={raw,w,e,n,s}; try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;if(S.loading){S.pendingRefine=true;}else{applyVegetation();refineWithLidar();}}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
   });
   inner.position.z=ground.position.z+0.06;
 }
@@ -1045,6 +1045,7 @@ function verdict(rows){
   $('verdict').textContent=t;
 }
 
+function applyVegetation(){const nt=rebuildTrees();if(S.counts)S.counts.orthoHedges=buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[]));if(S.counts)status(loadedText(nt));return nt;}
 let refineToken=0;
 async function refineWithLidar(){ // real heights for trees and hedges; drops false trees (lawn)
   const tok=++refineToken; const trees=treeSets.osm.concat(treeSets.ortho); const hedges=(S.osmHedges||[]).concat(S.orthoHedges||[]);
@@ -1054,7 +1055,7 @@ async function refineWithLidar(){ // real heights for trees and hedges; drops fa
   let kept=[],dropped=0; trees.forEach((t,i)=>{const z=hs[i];if(z==null){kept.push(t);return;}if(z<1.5){dropped++;return;}t.h=z;t.vs=0.85+Math.random()*0.5;kept.push(t);});
   treeSets.osm=[];treeSets.ortho=kept;
   const hg=[];hedges.forEach((g,i)=>{const z=hs[trees.length+i];if(z!=null){if(z<0.5)return;if(z>5&&!g.osm){g.segs.forEach(([a,b])=>kept.push({x:(a[0]+b[0])/2,y:(a[1]+b[1])/2,r:2,h:z,vs:1.1}));return;}g.h=Math.min(4.5,Math.max(0.8,z));}hg.push(g);});
-  const nt=rebuildTrees(); S.counts&&(S.counts.orthoHedges=buildHedges(hg)); S.counts&&(S.counts.lidar=true); status(loadedText(nt));
+  S.orthoHedges=hg.filter(g=>!g.osm); S.osmHedges=hg.filter(g=>g.osm); const nt=rebuildTrees(); S.counts&&(S.counts.orthoHedges=buildHedges(hg)); S.counts&&(S.counts.lidar=true); status(loadedText(nt));
 }
 function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
 /* ---------- load flow ---------- */
@@ -1067,7 +1068,7 @@ async function load(q){
     const [alt,feats,terrain]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000),fetchTerrain(g.lat,g.lon).catch(()=>null)]);
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
-    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
+    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     buildScene(feats); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
@@ -1076,10 +1077,10 @@ async function load(q){
       wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,600,4000).catch(()=>[]),L('zone_d_activite_ou_d_interet',600),L('haie',2000),L('construction_lineaire',2000),wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,600,800).catch(()=>[]),L('surface_hydrographique',500)]);
     const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,600,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); const nl=applyLandmarks(pois);
-    treeSets.ign=vegZoneSpots(veg); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.orthoHedges=[]; if(osm.hedges.length)buildHedges(osm.hedges); S.counts={osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}; const nt=rebuildTrees(); S.wx=wx; if(!wx)toast('Météo indisponible');
-    status(loadedText(nt));
+    treeSets.ign=vegZoneSpots(veg); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts={osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}; S.wx=wx; if(!wx)toast('Météo indisponible');
+    S.loading=false; applyVegetation(); if(S.pendingRefine||treeSets.ortho.length||S.orthoHedges.length)refineWithLidar();
     try{localStorage.setItem('qs-addr',q);}catch(e){}
-  }catch(e){status(e.message||'Erreur de chargement',true);}
+  }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;}
   $('go').disabled=false; update();
 }
 $('form').addEventListener('submit',e=>{e.preventDefault();load($('addr').value);});
