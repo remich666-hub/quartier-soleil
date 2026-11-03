@@ -1571,9 +1571,10 @@ async function lidarBuildings(){
       const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
       const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const bp=tw&&tw.base.length>=8?tw.base:pt.pts;const md=partModel(bp,pt.rings);if(!md)continue;md.pts=F===Ff?bp:null;vols.push({rings:pt.rings,md});
         if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){m2.pts=F===Ff?t.pts:null;vols.push({rings:[t.ring],md:m2,tower:true});}});}
-      // storeys: the IGN count belongs to the tallest volume, lower volumes get their share; without a plausible IGN count, ~2.9 m per storey
-      const hmax=Math.max(0,...vols.map(v=>v.md.h)),F0=u.floors;
-      vols.forEach(v=>{const hb=v.md.h;v.md.floors=(F0>0&&hmax/F0>=2.3&&hmax/F0<=4.6)?Math.max(1,Math.round(F0*hb/hmax)):Math.max(1,Math.floor((hb-0.5)/2.9+0.35));});
+      // storeys: the IGN count belongs to the main volume (largest footprint); the others are counted from it, ~3 m a storey
+      const F0=u.floors; let main=null,ma=-1; vols.forEach(v=>{if(v.tower)return;const ar=Math.abs(areaOf(v.rings[0]));if(ar>ma){ma=ar;main=v;}}); if(!main)main=vols[0];
+      const ok=main&&F0>0&&main.md.h/F0>=2.3&&main.md.h/F0<=4.6;
+      vols.forEach(v=>{const hb=v.md.h;v.md.floors=ok?Math.max(1,F0+Math.round((hb-main.md.h)/3)):Math.max(1,Math.floor((hb-0.5)/2.9+0.35));});
       const blocks=vols.map(v=>{const b=makeBlock(m,v.rings,v.md,roofSets);if(v.tower)b.userData.tower=true;return b;});
       if(!blocks.length)continue;
       buildingsGroup.remove(m);m.geometry.dispose();gone.add(m);
