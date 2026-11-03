@@ -1552,14 +1552,20 @@ async function fetchCloud(R){
 }
 /* Carve what the IGN outline misses: light wells, set-backs, notches. Only cells where the laser hits the ground (or a much lower cover)
    and no building point above are removed; the IGN outline is never enlarged, so neighbours stay separate. */
-function carveFootprint(u,cloud){
+function carveFootprint(u,cloud,others){
   const r0=u.rings[0],sh=u.shift||{dx:0,dy:0},a=domAngle(r0),ca=Math.cos(a),sa=Math.sin(a),st=0.5,zb=u.zBase;
   let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; r0.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
-  u0-=st;v0-=st;const nu=Math.ceil((u1-u0)/st)+2,nv=Math.ceil((v1-v0)/st)+2; if(nu*nv>150000)return null;
-  const IN=new Uint8Array(nu*nv),ST=new Uint8Array(nu*nv),Z=new Float32Array(nu*nv); const W=(U,V)=>({x:U*ca-V*sa,y:U*sa+V*ca}); const zs=[];
+  const PAD=3;u0-=PAD;v0-=PAD;u1+=PAD;v1+=PAD;const nu=Math.ceil((u1-u0)/st)+1,nv=Math.ceil((v1-v0)/st)+1; if(nu*nv>200000)return null;
+  const IN=new Uint8Array(nu*nv),ST=new Uint8Array(nu*nv),Z=new Float32Array(nu*nv),OUTZ=new Float32Array(nu*nv).fill(NaN);
+  let bx0=1e9,bx1=-1e9,by0=1e9,by1=-1e9;r0.forEach(p=>{bx0=Math.min(bx0,p.x);bx1=Math.max(bx1,p.x);by0=Math.min(by0,p.y);by1=Math.max(by1,p.y);});
+  const nearOthers=(others||[]).filter(o=>o.rings[0]!==r0&&o.x1>=bx0-PAD-1&&o.x0<=bx1+PAD+1&&o.y1>=by0-PAD-1&&o.y0<=by1+PAD+1); const W=(U,V)=>({x:U*ca-V*sa,y:U*sa+V*ca}); const zs=[];
   for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i,p=W(u0+(i+0.5)*st,v0+(j+0.5)*st);if(!pointInPoly(p.x,p.y,r0))continue;let hole=false;for(let q=1;q<u.rings.length;q++)if(pointInPoly(p.x,p.y,u.rings[q])){hole=true;break;}if(hole)continue;
     IN[k]=1;const c=cloud.at(p.x+sh.dx,p.y+sh.dy);if(c<0)continue;const z=cloud.z6[c];Z[k]=z;
     if(z>zb+2.2){ST[k]=1;zs.push(z);}else if(cloud.gnd[c])ST[k]=2;}
+  // just outside the outline: roof the IGN outline misses (offset or simplified), if no other building claims it
+  for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i;if(IN[k])continue;const p=W(u0+(i+0.5)*st,v0+(j+0.5)*st);if(distToRing(p.x,p.y,r0)>PAD)continue;
+    if(nearOthers.some(o=>p.x>=o.x0&&p.x<=o.x1&&p.y>=o.y0&&p.y<=o.y1&&pointInPoly(p.x,p.y,o.rings[0])))continue;
+    const c=cloud.at(p.x+sh.dx,p.y+sh.dy);if(c<0)continue;const z=cloud.z6[c];if(z>zb+2.2)OUTZ[k]=z;}
   if(zs.length<20)return null; zs.sort((p,q)=>p-q); const med=zs[zs.length>>1];
   for(let k=0;k<nu*nv;k++)if(ST[k]===1&&Z[k]<med-4)ST[k]=3; // a narrow well only half-seen by the laser, or a low cover at its bottom // much lower cover (a glass roof over the ground floor at the bottom of a light well)
   // fill unknown cells from neighbours, then open (erode+dilate) the void mask to drop slivers < 1 m
@@ -1568,6 +1574,19 @@ function carveFootprint(u,cloud){
   const nb4=(M,k,i,j)=>[[1,0],[-1,0],[0,1],[0,-1]].map(([di,dj])=>{const ni=i+di,nj=j+dj;return (ni<0||nj<0||ni>=nu||nj>=nv)?1:(M[nj*nu+ni]|| !IN[nj*nu+ni]?1:0);});
   const Er=new Uint8Array(nu*nv);for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i;if(V[k]&&nb4(V,k,i,j).every(x=>x))Er[k]=1;}
   const Op=new Uint8Array(nu*nv);for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i;if(!V[k])continue;if(Er[k]){Op[k]=1;continue;}for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=i+di,nj=j+dj;if(ni>=0&&nj>=0&&ni<nu&&nj<nv&&Er[nj*nu+ni]){Op[k]=1;break;}}}
+  // roof found outside: same building height (not a taller neighbour, not a low annex), touching the outline, ≥ 1 m wide
+  const AD=new Uint8Array(nu*nv);for(let k=0;k<nu*nv;k++){const z=OUTZ[k];if(z===z&&z>=med-4&&z<=med+3)AD[k]=1;}
+  const AE=new Uint8Array(nu*nv);for(let j=1;j<nv-1;j++)for(let i=1;i<nu-1;i++){const k=j*nu+i;if(AD[k]&&(AD[k+1]||IN[k+1])&&(AD[k-1]||IN[k-1])&&(AD[k+nu]||IN[k+nu])&&(AD[k-nu]||IN[k-nu]))AE[k]=1;}
+  const AO=new Uint8Array(nu*nv);for(let j=1;j<nv-1;j++)for(let i=1;i<nu-1;i++){const k=j*nu+i;if(!AD[k])continue;if(AE[k]||AE[k+1]||AE[k-1]||AE[k+nu]||AE[k-nu])AO[k]=1;}
+  const adds=[];{const la=new Int32Array(nu*nv).fill(-1);let aid=0;
+    for(let s=0;s<nu*nv;s++){if(!AO[s]||la[s]>=0)continue;const cells=[s];la[s]=++aid;let touch=false;
+      for(let c=0;c<cells.length;c++){const ci=cells[c]%nu,cj=(cells[c]/nu)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv)continue;const q=nj*nu+ni;if(IN[q])touch=true;if(AO[q]&&la[q]<0){la[q]=aid;cells.push(q);}}}
+      if(!touch||cells.length*st*st<1.5)continue;const M=new Uint8Array(nu*nv);cells.forEach(c=>M[c]=1);let left=cells.length;
+      for(let it=0;it<4&&left>cells.length*0.15;it++){const hh=new Int32Array(nu);let best=null;
+        for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hh[i]=M[j*nu+i]?hh[i]+1:0;const stk=[];for(let i=0;i<=nu;i++){const cur=i<nu?hh[i]:0;let s0=i;while(stk.length&&stk[stk.length-1][1]>=cur){const [si,sh2]=stk.pop();const ar=sh2*(i-si);if(sh2&&(!best||ar>best.ar))best={ar,i0:si,i1:i-1,j0:j-sh2+1,j1:j};s0=si;}stk.push([s0,cur]);}}
+        if(!best||best.ar*st*st<1.0)break;const {i0,i1,j0,j1}=best;for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){if(M[j*nu+i]){M[j*nu+i]=0;left--;}}
+        // overlap the outline by one cell so the union is seamless
+        adds.push([W(u0+(i0-1)*st,v0+(j0-1)*st),W(u0+(i1+2)*st,v0+(j0-1)*st),W(u0+(i1+2)*st,v0+(j1+2)*st),W(u0+(i0-1)*st,v0+(j1+2)*st)]);}}}
   // components → rectangles (up to 3 each), pushed 1 m out where they open onto the street or yard
   const lab=new Int32Array(nu*nv).fill(-1);let id=0;const cuts=[];
   for(let s=0;s<nu*nv;s++){if(!Op[s]||lab[s]>=0)continue;const cells=[s];lab[s]=++id;
@@ -1583,16 +1602,18 @@ function carveFootprint(u,cloud){
       const U0=u0+(i0-eL)*st,U1=u0+(i1+1+eR)*st,V0=v0+(j0-eB)*st,V1=v0+(j1+1+eT)*st;
       cuts.push([W(U0,V0),W(U1,V0),W(U1,V1),W(U0,V1)]);}
   }
-  if(!cuts.length)return null;
+  if(!cuts.length&&!adds.length)return null;
   const P=r=>{const q=r.map(p=>[p.x,p.y]);q.push(q[0]);return q;};
-  let res; try{res=cloud.pc.difference([u.rings.map(P)],...cuts.map(c=>[P(c)]));}catch(err){console.warn('carve',err);return null;}
+  let res; try{let base=[u.rings.map(P)];if(adds.length){base=cloud.pc.union(base,...adds.map(c=>[P(c)]));const oth=nearOthers.map(o=>[P(o.rings[0])]);if(oth.length)base=cloud.pc.difference(base,...oth);}
+    res=cuts.length?cloud.pc.difference(base,...cuts.map(c=>[P(c)])):base;}catch(err){console.warn('carve',err);return null;}
   const parts=res.map(poly=>poly.map(ring=>{const q=ring.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y));return q;})).filter(rs=>rs[0].length>=3&&Math.abs(areaOf(rs[0]))>=2);
-  return parts.length?{parts,cuts:cuts.length}:null;
+  return parts.length?{parts,cuts:cuts.length,adds:adds.length}:null;
 }
 async function lidarBuildings(){
   const tok=refineToken; if(!S.lidarP||S.lidarRun===tok)return; S.lidarRun=tok;
   const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(tok!==refineToken||(!Ff&&!Fc))return;
   const cloud=await Promise.race([S.lidarP.cloud||null,new Promise(r=>setTimeout(()=>r(null),25000))]); if(tok!==refineToken)return; let nCarved=0;
+  const others=S.meshes.map(m=>{const r=m.userData.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});return {rings:m.userData.rings,x0,x1,y0,y1};});
   const green=orthoGreen(); const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
   const gone=new Set(),added=[]; let n=0,tc=performance.now();const t0=tc;
   const list=S.meshes.filter(m=>!m.userData.lidar).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
@@ -1603,7 +1624,7 @@ async function lidarBuildings(){
     if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
     const smp=lidarSamples(u,F,green); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
     const clean=u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;});
-    let bases=[clean]; if(cloud&&ext<cloud.R-4){const cv=carveFootprint(u,cloud);if(cv){bases=cv.parts;nCarved++;}}
+    let bases=[clean]; if(cloud&&ext<cloud.R-4){const cv=carveFootprint(u,cloud,others);if(cv){bases=cv.parts;nCarved++;}}
     const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
     const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const md=partModel(tw&&tw.base.length>=8?tw.base:pt.pts,pt.rings);if(!md)continue;vols.push({rings:pt.rings,md});
       if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8)vols.push({rings:[t.ring],md:m2,tower:true});});}
