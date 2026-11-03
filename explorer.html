@@ -1365,11 +1365,19 @@ function lidarGeometry(m,F,cell){
   vals.sort((a,b)=>a-b); const q=f=>vals[Math.min(vals.length-1,Math.floor(f*(vals.length-1)))];
   const lo=q(0.08),med=q(0.5),hi=q(0.92),flat=(q(0.85)-q(0.15))<1.2;
   const cache=new Map();
-  const zAt=(x,y)=>{if(flat)return med;const key=x.toFixed(3)+','+y.toFixed(3);let z=cache.get(key);if(z!==undefined)return z;
-    const a=[];for(const rad of [0.8,1.6]){for(let ox=-rad;ox<=rad+1e-6;ox+=rad/2)for(let oy=-rad;oy<=rad+1e-6;oy+=rad/2){if(!inR(x+ox,y+oy))continue;const v=raw(x+ox,y+oy);if(v!=null&&v>zb+2)a.push(v);}if(a.length>=6)break;}
-    if(!a.length)z=med;else{a.sort((p,q)=>p-q);z=Math.min(hi,Math.max(lo,a[a.length>>1]));}
-    cache.set(key,z);return z;};
+  const zIn=(x,y)=>{const a=[];for(const rad of [0.8,1.6]){for(let ox=-rad;ox<=rad+1e-6;ox+=rad/2)for(let oy=-rad;oy<=rad+1e-6;oy+=rad/2){if(!inR(x+ox,y+oy))continue;const v=raw(x+ox,y+oy);if(v!=null&&v>zb+2)a.push(v);}if(a.length>=6)break;}
+    if(!a.length)return med;a.sort((p,q)=>p-q);return Math.min(hi,Math.max(lo,a[a.length>>1]));};
   const outer=orientRing(r0,true), holes=u.rings.slice(1).map(r=>orientRing(r,false));
+  // eave line: each façade gets a height profile sampled 0.9 m inside and median-filtered along the wall (no saw teeth)
+  const prof=[]; if(!flat)[outer].concat(holes).forEach(r=>r.forEach((A,i)=>{const B=r[(i+1)%r.length];const L=Math.hypot(B.x-A.x,B.y-A.y);if(L<1e-3)return;
+    const nx=-(B.y-A.y)/L,ny=(B.x-A.x)/L,N=Math.max(1,Math.ceil(L/0.5)),zs=[];
+    for(let k=0;k<=N;k++){const t=k/N;zs.push(zIn(A.x+(B.x-A.x)*t+nx*0.9,A.y+(B.y-A.y)*t+ny*0.9));}
+    const f=zs.map((_,k)=>{const w=zs.slice(Math.max(0,k-3),k+4).sort((p,q)=>p-q);return w[w.length>>1];});
+    prof.push({A,B,L,N,f});}));
+  const zEdge=(x,y)=>{for(const e of prof){const dx=e.B.x-e.A.x,dy=e.B.y-e.A.y;const t=((x-e.A.x)*dx+(y-e.A.y)*dy)/(e.L*e.L);if(t<-1e-6||t>1+1e-6)continue;
+      if(Math.abs((x-e.A.x)*dy-(y-e.A.y)*dx)/e.L>1e-5)continue;const s=Math.min(e.N,Math.max(0,t*e.N)),k=Math.min(e.N-1,Math.floor(s)),w=s-k;return e.f[k]*(1-w)+e.f[k+1]*w;}return null;};
+  const zAt=(x,y)=>{if(flat)return med;const key=x.toFixed(3)+','+y.toFixed(3);let z=cache.get(key);if(z!==undefined)return z;
+    z=zEdge(x,y);if(z==null)z=zIn(x,y);cache.set(key,z);return z;};
   const RP=[],RN=[],RU=[],WP=[],WN=[],WU=[],EL=[]; const BOT=zb-SINK;
   const wall=(a,b,X0,X1,Y0,Y1)=>{
     if((a.x===X0&&b.x===X0)||(a.x===X1&&b.x===X1)||(a.y===Y0&&b.y===Y0)||(a.y===Y1&&b.y===Y1))return; // cell side, not a façade
