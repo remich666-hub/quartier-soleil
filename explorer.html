@@ -1334,7 +1334,7 @@ try{const a=localStorage.getItem('qs-addr');if(a)$('addr').value=a;}catch(e){}
 const LB_R=200; let lidarRoofMatC=null;
 function washed(raw){const c=document.createElement('canvas');c.width=raw.width;c.height=raw.height;const g=c.getContext('2d');try{g.filter='saturate(0.72)';}catch(_){}g.drawImage(raw,0,0);g.filter='none';g.globalAlpha=0.36;g.fillStyle='#fbf7f0';g.fillRect(0,0,c.width,c.height);return c;}
 function lidarRoofMat(){
-  if(!lidarRoofMatC)lidarRoofMatC=new THREE.MeshLambertMaterial({color:0xe2ddd2,flatShading:true});
+  if(!lidarRoofMatC)lidarRoofMatC=new THREE.MeshLambertMaterial({color:0xe2ddd2});
   const RO=S.rawOrtho, M=lidarRoofMatC;
   if(RO&&M.userData.raw!==RO.raw){const t=new THREE.CanvasTexture(washed(RO.raw));t.encoding=THREE.sRGBEncoding;t.anisotropy=4;
     t.repeat.set(1/(RO.e-RO.w),1/(RO.n-RO.s));t.offset.set(-RO.w/(RO.e-RO.w),-RO.s/(RO.n-RO.s)); // UVs are local metres
@@ -1363,10 +1363,10 @@ function lidarGeometry(m,F,cell){
   for(let x=x0+st/2;x<x1;x+=st)for(let y=y0+st/2;y<y1;y+=st)if(inR(x,y)){nin++;const v=raw(x,y);if(v!=null&&v>zb+2)vals.push(v);}
   if(vals.length<3||vals.length<0.45*nin)return null; // no laser return over this footprint (demolished, data gap): keep the IGN volume
   vals.sort((a,b)=>a-b); const q=f=>vals[Math.min(vals.length-1,Math.floor(f*(vals.length-1)))];
-  const lo=q(0.05),med=q(0.5),hi=q(0.96),flat=(q(0.9)-q(0.1))<0.9;
+  const lo=q(0.08),med=q(0.5),hi=q(0.92),flat=(q(0.85)-q(0.15))<1.2;
   const cache=new Map();
   const zAt=(x,y)=>{if(flat)return med;const key=x.toFixed(3)+','+y.toFixed(3);let z=cache.get(key);if(z!==undefined)return z;
-    const a=[];for(const rad of [0.5,1.1]){for(let ox=-rad;ox<=rad+1e-6;ox+=rad)for(let oy=-rad;oy<=rad+1e-6;oy+=rad){if(!inR(x+ox,y+oy))continue;const v=raw(x+ox,y+oy);if(v!=null&&v>zb+2)a.push(v);}if(a.length>=3)break;}
+    const a=[];for(const rad of [0.8,1.6]){for(let ox=-rad;ox<=rad+1e-6;ox+=rad/2)for(let oy=-rad;oy<=rad+1e-6;oy+=rad/2){if(!inR(x+ox,y+oy))continue;const v=raw(x+ox,y+oy);if(v!=null&&v>zb+2)a.push(v);}if(a.length>=6)break;}
     if(!a.length)z=med;else{a.sort((p,q)=>p-q);z=Math.min(hi,Math.max(lo,a[a.length>>1]));}
     cache.set(key,z);return z;};
   const outer=orientRing(r0,true), holes=u.rings.slice(1).map(r=>orientRing(r,false));
