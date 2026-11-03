@@ -1193,8 +1193,10 @@ function introMove(){
       c=new THREE.Vector3(hc.x*0.7+best.mid.x*0.3,hc.y*0.7+best.mid.y*0.3,u.zBase+u.h*0.45); // house centred, nudged toward the façade
       d1=Math.max(isPhone()?70:60,best.len*(isPhone()?3.2:2.4),u.h*4);}}catch(e){}}
   { // never land inside or behind another building: climb (and if needed back off) until the house is in clear view
-    const others=S.meshes.filter(m=>m!==t), rc=new THREE.Raycaster(); const blocked=(th,ph,d)=>{const dir=new THREE.Vector3(Math.cos(ph)*Math.sin(th),Math.cos(ph)*Math.cos(th),Math.sin(ph));
-      rc.set(c.clone().addScaledVector(dir,0.5),dir); rc.far=d; return rc.intersectObjects(others,false).length>0;};
+    const others=S.meshes.filter(m=>m!==t), rc=new THREE.Raycaster(), pts=[c];
+    if(t){const bb=t.geometry.boundingBox, zt=t.userData.zBase+t.userData.h; [[bb.min.x,bb.min.y],[bb.max.x,bb.min.y],[bb.min.x,bb.max.y],[bb.max.x,bb.max.y]].forEach(([x,y])=>pts.push(new THREE.Vector3(x+(c.x-x)*0.15,y+(c.y-y)*0.15,zt)));}
+    const blocked=(th,ph,d)=>{const cam=c.clone().add(new THREE.Vector3(Math.cos(ph)*Math.sin(th),Math.cos(ph)*Math.cos(th),Math.sin(ph)).multiplyScalar(d));
+      return pts.some(p=>{const v=cam.clone().sub(p),L=v.length();v.normalize();rc.set(p.clone().addScaledVector(v,0.3),v);rc.far=L;return rc.intersectObjects(others,false).length>0;});};
     let n=0; while(blocked(th1,ph1,d1)&&n<20){ if(ph1<1.25)ph1=Math.min(1.25,ph1+0.08); else d1*=1.15; n++; }
   }
   const a={t:new THREE.Vector3(c.x*0.3,c.y*0.3,0),th:th1+0.62,ph:1.45,d:isPhone()?1100:950};
