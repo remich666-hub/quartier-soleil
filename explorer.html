@@ -773,6 +773,7 @@ function addRoof(sets,ring,zEave,zRidge){
   try{const sg=new THREE.ShapeGeometry(new THREE.Shape(inner));const pos=sg.attributes.position,idx=sg.index;for(let i=0;i<idx.count;i++){const q=idx.getX(i);P.push(pos.getX(q),pos.getY(q),zRidge);N.push(0,0,1);}sg.dispose();}catch(e){}
   return true;
 }
+const DETAIL_R=200;
 function buildScene(features){
   while(buildingsGroup.children.length){const m=buildingsGroup.children.pop();m.geometry.dispose();}
   if(edgeLines){scene.remove(edgeLines);edgeLines.geometry.dispose();edgeLines=null;}
@@ -795,20 +796,23 @@ function buildScene(features){
       const outer=ringToLocal(poly[0]); const holes=[]; for(let i=1;i<poly.length;i++)holes.push(ringToLocal(poly[i]));
       let cx=0,cy=0; outer.forEach(q=>{cx+=q.x;cy+=q.y;}); cx/=outer.length; cy/=outer.length;
       const zBase=(typeof p.altitude_minimale_sol==='number'&&p.altitude_minimale_sol>-50)?p.altitude_minimale_sol-S.alt0:terrainZ(cx,cy);
+      // detailed zone of DETAIL_R m; beyond it, only buildings tall enough to shade the address (> 4° above a first-floor window), as plain blocks
+      let rad=0; outer.forEach(q=>{rad=Math.max(rad,Math.hypot(q.x-cx,q.y-cy));}); const dEdge=Math.hypot(cx,cy)-rad;
+      const far=dEdge>DETAIL_R; if(far&&(zBase+h-4)/dEdge<0.07)return;
       const shape=new THREE.Shape(outer); holes.forEach(hr=>shape.holes.push(new THREE.Path(hr)));
       const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});
       fitWallUVs(geo,h);
       const mesh=new THREE.Mesh(geo,matsFor(usage,false));
       mesh.position.z=zBase-SINK; mesh.castShadow=true; mesh.receiveShadow=true;
       mesh.userData={h,floors:p.nombre_d_etages,usage,zBase,roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes)};
-      if(rise>0){let done=false;const ra=roofSets[roofKey].P.length;if(!holes.length&&convexity(outer)>0.8)done=addRoof(roofSets[roofKey],outer,zBase+h,zBase+h+rise);if(done)mesh.userData.roofRef={key:roofKey,a:ra,b:roofSets[roofKey].P.length};
+      if(rise>0&&!far){let done=false;const ra=roofSets[roofKey].P.length;if(!holes.length&&convexity(outer)>0.8)done=addRoof(roofSets[roofKey],outer,zBase+h,zBase+h+rise);if(done)mesh.userData.roofRef={key:roofKey,a:ra,b:roofSets[roofKey].P.length};
         if(!done){const g2=new THREE.ExtrudeGeometry(shape,{depth:rise+0.02,bevelEnabled:false});const m2=new THREE.Mesh(g2,ROOF[roofKey]);m2.position.z=zBase+h-0.01;m2.castShadow=m2.receiveShadow=true;scene.add(m2);roofMeshes.push(m2);mesh.userData.roofMesh=m2;}
         mesh.userData.ridge=h+rise;}
       buildingsGroup.add(mesh); S.meshes.push(mesh);
       // ground floor band + one door on the longest outer wall
       const segs=ringSegs(outer,false); let longest=null; segs.forEach(s=>{if(!longest||s.len>longest.len)longest=s;});
-      segs.forEach(s=>walls.push({a:s.a,b:s.b,len:s.len,nx:s.nx,ny:s.ny,zBase,com,door:!com&&s===longest&&s.len>=3}));
-      holes.forEach(hr=>ringSegs(hr,true).forEach(s=>walls.push({a:s.a,b:s.b,len:s.len,nx:s.nx,ny:s.ny,zBase,com,door:false})));
+      if(!far)segs.forEach(s=>walls.push({a:s.a,b:s.b,len:s.len,nx:s.nx,ny:s.ny,zBase,com,door:!com&&s===longest&&s.len>=3}));
+      if(!far)holes.forEach(hr=>ringSegs(hr,true).forEach(s=>walls.push({a:s.a,b:s.b,len:s.len,nx:s.nx,ny:s.ny,zBase,com,door:false})));
       if(church)mesh.userData.church=true;
       const eg=new THREE.EdgesGeometry(geo,25); const arr=eg.attributes.position.array; const off=new Float32Array(arr.length); for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+zBase-SINK;} edgeArrays.push(off); mesh.userData.edgeArr=off; eg.dispose();
       geo.computeBoundingBox(); const bb=geo.boundingBox; const d=Math.hypot((bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2);
@@ -1421,10 +1425,10 @@ async function load(q){
     buildScene(feats); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
-    const R=440, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
+    const R=DETAIL_R+40, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
     const [veg,osm,wx,roads,pois,hedges,walls,rails,water]=await Promise.all([L('zone_de_vegetation',800),Promise.resolve({trees:[],hedges:[]}),fetchWeather(g.lat,g.lon).catch(()=>null),
-      wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,600,4000).catch(()=>[]),L('zone_d_activite_ou_d_interet',600),L('haie',2000),L('construction_lineaire',2000),wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,600,800).catch(()=>[]),L('surface_hydrographique',500)]);
-    const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,600,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
+      wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,DETAIL_R+80,4000).catch(()=>[]),L('zone_d_activite_ou_d_interet',600),L('haie',2000),L('construction_lineaire',2000),wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,DETAIL_R+80,800).catch(()=>[]),L('surface_hydrographique',500)]);
+    const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,DETAIL_R+80,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); try{buildPlan(veg,roads);}catch(err){console.error('plan',err);} const nl=applyLandmarks(pois);
     treeSets.ign=vegZoneSpots(veg); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}); S.wx=wx; if(!wx)toast('Météo indisponible');
     S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building; lidarBuildings();
