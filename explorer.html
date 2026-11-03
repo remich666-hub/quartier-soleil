@@ -1436,18 +1436,88 @@ function partModel(pts,rings){
   if(pitched)return {h:Math.max(2.5,eave),rise:Math.min(9,top-eave,maxRise)};
   return {h:Math.max(2.5,top-eave>=2.2?(eave+top)/2:med),rise:0};
 }
+/* Roofs pan by pan: in each wing the laser heights are split into planar pans (region growing on local normals),
+   one plane is fitted per pan, and the roof is the lower envelope of those planes (capped by the flat top): ridges, hips and
+   valleys fall exactly where the planes meet. Gable walls fill the gap between the eaves and the roof edge. */
+function planeRoof(outer,pts,eave,top){
+  const wings=convexity(outer)>0.85?[{ring:orientRing2(outer)}]:rectDecomp(outer).map(r=>({ring:r.ring}));
+  if(!wings.length)return null;
+  // spatial hash for neighbourhoods
+  const key=(x,y)=>Math.floor(x)+','+Math.floor(y); const grid=new Map();
+  pts.forEach((p,i)=>{const k=key(p.x,p.y);let a=grid.get(k);if(!a){a=[];grid.set(k,a);}a.push(i);});
+  const near=(x,y,r)=>{const out=[];for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){const a=grid.get(Math.floor(x)+dx+','+(Math.floor(y)+dy));if(a)a.forEach(i=>{const q=pts[i];if((q.x-x)**2+(q.y-y)**2<=r*r)out.push(i);});}return out;};
+  const fit=idx=>{let n=idx.length,sx=0,sy=0,sz=0;idx.forEach(i=>{sx+=pts[i].x;sy+=pts[i].y;sz+=pts[i].h;});sx/=n;sy/=n;sz/=n;let xx=0,xy=0,yy=0,xz=0,yz=0;
+    idx.forEach(i=>{const dx=pts[i].x-sx,dy=pts[i].y-sy,dz=pts[i].h-sz;xx+=dx*dx;xy+=dx*dy;yy+=dy*dy;xz+=dx*dz;yz+=dy*dz;});const det=xx*yy-xy*xy;if(Math.abs(det)<1e-6)return null;
+    const a=(xz*yy-yz*xy)/det,b=(yz*xx-xz*xy)/det;let r=0;idx.forEach(i=>{const e=pts[i].h-(sz+a*(pts[i].x-sx)+b*(pts[i].y-sy));r+=e*e;});return {a,b,c:sz-a*sx-b*sy,rms:Math.sqrt(r/n)};};
+  const faces=[],gables=[]; let err=0,cnt=0,minEdge=Infinity;
+  for(const w of wings){
+    const ring=w.ring; const inner=pts.map((p,i)=>i).filter(i=>pointInPoly(pts[i].x,pts[i].y,ring)&&distToRing(pts[i].x,pts[i].y,ring)>=0.6);
+    if(inner.length<12)return null;
+    // local normals
+    const loc=new Map(); inner.forEach(i=>{const nb=near(pts[i].x,pts[i].y,1.1);if(nb.length>=5){const f=fit(nb);if(f&&f.rms<0.25)loc.set(i,f);}});
+    const seeds=[...loc.keys()].sort((i,j)=>loc.get(i).rms-loc.get(j).rms); const seg=new Map(); const segs=[];
+    for(const s of seeds){if(seg.has(s))continue;const f0=loc.get(s);const id=segs.length;const mem=[s];seg.set(s,id);
+      for(let q=0;q<mem.length;q++){const i=mem[q];near(pts[i].x,pts[i].y,0.8).forEach(j=>{if(seg.has(j)||!loc.has(j))return;const f=loc.get(j);
+        const ang=Math.acos(Math.min(1,(1+f.a*f0.a+f.b*f0.b)/Math.sqrt((1+f.a*f.a+f.b*f.b)*(1+f0.a*f0.a+f0.b*f0.b))));
+        const d=Math.abs(pts[j].h-(f0.c+f0.a*pts[j].x+f0.b*pts[j].y))/Math.sqrt(1+f0.a*f0.a+f0.b*f0.b);
+        if(ang<0.26&&d<0.35){seg.set(j,id);mem.push(j);}});}
+      segs.push(mem);}
+    const cellA=(()=>{const a=Math.abs(areaOf(ring));return a/Math.max(1,inner.length);})();
+    let planes=segs.filter(m=>m.length*cellA>=Math.max(3,0.07*Math.abs(areaOf(ring)))).map(m=>fit(m)).filter(Boolean);
+    // merge near-identical planes
+    const merged=[];planes.forEach(pl=>{if(!merged.some(q=>Math.abs(q.a-pl.a)<0.08&&Math.abs(q.b-pl.b)<0.08&&Math.abs(q.c-pl.c)<0.5))merged.push(pl);});planes=merged;
+    if(!planes.length)return null;
+    planes.push({a:0,b:0,c:top,cap:true}); // the flat top caps everything (terraces, mansard tops)
+    const zEnv=(x,y)=>Math.min(...planes.map(pl=>pl.c+pl.a*x+pl.b*y));
+    // envelope must explain the data
+    inner.forEach(i=>{const e=pts[i].h-zEnv(pts[i].x,pts[i].y);err+=e*e;cnt++;});
+    planes.forEach((pl,i)=>{let poly=ring.slice();for(let j=0;j<planes.length&&poly;j++){if(j===i)continue;const q=planes[j];
+        poly=clipHalf(poly,q.a-pl.a,q.b-pl.b,q.c-pl.c);} // keep where pl ≤ q
+      if(poly&&Math.abs(areaOf(poly))>0.05)faces.push({poly,pl});});
+    ring.forEach(p=>{minEdge=Math.min(minEdge,zEnv(p.x,p.y));});
+    w.zEnv=zEnv;
+  }
+  const rmse=Math.sqrt(err/Math.max(1,cnt)); if(rmse>0.7||!faces.length)return null;
+  const hWall=Math.max(2,Math.min(eave,minEdge-0.03));
+  // gable / side walls between hWall and the roof edge, following every face vertex lying on the outline of each wing
+  wings.forEach(w=>{const r=w.ring;for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length],L=a.distanceTo(b);if(L<0.05)continue;
+      const ts=[0,1];faces.forEach(f=>f.poly.forEach(p=>{const t=((p.x-a.x)*(b.x-a.x)+(p.y-a.y)*(b.y-a.y))/(L*L);if(t>0.001&&t<0.999&&Math.abs((p.x-a.x)*(b.y-a.y)-(p.y-a.y)*(b.x-a.x))/L<0.02)ts.push(t);}));
+      ts.sort((x,y)=>x-y);for(let k=0;k<ts.length-1;k++){const t0=ts[k],t1=ts[k+1];if(t1-t0<1e-4)continue;const p0={x:a.x+(b.x-a.x)*t0,y:a.y+(b.y-a.y)*t0},p1={x:a.x+(b.x-a.x)*t1,y:a.y+(b.y-a.y)*t1};
+        const z0=w.zEnv(p0.x,p0.y),z1=w.zEnv(p1.x,p1.y);if(z0>hWall+0.02||z1>hWall+0.02)gables.push([p0,p1,z0,z1]);}}});
+  return {faces,gables,hWall,top:Math.max(...faces.map(f=>Math.max(...f.poly.map(p=>f.pl.c+f.pl.a*p.x+f.pl.b*p.y)))),rmse};
+}
+function orientRing2(r){const q=r.slice();if(areaOf(q)<0)q.reverse();return q;}
+function planeRoofMeshes(pr,zBase,roofMat,wallMat){
+  const P=[],N=[],GP=[],GN=[];
+  pr.faces.forEach(f=>{const p=f.poly;const pl=f.pl;const n=new THREE.Vector3(-pl.a,-pl.b,1).normalize();
+    for(let i=1;i<p.length-1;i++){let A=p[0],B=p[i],C=p[i+1];if((B.x-A.x)*(C.y-A.y)-(B.y-A.y)*(C.x-A.x)<0){const T=B;B=C;C=T;}
+      [A,B,C].forEach(q=>{P.push(q.x,q.y,zBase+pl.c+pl.a*q.x+pl.b*q.y);N.push(n.x,n.y,n.z);});}});
+  pr.gables.forEach(([a,b,za,zb])=>{const z0=zBase+pr.hWall-0.05;const dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy)||1;const nx=dy/L,ny=-dx/L;
+    [[a.x,a.y,z0],[b.x,b.y,z0],[b.x,b.y,zBase+zb],[a.x,a.y,z0],[b.x,b.y,zBase+zb],[a.x,a.y,zBase+za]].forEach(v=>{GP.push(...v);GN.push(nx,ny,0);});});
+  const out=[];
+  const mk=(P,N,mat)=>{if(!P.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));const m=new THREE.Mesh(g,mat);m.castShadow=m.receiveShadow=true;out.push(m);};
+  mk(P,N,roofMat); mk(GP,GN,wallMat); return out;
+}
 function makeBlock(src,rings,model,roofSets){
-  const u=src.userData,outer=rings[0],holes=rings.slice(1),h=model.h;
+  const u=src.userData,outer=rings[0],holes=rings.slice(1);
+  let pr=null; if(model.rise>0&&model.pts&&!holes.length){try{pr=planeRoof(outer,model.pts,model.h,model.h+model.rise);}catch(err){pr=null;}}
+  const h=pr?pr.hWall:model.h;
   const shape=new THREE.Shape(outer);holes.forEach(hr=>shape.holes.push(new THREE.Path(hr)));
   const floors=model.floors||Math.max(1,Math.round(h/3));const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});fitWallUVs(geo,h,floors);
   const mesh=new THREE.Mesh(geo,matsFor(u.usage,false));mesh.position.z=u.zBase-SINK;mesh.castShadow=true;mesh.receiveShadow=true;
   mesh.userData={h,floors,usage:u.usage,zBase:u.zBase,roofKey:u.roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes),lidar:true,shift:u.shift,church:u.church};
-  if(model.rise>0){const s=roofSets[u.roofKey||'autre']||roofSets.autre;
+  if(pr){ // roof pans measured by the laser, attached to the block (moves and disappears with it)
+    const parts=planeRoofMeshes(pr,u.zBase,ROOF[u.roofKey||'autre']||ROOF.autre,new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0]}));
+    const ea=[];parts.forEach(pm=>{pm.position.z=-(u.zBase-SINK);mesh.add(pm);const eg=new THREE.EdgesGeometry(pm.geometry,20);ea.push(eg.attributes.position.array.slice());eg.dispose();});
+    mesh.userData.roofEdgeArr=ea; mesh.userData.ridge=pr.top; mesh.userData.panRoof=pr.faces.length;
+  }
+  else if(model.rise>0){const s=roofSets[u.roofKey||'autre']||roofSets.autre;
     if(convexity(outer)>0.8){if(addRoof(s,outer,u.zBase+h,u.zBase+h+model.rise))mesh.userData.ridge=h+model.rise;}
     else{ // L, T, U shapes: one hip roof per wing (maximal rectangles inside the footprint), same pitch everywhere, like a real compound roof
       const R=rectDecomp(outer); if(R.length){const main=R[0],slope=Math.min(1,model.rise/Math.max(1.5,main.w/2));let top=0;
         R.forEach(r=>{const rise=Math.min(model.rise,slope*r.w/2);if(addRoof(s,r.ring,u.zBase+h,u.zBase+h+rise))top=Math.max(top,rise);});if(top)mesh.userData.ridge=h+top;}}}
-  const eg=new THREE.EdgesGeometry(geo,25),arr=eg.attributes.position.array,off=new Float32Array(arr.length);for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+u.zBase-SINK;}mesh.userData.edgeArr=off;eg.dispose();
+  const eg=new THREE.EdgesGeometry(geo,25),arr=eg.attributes.position.array,off=new Float32Array(arr.length);for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+u.zBase-SINK;}eg.dispose();
+  if(mesh.userData.roofEdgeArr){let tot=off.length;mesh.userData.roofEdgeArr.forEach(a=>tot+=a.length);const all=new Float32Array(tot);all.set(off);let o=off.length;mesh.userData.roofEdgeArr.forEach(a=>{all.set(a,o);o+=a.length;});mesh.userData.edgeArr=all;delete mesh.userData.roofEdgeArr;}else mesh.userData.edgeArr=off;
   geo.computeBoundingBox();geo.computeBoundingSphere();return mesh;
 }
 function domAngle(r){let sx=0,sy=0;for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length],L=a.distanceTo(b),t=4*Math.atan2(b.y-a.y,b.x-a.x);sx+=L*Math.cos(t);sy+=L*Math.sin(t);}return Math.atan2(sy,sx)/4;}
@@ -1669,7 +1739,7 @@ async function lidarBuildings(){
       buildingsGroup.remove(m);m.geometry.dispose();gone.add(m);
       if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh.geometry.dispose();gone.add(u.roofMesh);}
       const nearB=(p)=>blocks.filter(b=>!b.userData.tower).concat(blocks).reduce((b,x)=>{const d=x.geometry.boundingSphere.center.distanceTo(new THREE.Vector3(p.x,p.y,x.geometry.boundingSphere.center.z));return !b||d<b.d?{x,d}:b;},null).x;
-      blocks.forEach(b=>{buildingsGroup.add(b);added.push(b);if(b.userData.roofParts)b.userData.roofParts.forEach(rp=>{scene.add(rp);added.push(rp);});});
+      blocks.forEach(b=>{buildingsGroup.add(b);added.push(b);b.children.forEach(c=>added.push(c));});
       if(m===S.target){S.target=nearB({x:0,y:0});S.target.material=matsFor(S.target.userData.usage,true);}
       if(m===S.building||m===S.selMesh){const nb=nearB(S.win&&S.win.pos?S.win.pos:{x:0,y:0});if(m===S.building)S.building=nb;if(m===S.selMesh)S.selMesh=nb;nb.material=matsFor(nb.userData.usage,true);}
       n++;
