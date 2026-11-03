@@ -503,7 +503,7 @@ function applyGroundMode(){
 let planLayer=null;
 function loadOrtho(lat,lon){
   orthoLayer(ground,groundMat,lat,lon,17,3,0xe9e6df,28);          // 7×7 tiles ≈ 1.4 km, 80 cm/px
-  orthoLayer(inner,innerMat,lat,lon,19,isPhone()?4:5,0,40,(raw,w,e,n,s)=>{ // 9×9 or 11×11 tiles ≈ 450–550 m, 20 cm/px
+  orthoLayer(inner,innerMat,lat,lon,19,3,0,40,(raw,w,e,n,s)=>{ // 9×9 or 11×11 tiles ≈ 450–550 m, 20 cm/px
     if(!raw)return; S.rawOrtho={raw,w,e,n,s};  try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
   });
   inner.position.z=ground.position.z+0.06;
@@ -822,65 +822,6 @@ function vegZoneSpots(features){
   });
   return spots;
 }
-async function fetchOsmTrees(lat,lon,radius){
-  const dLat=radius/110574, dLon=radius/(111320*Math.cos(lat*RAD));
-  const q=`[out:json][timeout:20];node["natural"="tree"](${lat-dLat},${lon-dLon},${lat+dLat},${lon+dLon});out;`;
-  let j=null;
-  for(const host of ['https://overpass-api.de','https://overpass.kumi.systems','https://overpass.private.coffee']){
-    const c=new AbortController(); const id=setTimeout(()=>c.abort(),12000);
-    try{const r=await fetch(host+'/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q),signal:c.signal});if(r.ok){j=await r.json();break;}}catch(e){}finally{clearTimeout(id);}
-  }
-  if(!j)throw new Error('overpass');
-  return (j.elements||[]).map(e=>{const p=proj(e.lon,e.lat);return {x:p[0],y:p[1],r:2.4+Math.random()*1.4};});
-}
-function detectCanopy(raw,west,east,north,south){ // raw: unfiltered ortho canvas of the inner layer → {trees, hedges}
-  const W=raw.width, mpp=(east-west)/W; const g=raw.getContext('2d'); const data=g.getImageData(0,0,W,W).data;
-  const mask=document.createElement('canvas'); mask.width=mask.height=W; const mg=mask.getContext('2d'); mg.fillStyle='#000'; mg.fillRect(0,0,W,W); mg.fillStyle='#fff';
-  S.meshes.forEach(mm=>{mm.userData.rings.forEach(ring=>{mg.beginPath();ring.forEach((p,i)=>{const px=(p.x-west)/mpp,py=(north-p.y)/mpp;i?mg.lineTo(px,py):mg.moveTo(px,py);});mg.closePath();mg.fill('evenodd');});});
-  const md=mg.getImageData(0,0,W,W).data;
-  const cell=2; const step=Math.max(3,Math.round(cell/mpp)); const nx=Math.floor(W/step), ny=Math.floor(W/step); const green=new Uint8Array(nx*ny);
-  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
-    let exg=0,cnt=0,lum=0,gs=0,rs=0,bs=0; const cx=i*step+step/2|0, cy=j*step+step/2|0;
-    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=cx+dx*2,y=cy+dy*2;if(x<0||y<0||x>=W||y>=W)continue;const k=(y*W+x)*4;if(md[k]>127)continue;const r=data[k],gg=data[k+1],b=data[k+2];exg+=2*gg-r-b;lum+=(r+gg+b)/3;gs+=gg;rs+=r;bs+=b;cnt++;}
-    if(cnt<5)continue; exg/=cnt;lum/=cnt;gs/=cnt;rs/=cnt;bs/=cnt;
-    if(exg>22&&gs>rs+6&&gs>bs+10&&lum<150)green[j*nx+i]=1;
-  }
-  // connected components (8-neighbourhood); thick cells = full 3×3 green
-  const comp=new Int32Array(nx*ny).fill(-1); const comps=[]; const thick=(i,j)=>{for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=i+dx,y=j+dy;if(x<0||y<0||x>=nx||y>=ny||!green[y*nx+x])return false;}return true;};
-  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){if(!green[j*nx+i]||comp[j*nx+i]>=0)continue;const id=comps.length;const cells=[];const st=[[i,j]];comp[j*nx+i]=id;
-    while(st.length){const [x,y]=st.pop();cells.push([x,y]);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const u=x+dx,v=y+dy;if(u<0||v<0||u>=nx||v>=ny||!green[v*nx+u]||comp[v*nx+u]>=0)continue;comp[v*nx+u]=id;st.push([u,v]);}}
-    comps.push({cells});}
-  const toXY=(i,j)=>[west+(i*step+step/2)*mpp,north-(j*step+step/2)*mpp];
-  const trees=[],hedges=[];
-  comps.forEach(c=>{const th=c.cells.filter(([i,j])=>thick(i,j));
-    if(th.length){ // canopy: one tree per thick cell, spaced ~5 m
-      const used=new Set();th.forEach(([i,j])=>{const key=Math.round(i/2.5)+':'+Math.round(j/2.5);if(used.has(key))return;used.add(key);let n=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const x=i+dx,y=j+dy;if(x>=0&&y>=0&&x<nx&&y<ny)n+=green[y*nx+x];}const xy=toXY(i,j);trees.push({x:xy[0]+(Math.random()-.5)*1.5,y:xy[1]+(Math.random()-.5)*1.5,r:1.6+n*0.12});});
-      if(c.cells.length>=3&&th.length<c.cells.length*0.4){ // thin tails of a canopy component are hedges too
-        const thin=c.cells.filter(([i,j])=>!thick(i,j)); hedgeChain(thin,hedges,toXY,nx);}
-    } else if(c.cells.length>=3){ hedgeChain(c.cells,hedges,toXY,nx); }
-  });
-  return {trees,hedges};
-}
-function hedgeChain(cells,hedges,toXY,nx){ // link neighbouring cells into short segments; one hedge group per call
-  const set=new Set(cells.map(([i,j])=>j*nx+i)); const segs=[]; let sx=0,sy=0;
-  cells.forEach(([i,j])=>{const a=toXY(i,j);sx+=a[0];sy+=a[1];[[1,0],[0,1],[1,1],[1,-1]].forEach(([dx,dy])=>{if(set.has((j+dy)*nx+i+dx)){const b=toXY(i+dx,j+dy);segs.push([a,b]);}});});
-  if(segs.length)hedges.push({segs,cx:sx/cells.length,cy:sy/cells.length,h:1.8,len:cells.length*2});
-}
-/* OSM hedges (barrier=hedge ways) */
-async function fetchOsm(lat,lon,radius){
-  const dLat=radius/110574, dLon=radius/(111320*Math.cos(lat*RAD)); const bb=`${lat-dLat},${lon-dLon},${lat+dLat},${lon+dLon}`;
-  const q=`[out:json][timeout:20];(node["natural"="tree"](${bb});way["barrier"="hedge"](${bb}););out geom;`;
-  let j=null;
-  for(const host of ['https://overpass-api.de','https://overpass.kumi.systems','https://overpass.private.coffee']){
-    const c=new AbortController(); const id=setTimeout(()=>c.abort(),12000);
-    try{const r=await fetch(host+'/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q),signal:c.signal});if(r.ok){j=await r.json();break;}}catch(e){}finally{clearTimeout(id);}
-  }
-  if(!j)throw new Error('overpass');
-  const trees=[],hedges=[];
-  (j.elements||[]).forEach(e=>{if(e.type==='node'&&e.lat!=null){const p=proj(e.lon,e.lat);trees.push({x:p[0],y:p[1],r:2.4+Math.random()*1.4});}
-    else if(e.type==='way'&&e.geometry){const pts=e.geometry.map(g=>proj(g.lon,g.lat));const segs=[];for(let i=0;i<pts.length-1;i++)segs.push([pts[i],pts[i+1]]);const hh=parseFloat((e.tags||{}).height);let cx=0,cy=0;pts.forEach(p=>{cx+=p[0];cy+=p[1];});if(segs.length)hedges.push({segs,cx:cx/pts.length,cy:cy/pts.length,h:(hh>0.3&&hh<8)?hh:1.8,len:0,osm:true});}});
-  return {trees,hedges};
-}
 /* LiDAR HD object heights (MNH) for a list of local points; sequential 400-point batches with retry */
 /* LiDAR HD as rasters (IGN WMS-R, float32 BIL): one request for the whole area instead of thousands of point queries */
 async function fetchLidarRaster(kind,R,res){
@@ -894,8 +835,7 @@ async function fetchLidarRaster(kind,R,res){
 }
 function startLidar(){ // launched right after geocoding, in parallel with buildings
   const c=p=>p.catch(()=>null);
-  S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1)),cloudNear:fetchCloud(35).catch(err=>{S.cloudErr=String(err&&err.stack||err);return null;})};
-  S.lidarP.cloud=S.lidarP.cloudNear.then(()=>fetchCloud(isPhone()?70:110)).catch(err=>{console.warn('LiDAR cloud',err);S.cloudErr=String(err&&err.stack||err);return null;});
+  S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1))};
 }
 async function lidarHeights(pts){
   const M=S.lidarP&&await S.lidarP.mnh; if(M)return pts.map(p=>M.max(p.x,p.y,1));
@@ -1605,163 +1545,21 @@ function findTowers(rings,u,F,green){
   const base=[];for(let s=0;s<nu*nv;s++)if(H[s]===H[s]&&!used[s])base.push(pt(s));
   return {towers:out,base};
 }
-/* ---------- LiDAR HD point cloud (classified, ~12 pts/m² on roofs), streamed from the IGN COPC tiles by HTTP range ----------
-   Only class 6 (building) and 2 (ground) are kept, binned on a 0.5 m grid: highest building point, ground seen. */
-/* ---------- LiDAR HD point cloud (classified, ~12 pts/m² on roofs), streamed from the IGN COPC tiles by HTTP range ----------
-   Decoded in a background worker (the page never freezes); decoded chunks stay cached there, so a second address nearby is almost free.
-   Only class 6 (building) and 2 (ground) are kept, binned on a 0.5 m grid: highest building point, ground seen. */
-const CLOUD_WORKER_SRC="\nconst J='https://cdn.jsdelivr.net/npm/';\nlet libs=null; const tiles=new Map(); let cached=0;\nasync function L(){if(!libs){const [cp,lz,pj]=await Promise.all([import(J+'copc@0.0.9/+esm'),import(J+'laz-perf@0.0.7/+esm'),import(J+'proj4@2.11.0/+esm')]);\n  const proj4=pj.default||pj; proj4.defs('EPSG:2154','+proj=lcc +lat_0=46.5 +lon_0=3 +lat_1=49 +lat_2=44 +x_0=700000 +y_0=6600000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');\n  const wasmBinary=await (await fetch(J+'laz-perf@0.0.7/lib/web/laz-perf.wasm')).arrayBuffer();\n  libs={Copc:cp.Copc,mk:()=>(lz.createLazPerf||lz.LazPerf.create)({wasmBinary:wasmBinary.slice(0),locateFile:()=>J+'laz-perf@0.0.7/lib/web/laz-perf.wasm'}),proj4};}return libs;}\nasync function get(url){for(let a=0;a<4;a++){try{const r=await fetch(url);if(r.status===429||r.status>=500){await new Promise(s=>setTimeout(s,600*(a+1)));continue;}return r;}catch(e){await new Promise(s=>setTimeout(s,400));}}throw new Error('IGN index');}\nasync function tileUrls(lat,lon,X0,Y0,R,proj4){\n  const W='https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=IGNF_LIDAR-HD_METADONNEE:metadata&OUTPUTFORMAT=application/json&SRSNAME=CRS:84';\n  const set=new Set(); const add=async(bb,n)=>{try{const j=await (await get(W+'&COUNT='+n+'&BBOX='+bb.join(',')+',CRS:84')).json();(j.features||[]).forEach(f=>f.properties&&f.properties.url_npl&&set.add(f.properties.url_npl));}catch(_){}};\n  const dLat=R/110574,dLon=R/(111320*Math.cos(lat*Math.PI/180)); await add([lon-dLon,lat-dLat,lon+dLon,lat+dLat],10);\n  const kx=new Set([Math.floor((X0-R)/1000),Math.floor((X0+R)/1000)]),ky=new Set([Math.floor((Y0-R)/1000),Math.floor((Y0+R)/1000)]);\n  if(set.size<kx.size*ky.size)for(const [sx,sy] of [[-1,-1],[1,-1],[1,1],[-1,1]]){const ll=proj4('EPSG:2154','EPSG:4326',[X0+sx*R*0.95,Y0+sy*R*0.95]),e=0.00005;await add([ll[0]-e,ll[1]-e,ll[0]+e,ll[1]+e],4);}\n  return [...set];\n}\nonmessage=async e=>{const m=e.data;if(m.warm){try{const l=await L();await l.mk();}catch(_){}return;}try{const d=await run(m);postMessage({id:m.id,ok:true,data:d},[d.z6.buffer,d.gnd.buffer]);}catch(err){postMessage({id:m.id,ok:false,err:String(err&&err.stack||err)});}};\nasync function run({lat,lon,R,kx,ky}){\n  const t0=performance.now(); const {Copc,mk,proj4}=await L(); const tm={libs:Math.round(performance.now()-t0),create:0,hier:0,nodes:0,bytes:0,dec:0};\n  const [X0,Y0]=proj4('EPSG:4326','EPSG:2154',[lon,lat]);\n  const loc=(X,Y)=>{const ll=proj4('EPSG:2154','EPSG:4326',[X,Y]);return [(ll[0]-lon)*kx,(ll[1]-lat)*ky];};\n  const o=loc(X0,Y0),ex=loc(X0+100,Y0),ny=loc(X0,Y0+100),A=(ex[0]-o[0])/100,B=(ny[0]-o[0])/100,C=(ex[1]-o[1])/100,D=(ny[1]-o[1])/100;\n  let tq=performance.now(); const urls=await tileUrls(lat,lon,X0,Y0,R,proj4); tm.index=Math.round(performance.now()-tq); if(!urls.length)return null;\n  const R2=R+8,cell=0.5,N=Math.ceil(2*R2/cell),z6=new Float32Array(N*N).fill(-1e9),gnd=new Uint8Array(N*N); let total=0,fresh=0;\n  const bin=(arr,ox,oy)=>{for(let q=0;q<arr.length;q+=4){const X=arr[q]+ox-X0,Y=arr[q+1]+oy-Y0;if(X>R2||X<-R2||Y>R2||Y<-R2)continue;\n      const lx=o[0]+A*X+B*Y,ly=o[1]+C*X+D*Y,ii=Math.floor((lx+R2)/cell),jj=Math.floor((R2-ly)/cell);if(ii<0||jj<0||ii>=N||jj>=N)continue;const k=jj*N+ii;\n      if(arr[q+3]===2)gnd[k]=1;else if(arr[q+2]>z6[k])z6[k]=arr[q+2];total++;}};\n  for(const url of urls){\n    tq=performance.now(); let t=tiles.get(url); if(!t){let copc=null;for(let a=0;a<3&&!copc;a++){try{copc=await Copc.create(url);}catch(err){await new Promise(s=>setTimeout(s,500*(a+1)));}}if(!copc)continue;t={copc,nodes:{},pages:new Set(),pts:new Map(),ox:copc.info.cube[0],oy:copc.info.cube[1]};tiles.set(url,t);}\n    const cube=t.copc.info.cube; const hit=k=>{const [d,x,y]=k.split('-').map(Number);const s=(cube[3]-cube[0])/2**d;const x0=cube[0]+x*s,y0=cube[1]+y*s;return x0<=X0+R2&&x0+s>=X0-R2&&y0<=Y0+R2&&y0+s>=Y0-R2;};\n    const walk=async(key,page)=>{if(t.pages.has(key))return;t.pages.add(key);const hp=await Copc.loadHierarchyPage(url,page);Object.assign(t.nodes,hp.nodes);for(const [k,p] of Object.entries(hp.pages||{}))if(hit(k))await walk(k,p);};\n    tm.create+=Math.round(performance.now()-tq); tq=performance.now(); try{await walk('root',t.copc.info.rootHierarchyPage);}catch(err){t.pages.clear();continue;} tm.hier+=Math.round(performance.now()-tq); tq=performance.now(); for(const k of Object.keys(t.nodes))0;\n    const sel=Object.entries(t.nodes).filter(([k,n])=>n&&n.pointCount>0&&hit(k));\n    let qi=0; const lane=async()=>{let lazPerf=null,used=0;while(qi<sel.length){const [k,n]=sel[qi++];let arr=t.pts.get(k);\n      if(!arr){tm.nodes++;tm.bytes+=n.pointDataLength;if(!lazPerf||used>=6){lazPerf=await mk();used=0;}/* the decoder never gives memory back: a fresh one every few chunks */used++;let v;try{v=await Copc.loadPointDataView(url,t.copc,n,{lazPerf});}catch(err){lazPerf=await mk();used=1;try{v=await Copc.loadPointDataView(url,t.copc,n,{lazPerf});}catch(e2){continue;}}\n        const gx=v.getter('X'),gy=v.getter('Y'),gz=v.getter('Z'),gc=v.getter('Classification'); const tmp=new Float32Array(v.pointCount*4);let w=0;\n        for(let q=0;q<v.pointCount;q++){const cl=gc(q);if(cl!==6&&cl!==2)continue;tmp[w++]=gx(q)-t.ox;tmp[w++]=gy(q)-t.oy;tmp[w++]=gz(q);tmp[w++]=cl;}\n        arr=tmp.slice(0,w);t.pts.set(k,arr);cached+=arr.length/4;fresh++;}\n      bin(arr,t.ox,t.oy);}};\n    await Promise.all([lane(),lane(),lane()]); // downloads overlap; each lane has its own decoder\n    tm.dec+=Math.round(performance.now()-tq);\n  }\n  if(cached>6e6){tiles.clear();cached=0;} // keep memory bounded\n  return {R:R2,N,cell,z6,gnd,tiles:urls.length,pts:total,fresh,tm,ms:Math.round(performance.now()-t0)};\n}\n";
-let cloudWorker=null,cloudSeq=0; const cloudReqs=new Map(); let _pcLib=null;
+/* polygon booleans (roof regions of L/T shaped buildings), loaded in the background */
+let _pcLib=null;
 function polyClip(){if(!_pcLib)_pcLib=import('https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/+esm').then(m=>{PCSYNC=m.default||m;return PCSYNC;});return _pcLib;}
 setTimeout(()=>polyClip().catch(()=>{}),800);
-setTimeout(()=>{try{cloudWorkerGet().postMessage({warm:true});}catch(_){}},1500); // libraries and decoder ready before the first address
-function cloudWorkerGet(){if(!cloudWorker){cloudWorker=new Worker(URL.createObjectURL(new Blob([CLOUD_WORKER_SRC],{type:'text/javascript'})),{type:'module'});
-  cloudWorker.onmessage=e=>{const {id,ok,data,err}=e.data;const r=cloudReqs.get(id);if(!r)return;cloudReqs.delete(id);ok?r.res(data):r.rej(new Error(err));};
-  cloudWorker.onerror=e=>{cloudReqs.forEach(r=>r.rej(new Error('worker '+(e.message||''))));cloudReqs.clear();cloudWorker=null;};}
-  return cloudWorker;}
-async function fetchCloud(R){
-  const tok=refineToken,lat=S.lat,lon=S.lon,id=++cloudSeq;
-  const p=new Promise((res,rej)=>cloudReqs.set(id,{res,rej})); cloudWorkerGet().postMessage({id,lat,lon,R,kx:111320*Math.cos(lat*RAD),ky:110574});
-  const [d,pc]=await Promise.all([p,polyClip()]); if(!d)return null;
-  for(let i=0;i<100&&(S.alt0==null||S.lat!==lat);i++)await sleep(100); if(S.lat!==lat)return null;
-  const z6=d.z6,a0=S.alt0;for(let i=0;i<z6.length;i++)if(z6[i]>-1e8)z6[i]-=a0;
-  console.log('LiDAR cloud',d.tiles,'tile(s)',d.pts,'pts',d.ms+' ms','(new chunks: '+d.fresh+')'); S.cloudInfo={tiles:d.tiles,pts:d.pts,ms:d.ms,R,tm:d.tm};
-  const R2=d.R,N=d.N,cell=d.cell;
-  return {R:R2,N,cell,z6,gnd:d.gnd,pc,at(x,y){const i=Math.floor((x+R2)/cell),j=Math.floor((R2-y)/cell);return (i<0||j<0||i>=N||j>=N)?-1:j*N+i;}};
-}
-/* Carve what the IGN outline misses: light wells, set-backs, notches. Only cells where the laser hits the ground (or a much lower cover)
-   and no building point above are removed; the IGN outline is never enlarged, so neighbours stay separate. */
-function carveFootprint(u,cloud,others){
-  const r0=u.rings[0],sh=u.shift||{dx:0,dy:0},a=domAngle(r0),ca=Math.cos(a),sa=Math.sin(a),st=0.5,zb=u.zBase;
-  let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; r0.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
-  const PAD=6;u0-=PAD;v0-=PAD;u1+=PAD;v1+=PAD;const nu=Math.ceil((u1-u0)/st)+1,nv=Math.ceil((v1-v0)/st)+1; if(nu*nv>200000)return null;
-  const IN=new Uint8Array(nu*nv),ST=new Uint8Array(nu*nv),Z=new Float32Array(nu*nv),OUTZ=new Float32Array(nu*nv).fill(NaN);
-  let bx0=1e9,bx1=-1e9,by0=1e9,by1=-1e9;r0.forEach(p=>{bx0=Math.min(bx0,p.x);bx1=Math.max(bx1,p.x);by0=Math.min(by0,p.y);by1=Math.max(by1,p.y);});
-  const nearOthers=(others||[]).filter(o=>o.rings[0]!==r0&&o.x1>=bx0-PAD-1&&o.x0<=bx1+PAD+1&&o.y1>=by0-PAD-1&&o.y0<=by1+PAD+1); const W=(U,V)=>({x:U*ca-V*sa,y:U*sa+V*ca}); const zs=[];
-  for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i,p=W(u0+(i+0.5)*st,v0+(j+0.5)*st);if(!pointInPoly(p.x,p.y,r0))continue;let hole=false;for(let q=1;q<u.rings.length;q++)if(pointInPoly(p.x,p.y,u.rings[q])){hole=true;break;}if(hole)continue;
-    IN[k]=1;const c=cloud.at(p.x+sh.dx,p.y+sh.dy);if(c<0)continue;const z=cloud.z6[c];Z[k]=z;
-    if(z>zb+2.2){ST[k]=1;zs.push(z);}else if(cloud.gnd[c])ST[k]=2;}
-  // just outside the outline: roof the IGN outline misses (offset or simplified), if no other building claims it
-  for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i;if(IN[k])continue;const p=W(u0+(i+0.5)*st,v0+(j+0.5)*st);if(distToRing(p.x,p.y,r0)>PAD)continue;
-    if(nearOthers.some(o=>p.x>=o.x0&&p.x<=o.x1&&p.y>=o.y0&&p.y<=o.y1&&pointInPoly(p.x,p.y,o.rings[0])))continue;
-    const c=cloud.at(p.x+sh.dx,p.y+sh.dy);if(c<0)continue;const z=cloud.z6[c];if(z>zb+2.2)OUTZ[k]=z;}
-  if(zs.length<20)return null; zs.sort((p,q)=>p-q); const med=zs[zs.length>>1];
-  for(let k=0;k<nu*nv;k++)if(ST[k]===1&&Z[k]<med-4)ST[k]=3; // a narrow well only half-seen by the laser, or a low cover at its bottom // much lower cover (a glass roof over the ground floor at the bottom of a light well)
-  // fill unknown cells from neighbours, then open (erode+dilate) the void mask to drop slivers < 1 m
-  const V=new Uint8Array(nu*nv);for(let k=0;k<nu*nv;k++)if(IN[k]&&(ST[k]===2||ST[k]===3))V[k]=1;
-  for(let j=1;j<nv-1;j++)for(let i=1;i<nu-1;i++){const k=j*nu+i;if(!IN[k]||ST[k])continue;let vc=0,sc=0;for(let b=-1;b<=1;b++)for(let c=-1;c<=1;c++){const q=k+b*nu+c;if(ST[q]===1)sc++;else if(ST[q]===2||ST[q]===3)vc++;}if(vc>sc&&vc>=3)V[k]=1;}
-  const nb4=(M,k,i,j)=>[[1,0],[-1,0],[0,1],[0,-1]].map(([di,dj])=>{const ni=i+di,nj=j+dj;return (ni<0||nj<0||ni>=nu||nj>=nv)?1:(M[nj*nu+ni]|| !IN[nj*nu+ni]?1:0);});
-  const Er=new Uint8Array(nu*nv);for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i;if(V[k]&&nb4(V,k,i,j).every(x=>x))Er[k]=1;}
-  const Op=new Uint8Array(nu*nv);for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i;if(!V[k])continue;if(Er[k]){Op[k]=1;continue;}for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=i+di,nj=j+dj;if(ni>=0&&nj>=0&&ni<nu&&nj<nv&&Er[nj*nu+ni]){Op[k]=1;break;}}}
-  // roof found outside: same building height (not a taller neighbour, not a low annex), touching the outline, ≥ 1 m wide
-  const AD=new Uint8Array(nu*nv);for(let k=0;k<nu*nv;k++){const z=OUTZ[k];if(z===z&&z>=med-4&&z<=med+3)AD[k]=1;}
-  const AE=new Uint8Array(nu*nv);for(let j=1;j<nv-1;j++)for(let i=1;i<nu-1;i++){const k=j*nu+i;if(AD[k]&&(AD[k+1]||IN[k+1])&&(AD[k-1]||IN[k-1])&&(AD[k+nu]||IN[k+nu])&&(AD[k-nu]||IN[k-nu]))AE[k]=1;}
-  const AO=new Uint8Array(nu*nv);for(let j=1;j<nv-1;j++)for(let i=1;i<nu-1;i++){const k=j*nu+i;if(!AD[k])continue;if(AE[k]||AE[k+1]||AE[k-1]||AE[k+nu]||AE[k-nu])AO[k]=1;}
-  const adds=[];{const la=new Int32Array(nu*nv).fill(-1);let aid=0;
-    for(let s=0;s<nu*nv;s++){if(!AO[s]||la[s]>=0)continue;const cells=[s];la[s]=++aid;let touch=false;
-      for(let c=0;c<cells.length;c++){const ci=cells[c]%nu,cj=(cells[c]/nu)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv)continue;const q=nj*nu+ni;if(IN[q])touch=true;if(AO[q]&&la[q]<0){la[q]=aid;cells.push(q);}}}
-      if(!touch||cells.length*st*st<1.5)continue;const M=new Uint8Array(nu*nv);cells.forEach(c=>M[c]=1);let left=cells.length;
-      for(let it=0;it<4&&left>cells.length*0.15;it++){const hh=new Int32Array(nu);let best=null;
-        for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hh[i]=M[j*nu+i]?hh[i]+1:0;const stk=[];for(let i=0;i<=nu;i++){const cur=i<nu?hh[i]:0;let s0=i;while(stk.length&&stk[stk.length-1][1]>=cur){const [si,sh2]=stk.pop();const ar=sh2*(i-si);if(sh2&&(!best||ar>best.ar))best={ar,i0:si,i1:i-1,j0:j-sh2+1,j1:j};s0=si;}stk.push([s0,cur]);}}
-        if(!best||best.ar*st*st<1.0)break;const {i0,i1,j0,j1}=best;for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){if(M[j*nu+i]){M[j*nu+i]=0;left--;}}
-        if((i1-i0+1)*st<1.5||(j1-j0+1)*st<1.5)continue;
-        // overlap the outline by one cell so the union is seamless
-        adds.push([W(u0+(i0-1)*st,v0+(j0-1)*st),W(u0+(i1+2)*st,v0+(j0-1)*st),W(u0+(i1+2)*st,v0+(j1+2)*st),W(u0+(i0-1)*st,v0+(j1+2)*st)]);}}}
-  // components → rectangles (up to 3 each), pushed 1 m out where they open onto the street or yard
-  const lab=new Int32Array(nu*nv).fill(-1);let id=0;const cuts=[];
-  for(let s=0;s<nu*nv;s++){if(!Op[s]||lab[s]>=0)continue;const cells=[s];lab[s]=++id;
-    for(let c=0;c<cells.length;c++){const ci=cells[c]%nu,cj=(cells[c]/nu)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv)continue;const q=nj*nu+ni;if(Op[q]&&lab[q]<0){lab[q]=id;cells.push(q);}}}
-    const area=cells.length*st*st; if(area<1.5)continue; const low=cells.filter(c=>ST[c]===3).length; if(low>cells.length/2&&area>12)continue; if(low>cells.length/2&&cells.some(c=>{const ci=c%nu,cj=(c/nu)|0;return [[1,0],[-1,0],[0,1],[0,-1]].some(([di,dj])=>{const ni=ci+di,nj=cj+dj;return ni<0||nj<0||ni>=nu||nj>=nv||!IN[nj*nu+ni];});}))continue; // a lower roof on the edge is the neighbour's, not a well // a big low part is an annex, not a well
-    const M=new Uint8Array(nu*nv);cells.forEach(c=>M[c]=1);let left=cells.length;
-    for(let it=0;it<3&&left>cells.length*0.15;it++){const hh=new Int32Array(nu);let best=null;
-      for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hh[i]=M[j*nu+i]?hh[i]+1:0;const stk=[];for(let i=0;i<=nu;i++){const cur=i<nu?hh[i]:0;let s0=i;while(stk.length&&stk[stk.length-1][1]>=cur){const [si,sh2]=stk.pop();const ar=sh2*(i-si);if(sh2&&(!best||ar>best.ar))best={ar,i0:si,i1:i-1,j0:j-sh2+1,j1:j};s0=si;}stk.push([s0,cur]);}}
-      if(!best||best.ar*st*st<1.0)break; let {i0,i1,j0,j1}=best; for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){if(M[j*nu+i]){M[j*nu+i]=0;left--;}}
-      const out=(i,j)=>i<0||j<0||i>=nu||j>=nv||!IN[j*nu+i]; let eL=0,eR=0,eB=0,eT=0,L1=0,L2=0;
-      for(let j=j0;j<=j1;j++){if(out(i0-1,j))L1++;if(out(i1+1,j))L2++;} if(L1>(j1-j0+1)/2)eL=2;if(L2>(j1-j0+1)/2)eR=2;
-      L1=0;L2=0;for(let i=i0;i<=i1;i++){if(out(i,j0-1))L1++;if(out(i,j1+1))L2++;} if(L1>(i1-i0+1)/2)eB=2;if(L2>(i1-i0+1)/2)eT=2;
-      const U0=u0+(i0-eL)*st,U1=u0+(i1+1+eR)*st,V0=v0+(j0-eB)*st,V1=v0+(j1+1+eT)*st;
-      cuts.push([W(U0,V0),W(U1,V0),W(U1,V1),W(U0,V1)]);}
-  }
-  if(!cuts.length&&!adds.length)return null;
-  const P=r=>{const q=r.map(p=>[p.x,p.y]);q.push(q[0]);return q;};
-  let res; try{let base=[u.rings.map(P)];if(adds.length){base=cloud.pc.union(base,...adds.map(c=>[P(c)]));const oth=nearOthers.map(o=>[P(o.rings[0])]);if(oth.length)base=cloud.pc.difference(base,...oth);}
-    res=cuts.length?cloud.pc.difference(base,...cuts.map(c=>[P(c)])):base;}catch(err){console.warn('carve',err);return null;}
-  const parts=res.map(poly=>poly.map(ring=>{const q=ring.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y));return q;})).filter(rs=>rs[0].length>=3&&Math.abs(areaOf(rs[0]))>=2);
-  return parts.length?{parts,cuts:cuts.length,adds:adds.length}:null;
-}
-/* Roofs the laser sees where the IGN has no building (verandas, garages, sheds, covered yards, the floor of a light well):
-   each becomes a plain block at its measured height, cut in rectangles aligned on the nearest building's walls. */
-function laserOnlyBuildings(cloud){
-  const {N,cell,R,z6}=cloud; const c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d');g.fillStyle='#fff';g.strokeStyle='#fff';g.lineWidth=2;g.lineJoin='round';
-  const path=r=>{g.beginPath();r.forEach((p,i)=>{const px=(p.x+R)/cell,py=(R-p.y)/cell;i?g.lineTo(px,py):g.moveTo(px,py);});g.closePath();};
-  S.meshes.forEach(m=>{path(m.userData.rings[0]);g.fill();});
-  g.fillStyle='#000';S.meshes.forEach(m=>m.userData.rings.slice(1).forEach(r=>{path(r);g.fill();})); // courtyards stay free
-
-  const occ=g.getImageData(0,0,N,N).data; const lim=R-6;
-  const T=new Float32Array(N*N).fill(NaN),C=new Uint8Array(N*N);
-  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const k=j*N+i;if(occ[k*4]>127)continue;const x=-R+(i+0.5)*cell,y=R-(j+0.5)*cell;if(Math.abs(x)>lim||Math.abs(y)>lim)continue;const z=z6[k];if(!(z>-1e8))continue;const gz=terrainZ(x,y);if(z-gz<2)continue;T[k]=z;C[k]=1;}
-  // opening: drop single-cell slivers along walls
-  const E=new Uint8Array(N*N);for(let j=1;j<N-1;j++)for(let i=1;i<N-1;i++){const k=j*N+i;if(C[k]&&C[k+1]&&C[k-1]&&C[k+N]&&C[k-N]&&C[k+N+1]&&C[k+N-1]&&C[k-N+1]&&C[k-N-1])E[k]=1;}
-  const O=new Uint8Array(N*N);for(let j=1;j<N-1;j++)for(let i=1;i<N-1;i++){const k=j*N+i;if(!C[k])continue;if(E[k]||E[k+1]||E[k-1]||E[k+N]||E[k-N]||E[k+N+1]||E[k+N-1]||E[k-N+1]||E[k-N-1])O[k]=1;} // strips under 1.5 m (eaves, gutters) go
-  const lab=new Int32Array(N*N).fill(-1);let id=0;const out=[];
-  for(let s=0;s<N*N;s++){if(!O[s]||lab[s]>=0)continue;const cells=[s];lab[s]=++id;
-    for(let q=0;q<cells.length;q++){const k=cells[q],ci=k%N,cj=(k/N)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=N||nj>=N)continue;const n2=nj*N+ni;if(O[n2]&&lab[n2]<0&&Math.abs(T[n2]-T[k])<1.2){lab[n2]=id;cells.push(n2);}}}
-    if(cells.length*cell*cell<3)continue; out.push({id,cells});}
-  // small low pockets (the floor of a narrow light well, a sunken terrace): kept even if tiny or thin, but only when the roof around
-  // stands at least 2 m higher — an eave overhang sits at the roof's own height and is still dropped
-  const used=new Uint8Array(N*N);out.forEach(r=>r.cells.forEach(k=>used[k]=1));
-  const PK=new Uint8Array(N*N);
-  for(let j=3;j<N-3;j++)for(let i=3;i<N-3;i++){const k=j*N+i;if(!C[k]||used[k])continue;const z=T[k];const hi=[];
-    for(let b=-3;b<=3;b++)for(let a=-3;a<=3;a++){const q=k+b*N+a;if(occ[q*4]>127&&z6[q]>-1e8)hi.push(z6[q]);}
-    if(hi.length<6)continue;hi.sort((p,q)=>p-q);if(hi[hi.length>>1]>=z+2)PK[k]=1;}
-  const lab2=new Int32Array(N*N).fill(-1);
-  for(let s=0;s<N*N;s++){if(!PK[s]||lab2[s]>=0)continue;const cells=[s];lab2[s]=1;
-    for(let q=0;q<cells.length;q++){const k=cells[q],ci=k%N,cj=(k/N)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const n2=(cj+dj)*N+ci+di;if(PK[n2]&&lab2[n2]<0&&Math.abs(T[n2]-T[k])<1.2){lab2[n2]=1;cells.push(n2);}}}
-    if(cells.length*cell*cell<1)continue; const nid=++id; cells.forEach(k=>lab[k]=nid); out.push({id:nid,cells,pocket:true});}
-  const blocks=[];
-  out.forEach(reg=>{
-    let sx=0,sy=0;reg.cells.forEach(k=>{sx+=-R+(k%N+0.5)*cell;sy+=R-(((k/N)|0)+0.5)*cell;});sx/=reg.cells.length;sy/=reg.cells.length;
-    let best=null,bd=1e9;S.meshes.forEach(m=>{const bs=m.geometry.boundingSphere;if(!bs)return;const d=Math.hypot(bs.center.x-sx,bs.center.y-sy)-bs.radius;if(d<bd){bd=d;best=m;}});
-    const a=best?domAngle(best.userData.rings[0]):0,ca=Math.cos(a),sa=Math.sin(a),st=0.5;
-    let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;reg.cells.forEach(k=>{const x=-R+(k%N+0.5)*cell,y=R-(((k/N)|0)+0.5)*cell,U=x*ca+y*sa,V=-x*sa+y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
-    u0-=st;v0-=st;const nu=Math.ceil((u1-u0)/st)+2,nv=Math.ceil((v1-v0)/st)+2;if(nu*nv>40000)return;
-    const W=(U,V)=>({x:U*ca-V*sa,y:U*sa+V*ca}); const M=new Uint8Array(nu*nv),Hm=new Float32Array(nu*nv);let left=0;
-    for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const p=W(u0+(i+0.5)*st,v0+(j+0.5)*st);const k=cloud.at(p.x,p.y);if(k>=0&&lab[k]===reg.id){M[j*nu+i]=1;Hm[j*nu+i]=T[k];left++;}}
-    const total=left;
-    for(let it=0;it<4&&left>total*0.15;it++){const hh=new Int32Array(nu);let bst=null;
-      for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hh[i]=M[j*nu+i]?hh[i]+1:0;const stk=[];for(let i=0;i<=nu;i++){const cur=i<nu?hh[i]:0;let s0=i;while(stk.length&&stk[stk.length-1][1]>=cur){const [si,sh2]=stk.pop();const ar=sh2*(i-si);if(sh2&&(!bst||ar>bst.ar))bst={ar,i0:si,i1:i-1,j0:j-sh2+1,j1:j};s0=si;}stk.push([s0,cur]);}}
-      const minA=reg.pocket?0.9:3,minS=reg.pocket?0.95:2;
-      if(!bst||bst.ar*st*st<minA)break;const {i0,i1,j0,j1}=bst;const zs=[];if((i1-i0+1)*st<minS||(j1-j0+1)*st<minS){for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const k=j*nu+i;if(M[k]){M[k]=0;left--;}}continue;}
-      for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const k=j*nu+i;if(M[k]){zs.push(Hm[k]);M[k]=0;left--;}}
-      zs.sort((p,q)=>p-q);const ring=[W(u0+i0*st,v0+j0*st),W(u0+(i1+1)*st,v0+j0*st),W(u0+(i1+1)*st,v0+(j1+1)*st),W(u0+i0*st,v0+(j1+1)*st)];
-      let cx=0,cy=0;ring.forEach(p=>{cx+=p.x;cy+=p.y;});cx/=4;cy/=4;const zb=terrainZ(cx,cy),top=zs[zs.length>>1]-zb;if(top<2)continue;
-      blocks.push({ring:ring.map(p=>new THREE.Vector2(p.x,p.y)),h:top,zb,pocket:!!reg.pocket});}
-  });
-  const made=[];
-  blocks.forEach(b=>{const shape=new THREE.Shape(b.ring);const geo=new THREE.ExtrudeGeometry(shape,{depth:b.h+SINK,bevelEnabled:false});const fl=Math.max(1,Math.floor((b.h-0.5)/2.9+0.35));fitWallUVs(geo,b.h,fl);
-    const m=new THREE.Mesh(geo,matsFor('',false));m.position.z=b.zb-SINK;m.castShadow=true;m.receiveShadow=true;
-    m.userData={h:b.h,floors:fl,usage:'',zBase:b.zb,facades:facadesOf(b.ring),rings:[b.ring],lidar:true,laserOnly:true,pocket:b.pocket};
-    const eg=new THREE.EdgesGeometry(geo,25),arr=eg.attributes.position.array,off=new Float32Array(arr.length);for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+b.zb-SINK;}m.userData.edgeArr=off;eg.dispose();
-    geo.computeBoundingBox();geo.computeBoundingSphere();buildingsGroup.add(m);made.push(m);});
-  return made;
-}
 async function lidarBuildings(){
   const tok=refineToken; if(!S.lidarP||S.lidarRun===tok)return; S.lidarRun=tok;
   const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(tok!==refineToken||(!Ff&&!Fc))return;
-  const others=S.meshes.map(m=>{const r=m.userData.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});return {rings:m.userData.rings,x0,x1,y0,y1};});
-  const green=orthoGreen(); const t0=performance.now(); let n=0,nCarved=0;
+  const green=orthoGreen(); const t0=performance.now(); let n=0;
   const extOf=m=>{let e=0;m.userData.rings[0].forEach(p=>{e=Math.max(e,Math.abs(p.x),Math.abs(p.y));});return e;};
-  const timeout=(p,ms)=>Promise.race([p||null,new Promise(r=>setTimeout(()=>r(null),ms))]);
-  // pass 1: the address and its street with the nearby cloud (a few seconds); pass 2: everything else with the full cloud
-  const near=await timeout(S.lidarP.cloudNear,40000); if(tok!==refineToken)return;
-  const r1=await runPass(m=>near&&extOf(m)<near.R-6,near); if(r1===false)return;
-  const full=await timeout(S.lidarP.cloud,90000); if(tok!==refineToken)return; S.counts.cloud=full?'ok':(near?'near':'absent');
-  const r2=await runPass(()=>true,full,true); if(r2===false)return;
-  console.log('LiDAR buildings',n,'découpés au nuage de points:',nCarved,Math.round(performance.now()-t0)+' ms');
-  async function runPass(filter,cloud,last){
+  if(await runPass()===false)return;
+  console.log('LiDAR buildings',n,Math.round(performance.now()-t0)+' ms');
+  async function runPass(){
     const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
     const gone=new Set(),added=[]; let tc=performance.now();
-    const list=S.meshes.filter(m=>!m.userData.lidar&&filter(m)).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
+    const list=S.meshes.filter(m=>!m.userData.lidar).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
     for(const m of list){
       if(performance.now()-tc>25){await new Promise(r=>setTimeout(r,0));tc=performance.now();if(tok!==refineToken)return false;}
       const u=m.userData;const ext=extOf(m);if(ext>LB_R)continue;
@@ -1769,10 +1567,10 @@ async function lidarBuildings(){
       if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
       const smp=lidarSamples(u,F,green); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
       const clean=u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;});
-      let bases=[clean]; if(cloud&&ext<cloud.R-4){const cv=carveFootprint(u,cloud,others);if(cv){bases=cv.parts;nCarved++;}}
+      const bases=[clean];
       const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
-      const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const bp=tw&&tw.base.length>=8?tw.base:pt.pts;const md=partModel(bp,pt.rings);if(!md)continue;md.pts=bp;vols.push({rings:pt.rings,md});
-        if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){m2.pts=t.pts;vols.push({rings:[t.ring],md:m2,tower:true});}});}
+      const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const bp=tw&&tw.base.length>=8?tw.base:pt.pts;const md=partModel(bp,pt.rings);if(!md)continue;md.pts=F===Ff?bp:null;vols.push({rings:pt.rings,md});
+        if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){m2.pts=F===Ff?t.pts:null;vols.push({rings:[t.ring],md:m2,tower:true});}});}
       // storeys: the IGN count belongs to the tallest volume, lower volumes get their share; without a plausible IGN count, ~2.9 m per storey
       const hmax=Math.max(0,...vols.map(v=>v.md.h)),F0=u.floors;
       vols.forEach(v=>{const hb=v.md.h;v.md.floors=(F0>0&&hmax/F0>=2.3&&hmax/F0<=4.6)?Math.max(1,Math.round(F0*hb/hmax)):Math.max(1,Math.floor((hb-0.5)/2.9+0.35));});
@@ -1788,17 +1586,15 @@ async function lidarBuildings(){
     }
     if(tok!==refineToken)return false;
     S.meshes=S.meshes.filter(m=>!gone.has(m)).concat(added.filter(b=>b.userData&&b.userData.rings));
-    if(last&&cloud){try{const lo=laserOnlyBuildings(cloud);S.meshes.push(...lo);added.push(...lo);S.counts.laserOnly=lo.length;}catch(err){console.warn('laser-only',err);}}
     // pitched roofs: IGN ones of replaced buildings dropped, laser-confirmed ones added
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
     (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
     roofMeshes=roofMeshes.filter(m=>!gone.has(m));S.roofEdgeParts=buildRoofSets(S.roofSkip);
     rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0;
-    S.counts=Object.assign(S.counts||{},{lidarBuildings:n,carved:nCarved});
+    S.counts=Object.assign(S.counts||{},{lidarBuildings:n});
     return true;
   }
 }
-window.__qs={CLOUD_WORKER_SRC,S,get cam(){return cam;},scene,partModel,findTowers,lidarSamples,orthoGreen,distToRing,fetchCloud,carveFootprint};
 function rebuildEdges(){
   if(edgeLines){scene.remove(edgeLines);edgeLines.geometry.dispose();edgeLines=null;}
   const parts=S.meshes.map(m=>m.userData.edgeArr).filter(Boolean).concat(S.roofEdgeParts||[]);
