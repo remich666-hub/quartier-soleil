@@ -241,12 +241,16 @@ const isPhone=()=>window.innerWidth<=760;
 const RAD=Math.PI/180;
 
 /* ---------- time helpers (Europe/Paris) ---------- */
+let TZF=null,TZF_TZ=null; const tzOffCache=new Map();
 function tzParts(date){
-  const f=new Intl.DateTimeFormat('en-US',{timeZone:TZ,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(TZF_TZ!==TZ){TZF=null;tzOffCache.clear();}
+  const f=TZF||(TZF_TZ=TZ,TZF=new Intl.DateTimeFormat('en-US',{timeZone:TZ,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}));
   const p={};f.formatToParts(date).forEach(x=>p[x.type]=x.value);
   return {y:+p.year,m:+p.month,d:+p.day,h:(+p.hour)%24,mi:+p.minute,s:+p.second};
 }
-function tzOffsetMin(date){const p=tzParts(date);return (Date.UTC(p.y,p.m-1,p.d,p.h,p.mi,p.s)-date.getTime())/60000;}
+function tzOffsetMin(date){ // the offset only changes on the hour: cache it per UTC hour (the year calculation asks ~17 000 times)
+  if(TZF_TZ!==TZ){TZF=null;tzOffCache.clear();} const k=Math.floor(date.getTime()/3600000); const c=tzOffCache.get(k); if(c!==undefined)return c;
+  const p=tzParts(date); const o=Math.round((Date.UTC(p.y,p.m-1,p.d,p.h,p.mi,p.s)-date.getTime())/60000); tzOffCache.set(k,o); return o;}
 function localToInstant(y,m,d,h,mi){let g=Date.UTC(y,m-1,d,h,mi);let off=tzOffsetMin(new Date(g));let t=g-off*60000;off=tzOffsetMin(new Date(t));return new Date(g-off*60000);}
 function dayOfYearToMD(year,doy){const d=new Date(Date.UTC(year,0,doy));return {m:d.getUTCMonth()+1,d:d.getUTCDate()};}
 function fmtTime(min){return String(Math.floor(min/60)).padStart(2,'0')+':'+String(Math.round(min%60)).padStart(2,'0');}
@@ -511,6 +515,20 @@ function orthoLayer(mesh,mat,lat,lon,z,R,fallback,segs,onDone){
 }
 /* Ground: a plain architect's-model plan by default (roads, water, green areas drawn from the IGN vectors); the aerial photo on demand.
    The photo is always fetched: it is what finds the trees and hedges. */
+/* the ground and everything laid on it fade out in a circle around the address, into the sky */
+const FADE={c:{value:new THREE.Vector2(0,0)},r0:{value:150},r1:{value:250}}; const fadedMats=new WeakSet();
+function fadeMat(m){
+  if(!m||fadedMats.has(m)||m.isShaderMaterial)return; fadedMats.add(m); m.transparent=true; const prev=m.onBeforeCompile;
+  m.onBeforeCompile=(sh,r)=>{if(prev)prev(sh,r); sh.uniforms.qsC=FADE.c; sh.uniforms.qsR0=FADE.r0; sh.uniforms.qsR1=FADE.r1;
+    sh.vertexShader='varying vec2 vQsW;\n'+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n vQsW=(modelMatrix*vec4(transformed,1.0)).xy;');
+    sh.fragmentShader='uniform vec2 qsC; uniform float qsR0,qsR1; varying vec2 vQsW;\n'+sh.fragmentShader.replace('#include <fog_fragment>','#include <fog_fragment>\n gl_FragColor.a*=1.0-smoothstep(qsR0,qsR1,length(vQsW-qsC));');};
+  const k=m.customProgramCacheKey; m.customProgramCacheKey=function(){return (k?k.call(this):'')+'|qsfade';}; m.needsUpdate=true;
+}
+function applyFade(){
+  ground.renderOrder=-2; inner.renderOrder=-1; fadeMat(groundMat); fadeMat(innerMat);
+  const take=o=>{if(!(o.isMesh||o.isLine)||o.isInstancedMesh)return; (Array.isArray(o.material)?o.material:[o.material]).forEach(fadeMat);};
+  if(planLayer)planLayer.traverse(take); layerMeshes.forEach(take); roadMeshes.forEach(take);
+}
 function applyGroundMode(){
   if(photoMode&&ground.userData.loadTiles)ground.userData.loadTiles();
   [[ground,groundMat,PLAN_GROUND],[inner,innerMat,null]].forEach(([m,mat,col])=>{const t=m.userData.photoTex;
@@ -826,7 +844,8 @@ function buildScene(features){
   const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.BufferAttribute(all,3));
   edgeLines=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0x4a4f56,transparent:true,opacity:0.28})); scene.add(edgeLines);
   ground.position.z=-0.15; inner.position.z=-0.09;
-  cam.target.set(0,0,10); cam.dist=isPhone()?300:380; applyCam();
+  if(S.camKeep){const k=S.camKeep;S.camKeep=null;cam.target.copy(k.t);cam.target.z-=S.alt0-k.alt0;cam.theta=k.th;cam.phi=k.ph;cam.dist=k.d;}
+  else{cam.target.set(0,0,10); cam.dist=isPhone()?300:380;} applyCam();
   S.obstacles=S.meshes.concat(monuments,roofMeshes);
 }
 /* ---------- trees from IGN vegetation zones ---------- */
@@ -1030,7 +1049,30 @@ function pick(e){
   if(S.building!==prevB)frameBuilding();
   if(!(wall&&bl[idx]&&S.win&&bl[idx][S.win.floor]))toast(`Façade ${idx+1}/${fac.length} · ${floorName(S.win.floor).toLowerCase()}`);
   if(prevB!==obj)pushNav('building');
+  if(prevB!==obj&&S.win){const b=obj.geometry.boundingSphere||(obj.geometry.computeBoundingSphere(),obj.geometry.boundingSphere);if(b.center.length()>RECENTER_D)recenterOn(obj);}
   if(isPhone())$('sheet').classList.add('collapsed'); // keep the map visible while aiming at the window
+}
+/* beyond RECENTER_D m from the address the fine LiDAR no longer surrounds the window: reload the neighbourhood around the new building,
+   keeping the chosen window and the camera exactly where they are on screen */
+const RECENTER_D=70; let recentering=false;
+async function recenterOn(obj){
+  if(recentering||S.loading)return; recentering=true;
+  try{
+    const w=S.win, c=obj.geometry.boundingSphere.center.clone(); c.z=0; const kx=111320*Math.cos(S.lat*RAD),ky=110574;
+    const keep={x:w.pos.x-c.x,y:w.pos.y-c.y,n:w.normal.clone(),floor:w.floor,along:w.along}, alt0=S.alt0;
+    S.camKeep={t:cam.target.clone().sub(c),th:cam.theta,ph:cam.phi,d:cam.dist,alt0};
+    const lat=S.lat+c.y/ky, lon=S.lon+c.x/kx, label=S.label||'ce bâtiment';
+    toast('Recentrage du quartier…'); $('addr').value=label;
+    await load(label,{lat,lon,label});
+    S.camKeep=null;
+    for(let i=0;i<60&&!S.lidarBuilt;i++)await new Promise(r=>setTimeout(r,250));
+    const pIn=new THREE.Vector2(keep.x-keep.n.x*0.8,keep.y-keep.n.y*0.8);
+    const m=S.meshes.find(m=>m.userData.rings&&pointInPoly(pIn.x,pIn.y,m.userData.rings[0]))||S.meshes.find(m=>m.userData.rings&&pointInPoly(keep.x-keep.n.x*2.5,keep.y-keep.n.y*2.5,m.userData.rings[0]));
+    if(m){selectBuilding(m); const fac=m.userData.facades; let idx=0,bs=-9; const P=new THREE.Vector2(keep.x,keep.y);
+      fac.forEach((f,i)=>{const sc=f.normal.dot(keep.n)-f.mid.distanceTo(P)/30;if(sc>bs){bs=sc;idx=i;}});
+      $('floor').value=keep.floor; $('along').value=Math.round(100*alongOf(fac[idx],P)); $('facade').value=String(idx); chooseFacade(idx);}
+    toast('Quartier recentré sur '+(S.label||label));
+  }finally{recentering=false;}
 }
 /* storey height and party walls (mitoyenneté): a floor of a façade is blind when a neighbour
    rises in front of it, sampled 0.8 m out at 20 / 50 / 80 % of its length */
@@ -1039,7 +1081,8 @@ const storeyH=u=>u.floors&&u.h?Math.max(2.5,Math.min(3.6,u.h/u.floors)):3;
 const downRay=new THREE.Raycaster();
 function blindMap(obj){
   const u=obj.userData; if(u._blind&&u._blindN===S.meshes.length)return u._blind;
-  const others=S.meshes.filter(m=>m!==obj), nF=nFloors(u), sh=storeyH(u), down=new THREE.Vector3(0,0,-1);
+  const bs0=obj.geometry.boundingSphere||(obj.geometry.computeBoundingSphere(),obj.geometry.boundingSphere);
+  const others=S.meshes.filter(m=>{if(m===obj)return false;const b=m.geometry.boundingSphere||(m.geometry.computeBoundingSphere(),m.geometry.boundingSphere);return b.center.distanceTo(bs0.center)-b.radius-bs0.radius<60;}), nF=nFloors(u), sh=storeyH(u), down=new THREE.Vector3(0,0,-1);
   u._blind=u.facades.map(f=>{
     const tops=[0.2,0.5,0.8].map(t=>{const p=pointAlong(f,t);
       downRay.set(new THREE.Vector3(p.x+f.normal.x*0.8,p.y+f.normal.y*0.8,u.zBase+u.h+300),down);downRay.far=1000;
@@ -1090,11 +1133,11 @@ function selectBuilding(obj){
   S.building=obj; const u=obj.userData;
   $('bInfo').textContent=`${u.h.toFixed(0)} m à l'égout${u.ridge?`, ${u.ridge.toFixed(0)} m au faîtage`:''}${u.floors?`, ${u.floors} étages`:''}${u.usage?`, ${u.usage.toLowerCase()}`:''}`;
   const sel=$('facade'); sel.innerHTML='';
+  if(!u._vis||u._visN!==S.meshes.length){const oth=S.meshes.filter(x=>x!==obj);u._visN=S.meshes.length;u._vis=u.facades.map(f=>{const origin=new THREE.Vector3(f.mid.x,f.mid.y,u.zBase+4).addScaledVector(f.normal,0.5);
+    const hh=new THREE.Raycaster(origin,f.normal,0,400).intersectObjects(oth,false);return hh.length?hh[0].distance:null;});}
   u.facades.forEach((f,i)=>{
     const o=document.createElement('option'); o.value=String(i);
-    const origin=new THREE.Vector3(f.mid.x,f.mid.y,u.zBase+4).addScaledVector(f.normal,0.5);
-    const rc=new THREE.Raycaster(origin,f.normal,0,400); const hh=rc.intersectObjects(S.meshes.filter(x=>x!==obj),false);
-    const vis=hh.length?`vis-à-vis à ${hh[0].distance.toFixed(0)} m`:'dégagé > 400 m';
+    const vd=u._vis[i]; const vis=vd!=null?`vis-à-vis à ${vd.toFixed(0)} m`:'dégagé > 400 m';
     const allBlind=blindMap(obj)[i].every(b=>b);
     o.textContent=`${DIRS[Math.round(f.az/45)%8]} ${f.az.toFixed(0)}° · ${f.len.toFixed(0)} m · ${allBlind?'mitoyenne':vis}`;
     if(allBlind)o.disabled=true;
@@ -1173,7 +1216,7 @@ async function fetchSkyline(){
   const winZ=S.alt0+w.pos.z; const hor=new Array(AZ.length).fill(-0.2); const hits=new Array(AZ.length).fill(null); let got=0;
   const F=S.lidarP&&await S.lidarP.mnsFine, C=S.lidarP&&await S.lidarP.mns, MH=S.lidarP&&await S.lidarP.mnh;
   if(F||C){ // rasters: instant. First register the IGN footprint on the LiDAR roof (they can be 1–2 m apart), then sample from the shifted window
-    const sh=MH?registerFootprint(w.obj,MH):{dx:0,dy:0};
+    const ud=w.obj.userData; const sh=MH?(ud._sh&&ud._shMH===MH?ud._sh:(ud._shMH=MH,ud._sh=registerFootprint(w.obj,MH))):{dx:0,dy:0};
     const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8));};
     const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+Math.sin(az)*d,y=w.pos.y+sh.dy+Math.cos(az)*d;if(d<8&&ownD(x,y,d))return;pts2.push({ai,d,x,y});}));
     pts2.forEach(p=>{let z=null;if(F&&p.d<115)z=F.at(p.x,p.y);if(z==null&&C)z=C.at(p.x,p.y);if(z==null)return;got++;const ang=Math.atan2(z-winZ,p.d);if(ang>hor[p.ai]){hor[p.ai]=ang;hits[p.ai]={d:p.d,z:z-S.alt0};}});
@@ -1412,11 +1455,11 @@ async function lidarVegGrid(){
 }
 function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?` · végétation LiDAR HD (rayon ${CORE} m)`:c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
 /* ---------- load flow ---------- */
-async function load(q){
+async function load(q,at){
   $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('addrDone').hidden=true; $('stepAddr').hidden=false; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
-    const g=await geocode(q); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
+    const g=at||await geocode(q); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
     status('Bâtiments et relief IGN…');
     const [alt,feats,terrain]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000),fetchTerrain(g.lat,g.lon).catch(()=>null)]);
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
@@ -1431,6 +1474,7 @@ async function load(q){
     const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,DETAIL_R+80,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); try{buildPlan(veg,roads);}catch(err){console.error('plan',err);} const nl=applyLandmarks(pois);
     treeSets.ign=vegZoneSpots(veg); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}); S.wx=wx; if(!wx)toast('Météo indisponible');
+    try{applyFade();}catch(err){console.error('fade',err);}
     S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building; lidarBuildings();
     try{localStorage.setItem('qs-addr',q);}catch(e){}
   }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;}
