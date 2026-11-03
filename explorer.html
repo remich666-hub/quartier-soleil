@@ -269,7 +269,7 @@ const view=$('view');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-renderer.outputEncoding=THREE.sRGBEncoding; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.15;
+renderer.localClippingEnabled=true; renderer.outputEncoding=THREE.sRGBEncoding; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.15;
 view.appendChild(renderer.domElement);
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(50,1,1,9000); camera.up.set(0,0,1);
@@ -354,7 +354,7 @@ function matsFor(usage,target){
   const c=USAGE[usage]||[0xf0efea,0xdddcd6];
   const wall=patchWall(new THREE.MeshLambertMaterial({color:target?0xe8a070:c[0],map:wallTex}));
   const roof=new THREE.MeshLambertMaterial({color:target?0xd48a5c:c[1]});
-  return matCache[key]=[roof,wall];
+  matCache[key]=[roof,wall]; if(!target&&typeof dsm!=='undefined'&&dsm)setTimeout(applyClip,0); return matCache[key];
 }
 const buildingsGroup=new THREE.Group(); scene.add(buildingsGroup);
 let edgeLines=null, treeCrown=null, treeTrunk=null;
@@ -488,7 +488,7 @@ function orthoLayer(mesh,mat,lat,lon,z,R,fallback,segs,onDone){
 function loadOrtho(lat,lon){
   orthoLayer(ground,groundMat,lat,lon,17,3,0xe9e6df,28);          // 7×7 tiles ≈ 1.4 km, 80 cm/px
   orthoLayer(inner,innerMat,lat,lon,19,isPhone()?4:5,0,40,(raw,w,e,n,s)=>{ // 9×9 or 11×11 tiles ≈ 450–550 m, 20 cm/px
-    if(!raw)return; S.rawOrtho={raw,w,e,n,s}; try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
+    if(!raw)return; S.rawOrtho={raw,w,e,n,s}; try{dsmSetOrtho();}catch(_){} try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
   });
   inner.position.z=ground.position.z+0.06;
 }
@@ -987,6 +987,7 @@ function selectBuilding(obj){
   $('floor').value=fl; $('along').value=50;
   $('winBox').hidden=false; $('viewWin').disabled=false; $('results').hidden=true;
   $('winHintText').textContent='Choisissez la façade, l\'étage et la position, puis calculez.';
+  if(S.selMesh&&S.selMesh!==S.target)S.selMesh.material=matsFor(S.selMesh.userData.usage,false); if(obj!==S.target)obj.material=matsFor(u.usage,true); S.selMesh=obj; updateDSMHole();
   $('stepPick').hidden=true; $('stepAddr').hidden=true; $('addrDone').hidden=false; $('addrDoneText').textContent=S.label||''; refreshWinUI();
 }
 function chooseFacade(idx){
@@ -1084,7 +1085,7 @@ const shellMat=new THREE.MeshBasicMaterial({color:0xe3dccf,side:THREE.DoubleSide
 let lidarShell=null;
 function drawShell(sk){ // measured horizon as a flat backdrop far away: it only shows where the 3D model has nothing in front
   if(lidarShell){scene.remove(lidarShell);lidarShell.geometry.dispose();lidarShell=null;}
-  const w=S.win; if(!w||!sk)return; const R=290, zb=-0.25*R; const P=[];
+  const w=S.win; if(!w||!sk)return; if(dsm&&Math.abs(w.pos.x)<DSM_R-15&&Math.abs(w.pos.y)<DSM_R-15)return; const R=290, zb=-0.25*R; const P=[];
   for(let i=0;i<sk.az.length-1;i++){const h1=sk.hor[i],h2=sk.hor[i+1];if(h1<0.01&&h2<0.01)continue;
     const a=[Math.sin(sk.az[i])*R,Math.cos(sk.az[i])*R],b=[Math.sin(sk.az[i+1])*R,Math.cos(sk.az[i+1])*R];
     const ta=Math.tan(Math.min(Math.max(h1,0),1.35))*R,tb=Math.tan(Math.min(Math.max(h2,0),1.35))*R;
@@ -1299,7 +1300,7 @@ async function load(q){
     const [alt,feats,terrain]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000),fetchTerrain(g.lat,g.lon).catch(()=>null)]);
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
-    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
+    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; if(dsm){scene.remove(dsm.mesh);dsm.mesh.geometry.dispose();dsm=null;applyClip();} if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     buildScene(feats); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
@@ -1309,7 +1310,7 @@ async function load(q){
     const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,600,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); const nl=applyLandmarks(pois);
     treeSets.ign=vegZoneSpots(veg); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}); S.wx=wx; if(!wx)toast('Météo indisponible');
-    S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building;
+    S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building; buildDSM();
     try{localStorage.setItem('qs-addr',q);}catch(e){}
   }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;}
   $('go').disabled=false; update();
@@ -1320,6 +1321,55 @@ try{const a=localStorage.getItem('qs-addr');if(a)$('addr').value=a;}catch(e){}
  const u=new URLSearchParams(location.search);if(!q&&u.get('adresse'))q=u.get('adresse');if(u.has('adresse'))history.replaceState(null,'',location.pathname);
  if(q){$('addr').value=q;setTimeout(()=>load(q),50);}}
 
+/* ---------- buildings measured by LiDAR HD (surface model at 50 cm) within ~110 m ----------
+   The IGN footprints keep their role for picking, façades and windows; what is drawn near the address is the laser-measured
+   city: real heights, real roof shapes, courtyards, and roof colours from the orthophoto. IGN volumes are clipped inside that box. */
+const DSM_R=110; let dsm=null; const clipPlanes=[];
+function clipMats(){const L=[];Object.keys(matCache).forEach(k=>{if(!/^T:/.test(k))L.push(...matCache[k]);});Object.values(ROOF).forEach(m=>L.push(m));L.push(matResGround,matComGround,matDoor);if(edgeLines)L.push(edgeLines.material);return L;}
+function applyClip(){const a=DSM_R-1;const planes=dsm?[new THREE.Plane(new THREE.Vector3(1,0,0),-a),new THREE.Plane(new THREE.Vector3(-1,0,0),-a),new THREE.Plane(new THREE.Vector3(0,1,0),-a),new THREE.Plane(new THREE.Vector3(0,-1,0),-a)]:[];
+  clipMats().forEach(m=>{m.clippingPlanes=planes.length?planes:null;m.clipIntersection=true;m.clipShadows=true;m.needsUpdate=true;});}
+async function buildDSM(){
+  const tok=refineToken; const F=S.lidarP&&await S.lidarP.mnsFine; if(!F||tok!==refineToken)return;
+  if(dsm){scene.remove(dsm.mesh);dsm.mesh.geometry.dispose();dsm=null;}
+  const s=isPhone()?1:0.5, R=DSM_R, n=Math.round(2*R/s)+1;
+  // footprint mask (dilated 1.5 m): only laser points on buildings are used, not trees or cars
+  const c=document.createElement('canvas');c.width=c.height=n;const g=c.getContext('2d');g.fillStyle='#fff';g.strokeStyle='#fff';g.lineWidth=3/s;g.lineJoin='round';
+  S.meshes.forEach(m=>m.userData.rings.forEach(r=>{g.beginPath();r.forEach((p,i)=>{const px=(p.x+R)/s,py=(R-p.y)/s;i?g.lineTo(px,py):g.moveTo(px,py);});g.closePath();g.fill();g.stroke();}));
+  const md=g.getImageData(0,0,n,n).data;
+  const P=new Float32Array(n*n*3),U=new Float32Array(n*n*2),Z=new Float32Array(n*n),G=new Float32Array(n*n),B=new Uint8Array(n*n);
+  const RO=S.rawOrtho;
+  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const k=j*n+i,x=-R+i*s,y=R-j*s;const gz=terrainZ(x,y);const zs=F.at(x,y);let z=gz;
+    if(zs!=null&&md[k*4]>127){const hz=zs-S.alt0;if(hz-gz>2.2){z=hz;B[k]=1;}}
+    Z[k]=z;G[k]=gz;P[k*3]=x;P[k*3+1]=y;P[k*3+2]=z;if(RO){U[k*2]=(x-RO.w)/(RO.e-RO.w);U[k*2+1]=(y-RO.s)/(RO.n-RO.s);}}
+  const roof=[],wall=[];const tri=(a,b,c2)=>{const ax=P[a*3],ay=P[a*3+1],az=P[a*3+2],bx=P[b*3]-ax,by=P[b*3+1]-ay,bz=P[b*3+2]-az,cx=P[c2*3]-ax,cy=P[c2*3+1]-ay,cz=P[c2*3+2]-az;
+    const nx=by*cz-bz*cy,ny=bz*cx-bx*cz,nz=bx*cy-by*cx;const L=Math.hypot(nx,ny,nz)||1;(Math.abs(nz/L)>0.55?roof:wall).push(a,b,c2);};
+  for(let j=0;j<n-1;j++)for(let i=0;i<n-1;i++){const a=j*n+i,b=a+1,c2=a+n,d=c2+1;if(!(B[a]|B[b]|B[c2]|B[d]))continue;tri(a,c2,b);tri(b,c2,d);}
+  if(!roof.length)return;
+  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(P,3));geo.setAttribute('uv',new THREE.BufferAttribute(U,2));
+  const idx=roof.concat(wall);geo.setIndex(idx);geo.addGroup(0,roof.length,0);geo.addGroup(roof.length,wall.length,1);geo.computeVertexNormals();
+  const roofMat=new THREE.MeshLambertMaterial({color:0xffffff,flatShading:true}); if(RO){const t=new THREE.CanvasTexture(RO.raw);t.encoding=THREE.sRGBEncoding;t.anisotropy=4;roofMat.map=t;}
+  const wallMat=new THREE.MeshLambertMaterial({color:0xf1ece4,flatShading:true});
+  const mesh=new THREE.Mesh(geo,[roofMat,wallMat]);mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);
+  dsm={mesh,n,s,R,Z,G,B,hole:new Set()};
+  applyClip(); updateDSMHole();
+  S.obstacles=S.obstacles||[];
+}
+function dsmSetOrtho(){if(!dsm||!S.rawOrtho)return;const RO=S.rawOrtho,U=dsm.mesh.geometry.attributes.uv;const {n,s,R}=dsm;for(let j=0;j<n;j++)for(let i=0;i<n;i++){const k=j*n+i,x=-R+i*s,y=R-j*s;U.array[k*2]=(x-RO.w)/(RO.e-RO.w);U.array[k*2+1]=(y-RO.s)/(RO.n-RO.s);}U.needsUpdate=true;
+  const t=new THREE.CanvasTexture(RO.raw);t.encoding=THREE.sRGBEncoding;t.anisotropy=4;dsm.mesh.material[0].map=t;dsm.mesh.material[0].needsUpdate=true;}
+async function updateDSMHole(){ // the highlighted buildings are drawn from IGN volumes (they carry the façades and windows), so their laser copy is lowered under ground
+  if(!dsm)return; const MH=S.lidarP&&await S.lidarP.mnh; const {n,s,R,Z,G,B}=dsm; const pos=dsm.mesh.geometry.attributes.position;
+  const objs=[S.target,S.building].filter(Boolean); const next=new Set();
+  objs.forEach(o=>{const u=o.userData;if(!u.shift)u.shift=MH?registerFootprint(o,MH):{dx:0,dy:0};const sh=u.shift;
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;u.rings[0].forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});
+    const pad=2.5;const i0=Math.max(0,Math.floor((x0-pad+R+Math.min(0,sh.dx))/s)),i1=Math.min(n-1,Math.ceil((x1+pad+R+Math.max(0,sh.dx))/s));
+    const j0=Math.max(0,Math.floor((R-(y1+pad+Math.max(0,sh.dy)))/s)),j1=Math.min(n-1,Math.ceil((R-(y0-pad+Math.min(0,sh.dy)))/s));
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const k=j*n+i;if(!B[k])continue;const x=-R+i*s,y=R-j*s;
+      const inside=r=>pointInPoly(x,y,r)||distToRing(x,y,r)<0.6||pointInPoly(x-sh.dx,y-sh.dy,r)||distToRing(x-sh.dx,y-sh.dy,r)<0.6;
+      if(inside(u.rings[0]))next.add(k);}});
+  dsm.hole.forEach(k=>{if(!next.has(k))pos.array[k*3+2]=Z[k];});
+  next.forEach(k=>{pos.array[k*3+2]=G[k]-1.2;});
+  dsm.hole=next; pos.needsUpdate=true; dsm.mesh.geometry.computeBoundingSphere();
+}
 /* ---------- simplified UI: steps, steppers, automatic LiDAR summary ---------- */
 function fmtH(h){const m=Math.round(h*60);const H=Math.floor(m/60),M=m%60;return H?`${H} h ${String(M).padStart(2,'0')}`:`${M} min`;}
 function floorName(f){return f===0?'Rez-de-chaussée':f===1?'1er étage':`${f}e étage`;}
@@ -1358,7 +1408,7 @@ $('floorDown').addEventListener('click',()=>{const f=Math.max(0,(+$('floor').val
 $('floorUp').addEventListener('click',()=>{const f=(+$('floor').value||0)+1;$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
 $('along').addEventListener('change',scheduleSummary);
 $('addrChange').addEventListener('click',()=>{$('stepAddr').hidden=false;$('addrDone').hidden=true;$('addr').focus();});
-$('clearWin').addEventListener('click',()=>{$('stepPick').hidden=false;$('winBox').hidden=true;$('blindWarn').hidden=true;});
+$('clearWin').addEventListener('click',()=>{if(S.selMesh&&S.selMesh!==S.target)S.selMesh.material=matsFor(S.selMesh.userData.usage,false);S.selMesh=null;setTimeout(updateDSMHole,0);$('stepPick').hidden=false;$('winBox').hidden=true;$('blindWarn').hidden=true;});
 $('grab').addEventListener('click',()=>{$('sheet').classList.toggle('collapsed');});
 $('timePill').addEventListener('click',()=>{const b=$('bottom');b.hidden=!b.hidden;$('timePill').setAttribute('aria-expanded',String(!b.hidden));});
 $('infoBtn').addEventListener('click',()=>{const b=$('info');b.hidden=!b.hidden;$('infoBtn').setAttribute('aria-expanded',String(!b.hidden));});
