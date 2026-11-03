@@ -892,7 +892,7 @@ async function fetchLidarRaster(kind,R,res){
 }
 function startLidar(){ // launched right after geocoding, in parallel with buildings
   const c=p=>p.catch(()=>null);
-  S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1))};
+  S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1)),cloud:c(fetchCloud(isPhone()?70:120))};
 }
 async function lidarHeights(pts){
   const M=S.lidarP&&await S.lidarP.mnh; if(M)return pts.map(p=>M.max(p.x,p.y,1));
@@ -1507,9 +1507,86 @@ function findTowers(rings,u,F,green){
   const base=[];for(let s=0;s<nu*nv;s++)if(H[s]===H[s]&&!used[s])base.push(pt(s));
   return {towers:out,base};
 }
+/* ---------- LiDAR HD point cloud (classified, ~12 pts/m² on roofs), streamed from the IGN COPC tiles by HTTP range ----------
+   Only class 6 (building) and 2 (ground) are kept, binned on a 0.5 m grid: highest building point, ground seen. */
+let _copcLibs=null;
+function copcLibs(){
+  if(!_copcLibs)_copcLibs=(async()=>{const J='https://cdn.jsdelivr.net/npm/';
+    const [cp,lz,pj,pc]=await Promise.all([import(J+'copc@0.0.9/+esm'),import(J+'laz-perf@0.0.7/+esm'),import(J+'proj4@2.11.0/+esm'),import(J+'polygon-clipping@0.15.7/+esm')]);
+    const proj4=pj.default||pj; proj4.defs('EPSG:2154','+proj=lcc +lat_0=46.5 +lon_0=3 +lat_1=49 +lat_2=44 +x_0=700000 +y_0=6600000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+    const lazPerf=await (lz.createLazPerf||lz.LazPerf.create)({locateFile:()=>J+'laz-perf@0.0.7/lib/web/laz-perf.wasm'});
+    return {Copc:cp.Copc,lazPerf,proj4,pc:pc.default||pc};})();
+  return _copcLibs;
+}
+async function fetchCloud(R){
+  const t0=performance.now(); const {Copc,lazPerf,proj4,pc}=await copcLibs();
+  const [X0,Y0]=proj4('EPSG:4326','EPSG:2154',[S.lon,S.lat]);
+  const loc=(X,Y)=>{const ll=proj4('EPSG:2154','EPSG:4326',[X,Y]);return proj(ll[0],ll[1]);};
+  const o=loc(X0,Y0),e=loc(X0+100,Y0),nn=loc(X0,Y0+100),A=(e[0]-o[0])/100,B=(nn[0]-o[0])/100,C=(e[1]-o[1])/100,D=(nn[1]-o[1])/100;
+  const dLat=R/110574,dLon=R/(111320*Math.cos(S.lat*RAD));
+  const r=await gpf(`https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=IGNF_LIDAR-HD_METADONNEE:metadata&OUTPUTFORMAT=application/json&COUNT=10&SRSNAME=CRS:84&BBOX=${S.lon-dLon},${S.lat-dLat},${S.lon+dLon},${S.lat+dLat},CRS:84`);
+  const urls=[...new Set((((await r.json()).features)||[]).map(f=>f.properties&&f.properties.url_npl).filter(Boolean))]; if(!urls.length)return null;
+  const R2=R+8,cell=0.5,N=Math.ceil(2*R2/cell); const z6=new Float32Array(N*N).fill(-1e9),gnd=new Uint8Array(N*N); let total=0;
+  for(const url of urls){
+    const copc=await Copc.create(url); const cube=copc.info.cube;
+    const hit=k=>{const [d,x,y]=k.split('-').map(Number);const s=(cube[3]-cube[0])/2**d;const x0=cube[0]+x*s,y0=cube[1]+y*s;return x0<=X0+R2&&x0+s>=X0-R2&&y0<=Y0+R2&&y0+s>=Y0-R2;};
+    const nodes={}; const walk=async page=>{const hp=await Copc.loadHierarchyPage(url,page);Object.assign(nodes,hp.nodes);for(const [k,p] of Object.entries(hp.pages||{}))if(hit(k))await walk(p);};
+    await walk(copc.info.rootHierarchyPage);
+    const sel=Object.entries(nodes).filter(([k,n])=>n&&n.pointCount>0&&hit(k)); let i=0;
+    const work=async()=>{while(i<sel.length){const n=sel[i++][1];const v=await Copc.loadPointDataView(url,copc,n,{lazPerf});
+      const gx=v.getter('X'),gy=v.getter('Y'),gz=v.getter('Z'),gc=v.getter('Classification');
+      for(let q=0;q<v.pointCount;q++){const cl=gc(q);if(cl!==6&&cl!==2)continue;const X=gx(q)-X0,Y=gy(q)-Y0;if(X>R2||X<-R2||Y>R2||Y<-R2)continue;
+        const lx=o[0]+A*X+B*Y,ly=o[1]+C*X+D*Y,ii=Math.floor((lx+R2)/cell),jj=Math.floor((R2-ly)/cell);if(ii<0||jj<0||ii>=N||jj>=N)continue;const k=jj*N+ii;
+        if(cl===2)gnd[k]=1;else{const z=gz(q)-S.alt0;if(z>z6[k])z6[k]=z;}total++;}
+      await new Promise(res=>setTimeout(res,0));}};
+    await Promise.all([work(),work(),work(),work()]);
+  }
+  console.log('LiDAR cloud',urls.length,'tile(s)',total,'pts',Math.round(performance.now()-t0)+' ms');
+  return {R:R2,N,cell,z6,gnd,pc,at(x,y){const i=Math.floor((x+R2)/cell),j=Math.floor((R2-y)/cell);return (i<0||j<0||i>=N||j>=N)?-1:j*N+i;}};
+}
+/* Carve what the IGN outline misses: light wells, set-backs, notches. Only cells where the laser hits the ground (or a much lower cover)
+   and no building point above are removed; the IGN outline is never enlarged, so neighbours stay separate. */
+function carveFootprint(u,cloud){
+  const r0=u.rings[0],sh=u.shift||{dx:0,dy:0},a=domAngle(r0),ca=Math.cos(a),sa=Math.sin(a),st=0.5,zb=u.zBase;
+  let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; r0.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
+  u0-=st;v0-=st;const nu=Math.ceil((u1-u0)/st)+2,nv=Math.ceil((v1-v0)/st)+2; if(nu*nv>150000)return null;
+  const IN=new Uint8Array(nu*nv),ST=new Uint8Array(nu*nv),Z=new Float32Array(nu*nv); const W=(U,V)=>({x:U*ca-V*sa,y:U*sa+V*ca}); const zs=[];
+  for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i,p=W(u0+(i+0.5)*st,v0+(j+0.5)*st);if(!pointInPoly(p.x,p.y,r0))continue;let hole=false;for(let q=1;q<u.rings.length;q++)if(pointInPoly(p.x,p.y,u.rings[q])){hole=true;break;}if(hole)continue;
+    IN[k]=1;const c=cloud.at(p.x+sh.dx,p.y+sh.dy);if(c<0)continue;const z=cloud.z6[c];Z[k]=z;
+    if(z>zb+2.2){ST[k]=1;zs.push(z);}else if(cloud.gnd[c])ST[k]=2;}
+  if(zs.length<20)return null; zs.sort((p,q)=>p-q); const med=zs[zs.length>>1];
+  for(let k=0;k<nu*nv;k++)if(ST[k]===1&&Z[k]<med-5)ST[k]=3; // much lower cover (a glass roof over the ground floor at the bottom of a light well)
+  // fill unknown cells from neighbours, then open (erode+dilate) the void mask to drop slivers < 1 m
+  const V=new Uint8Array(nu*nv);for(let k=0;k<nu*nv;k++)if(IN[k]&&(ST[k]===2||ST[k]===3))V[k]=1;
+  for(let j=1;j<nv-1;j++)for(let i=1;i<nu-1;i++){const k=j*nu+i;if(!IN[k]||ST[k])continue;let vc=0,sc=0;for(let b=-1;b<=1;b++)for(let c=-1;c<=1;c++){const q=k+b*nu+c;if(ST[q]===1)sc++;else if(ST[q]===2||ST[q]===3)vc++;}if(vc>sc&&vc>=3)V[k]=1;}
+  const nb4=(M,k,i,j)=>[[1,0],[-1,0],[0,1],[0,-1]].map(([di,dj])=>{const ni=i+di,nj=j+dj;return (ni<0||nj<0||ni>=nu||nj>=nv)?1:(M[nj*nu+ni]|| !IN[nj*nu+ni]?1:0);});
+  const Er=new Uint8Array(nu*nv);for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i;if(V[k]&&nb4(V,k,i,j).every(x=>x))Er[k]=1;}
+  const Op=new Uint8Array(nu*nv);for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const k=j*nu+i;if(!V[k])continue;if(Er[k]){Op[k]=1;continue;}for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=i+di,nj=j+dj;if(ni>=0&&nj>=0&&ni<nu&&nj<nv&&Er[nj*nu+ni]){Op[k]=1;break;}}}
+  // components → rectangles (up to 3 each), pushed 1 m out where they open onto the street or yard
+  const lab=new Int32Array(nu*nv).fill(-1);let id=0;const cuts=[];
+  for(let s=0;s<nu*nv;s++){if(!Op[s]||lab[s]>=0)continue;const cells=[s];lab[s]=++id;
+    for(let c=0;c<cells.length;c++){const ci=cells[c]%nu,cj=(cells[c]/nu)|0;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv)continue;const q=nj*nu+ni;if(Op[q]&&lab[q]<0){lab[q]=id;cells.push(q);}}}
+    const area=cells.length*st*st; if(area<1.5)continue; const low=cells.filter(c=>ST[c]===3).length; if(low>cells.length/2&&area>30)continue; // a big low part is an annex, not a well
+    const M=new Uint8Array(nu*nv);cells.forEach(c=>M[c]=1);let left=cells.length;
+    for(let it=0;it<3&&left>cells.length*0.15;it++){const hh=new Int32Array(nu);let best=null;
+      for(let j=0;j<nv;j++){for(let i=0;i<nu;i++)hh[i]=M[j*nu+i]?hh[i]+1:0;const stk=[];for(let i=0;i<=nu;i++){const cur=i<nu?hh[i]:0;let s0=i;while(stk.length&&stk[stk.length-1][1]>=cur){const [si,sh2]=stk.pop();const ar=sh2*(i-si);if(sh2&&(!best||ar>best.ar))best={ar,i0:si,i1:i-1,j0:j-sh2+1,j1:j};s0=si;}stk.push([s0,cur]);}}
+      if(!best||best.ar*st*st<1.0)break; let {i0,i1,j0,j1}=best; for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){if(M[j*nu+i]){M[j*nu+i]=0;left--;}}
+      const out=(i,j)=>i<0||j<0||i>=nu||j>=nv||!IN[j*nu+i]; let eL=0,eR=0,eB=0,eT=0,L1=0,L2=0;
+      for(let j=j0;j<=j1;j++){if(out(i0-1,j))L1++;if(out(i1+1,j))L2++;} if(L1>(j1-j0+1)/2)eL=2;if(L2>(j1-j0+1)/2)eR=2;
+      L1=0;L2=0;for(let i=i0;i<=i1;i++){if(out(i,j0-1))L1++;if(out(i,j1+1))L2++;} if(L1>(i1-i0+1)/2)eB=2;if(L2>(i1-i0+1)/2)eT=2;
+      const U0=u0+(i0-eL)*st,U1=u0+(i1+1+eR)*st,V0=v0+(j0-eB)*st,V1=v0+(j1+1+eT)*st;
+      cuts.push([W(U0,V0),W(U1,V0),W(U1,V1),W(U0,V1)]);}
+  }
+  if(!cuts.length)return null;
+  const P=r=>{const q=r.map(p=>[p.x,p.y]);q.push(q[0]);return q;};
+  let res; try{res=cloud.pc.difference([u.rings.map(P)],...cuts.map(c=>[P(c)]));}catch(err){console.warn('carve',err);return null;}
+  const parts=res.map(poly=>poly.map(ring=>{const q=ring.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y));return q;})).filter(rs=>rs[0].length>=3&&Math.abs(areaOf(rs[0]))>=2);
+  return parts.length?{parts,cuts:cuts.length}:null;
+}
 async function lidarBuildings(){
   const tok=refineToken; if(!S.lidarP||S.lidarRun===tok)return; S.lidarRun=tok;
   const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(tok!==refineToken||(!Ff&&!Fc))return;
+  const cloud=await Promise.race([S.lidarP.cloud||null,new Promise(r=>setTimeout(()=>r(null),25000))]); if(tok!==refineToken)return; let nCarved=0;
   const green=orthoGreen(); const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
   const gone=new Set(),added=[]; let n=0,tc=performance.now();const t0=tc;
   const list=S.meshes.filter(m=>!m.userData.lidar).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
@@ -1519,7 +1596,9 @@ async function lidarBuildings(){
     const F=(Ff&&ext<Ff.R-2)?Ff:Fc;if(!F)continue;
     if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
     const smp=lidarSamples(u,F,green); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
-    const parts=splitByLevel(u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;}),smp.pts,smp.cell,0);
+    const clean=u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;});
+    let bases=[clean]; if(cloud&&ext<cloud.R-4){const cv=carveFootprint(u,cloud);if(cv){bases=cv.parts;nCarved++;}}
+    const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
     const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const md=partModel(tw&&tw.base.length>=8?tw.base:pt.pts,pt.rings);if(!md)continue;vols.push({rings:pt.rings,md});
       if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8)vols.push({rings:[t.ring],md:m2,tower:true});});}
     // storeys: the IGN count belongs to the tallest volume, lower volumes get their share; without a plausible IGN count, ~2.9 m per storey
@@ -1542,7 +1621,7 @@ async function lidarBuildings(){
   (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
   roofMeshes=roofMeshes.filter(m=>!gone.has(m));S.roofEdgeParts=buildRoofSets(S.roofSkip);
   rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0;
-  S.counts=Object.assign(S.counts||{},{lidarBuildings:n});console.log('LiDAR buildings',n,'→',added.length,'blocs',Math.round(performance.now()-t0)+' ms');
+  S.counts=Object.assign(S.counts||{},{lidarBuildings:n});S.counts.carved=nCarved;console.log('LiDAR buildings',n,'→',added.length,'blocs, découpés au nuage de points:',nCarved,Math.round(performance.now()-t0)+' ms');
 }
 window.__qs={S,get cam(){return cam;},scene,partModel,findTowers,lidarSamples,orthoGreen,distToRing};
 function rebuildEdges(){
