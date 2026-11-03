@@ -822,6 +822,39 @@ function vegZoneSpots(features){
   });
   return spots;
 }
+function detectCanopy(raw,west,east,north,south){ // raw: unfiltered ortho canvas of the inner layer → {trees, hedges}
+  const W=raw.width, mpp=(east-west)/W; const g=raw.getContext('2d'); const data=g.getImageData(0,0,W,W).data;
+  const mask=document.createElement('canvas'); mask.width=mask.height=W; const mg=mask.getContext('2d'); mg.fillStyle='#000'; mg.fillRect(0,0,W,W); mg.fillStyle='#fff';
+  S.meshes.forEach(mm=>{mm.userData.rings.forEach(ring=>{mg.beginPath();ring.forEach((p,i)=>{const px=(p.x-west)/mpp,py=(north-p.y)/mpp;i?mg.lineTo(px,py):mg.moveTo(px,py);});mg.closePath();mg.fill('evenodd');});});
+  const md=mg.getImageData(0,0,W,W).data;
+  const cell=2; const step=Math.max(3,Math.round(cell/mpp)); const nx=Math.floor(W/step), ny=Math.floor(W/step); const green=new Uint8Array(nx*ny);
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+    let exg=0,cnt=0,lum=0,gs=0,rs=0,bs=0; const cx=i*step+step/2|0, cy=j*step+step/2|0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=cx+dx*2,y=cy+dy*2;if(x<0||y<0||x>=W||y>=W)continue;const k=(y*W+x)*4;if(md[k]>127)continue;const r=data[k],gg=data[k+1],b=data[k+2];exg+=2*gg-r-b;lum+=(r+gg+b)/3;gs+=gg;rs+=r;bs+=b;cnt++;}
+    if(cnt<5)continue; exg/=cnt;lum/=cnt;gs/=cnt;rs/=cnt;bs/=cnt;
+    if(exg>22&&gs>rs+6&&gs>bs+10&&lum<150)green[j*nx+i]=1;
+  }
+  // connected components (8-neighbourhood); thick cells = full 3×3 green
+  const comp=new Int32Array(nx*ny).fill(-1); const comps=[]; const thick=(i,j)=>{for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=i+dx,y=j+dy;if(x<0||y<0||x>=nx||y>=ny||!green[y*nx+x])return false;}return true;};
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){if(!green[j*nx+i]||comp[j*nx+i]>=0)continue;const id=comps.length;const cells=[];const st=[[i,j]];comp[j*nx+i]=id;
+    while(st.length){const [x,y]=st.pop();cells.push([x,y]);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const u=x+dx,v=y+dy;if(u<0||v<0||u>=nx||v>=ny||!green[v*nx+u]||comp[v*nx+u]>=0)continue;comp[v*nx+u]=id;st.push([u,v]);}}
+    comps.push({cells});}
+  const toXY=(i,j)=>[west+(i*step+step/2)*mpp,north-(j*step+step/2)*mpp];
+  const trees=[],hedges=[];
+  comps.forEach(c=>{const th=c.cells.filter(([i,j])=>thick(i,j));
+    if(th.length){ // canopy: one tree per thick cell, spaced ~5 m
+      const used=new Set();th.forEach(([i,j])=>{const key=Math.round(i/2.5)+':'+Math.round(j/2.5);if(used.has(key))return;used.add(key);let n=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const x=i+dx,y=j+dy;if(x>=0&&y>=0&&x<nx&&y<ny)n+=green[y*nx+x];}const xy=toXY(i,j);trees.push({x:xy[0]+(Math.random()-.5)*1.5,y:xy[1]+(Math.random()-.5)*1.5,r:1.6+n*0.12});});
+      if(c.cells.length>=3&&th.length<c.cells.length*0.4){ // thin tails of a canopy component are hedges too
+        const thin=c.cells.filter(([i,j])=>!thick(i,j)); hedgeChain(thin,hedges,toXY,nx);}
+    } else if(c.cells.length>=3){ hedgeChain(c.cells,hedges,toXY,nx); }
+  });
+  return {trees,hedges};
+}
+function hedgeChain(cells,hedges,toXY,nx){ // link neighbouring cells into short segments; one hedge group per call
+  const set=new Set(cells.map(([i,j])=>j*nx+i)); const segs=[]; let sx=0,sy=0;
+  cells.forEach(([i,j])=>{const a=toXY(i,j);sx+=a[0];sy+=a[1];[[1,0],[0,1],[1,1],[1,-1]].forEach(([dx,dy])=>{if(set.has((j+dy)*nx+i+dx)){const b=toXY(i+dx,j+dy);segs.push([a,b]);}});});
+  if(segs.length)hedges.push({segs,cx:sx/cells.length,cy:sy/cells.length,h:1.8,len:cells.length*2});
+}
 /* LiDAR HD object heights (MNH) for a list of local points; sequential 400-point batches with retry */
 /* LiDAR HD as rasters (IGN WMS-R, float32 BIL): one request for the whole area instead of thousands of point queries */
 async function fetchLidarRaster(kind,R,res){
