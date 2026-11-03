@@ -1177,7 +1177,7 @@ function introMove(){
       const vx=-f.mid.x,vy=-f.mid.y,vd=Math.hypot(vx,vy),face=vd>3?(f.normal.x*vx+f.normal.y*vy)/vd:0;
       const sc=f.len*Math.sqrt(Math.min(d,80))*(1+2*Math.max(0,face)); if(sc>bs){bs=sc;best=f;}});
     if(best){th1=Math.atan2(best.normal.x,best.normal.y); ph1=0.5;
-      c=new THREE.Vector3(best.mid.x+best.normal.x*2,best.mid.y+best.normal.y*2,u.zBase+u.h*0.45);
+      c=new THREE.Vector3(hc.x*0.7+best.mid.x*0.3,hc.y*0.7+best.mid.y*0.3,u.zBase+u.h*0.45); // house centred, nudged toward the façade
       d1=Math.max(isPhone()?70:60,best.len*(isPhone()?3.2:2.4),u.h*4);}}catch(e){}}
   const a={t:new THREE.Vector3(c.x*0.3,c.y*0.3,0),th:th1+0.62,ph:1.45,d:isPhone()?1100:950};
   cam.target.copy(a.t);cam.theta=a.th;cam.phi=a.ph;cam.dist=a.d;
