@@ -1796,7 +1796,7 @@ function frame(now){
   {const H=view.clientHeight,W=view.clientWidth;let want=0;if(isPhone()&&H){const sr=$('sheet').getBoundingClientRect(),vr=view.getBoundingClientRect();want=Math.max(0,Math.min(H*0.6,vr.bottom-sr.top))/2;}
    if(Math.abs(want-vOff.to)>2)vOff={from:vOff.cur,to:want,t0:now,cur:vOff.cur};
    const k=Math.min(1,(now-vOff.t0)/420),e=k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,c=vOff.from+(vOff.to-vOff.from)*e;
-   if(Math.abs(c-vOff.cur)>0.1||vOff.W!==W||vOff.H!==H){vOff.cur=c;vOff.W=W;vOff.H=H;if(c>0.5)camera.setViewOffset(W,H,0,c,W,H);else camera.clearViewOffset();camera.updateProjectionMatrix();}}
+   if(Math.abs(c-vOff.cur)>0.1||vOff.W!==W||vOff.H!==H){vOff.cur=c;vOff.W=W;vOff.H=H;if(c>0.5){const cov=2*c,z=1-0.45*cov/H,fW=W*z,fH=H*z;camera.setViewOffset(fW,fH,fW/2-W/2,fH/2-(H-cov)/2,W,H);}else camera.clearViewOffset();camera.updateProjectionMatrix();}}
   sky.position.copy(camera.position); sunPath.position.copy(camera.position); if(S.sunDir)sunDisc.position.copy(camera.position).addScaledVector(S.sunDir,2000);
   renderer.render(scene,camera); requestAnimationFrame(frame);
 }
