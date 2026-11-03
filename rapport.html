@@ -184,7 +184,7 @@ function monthChart(R){
 
 /* the solar mask: sun paths over the measured skyline, seen from the window */
 function maskChart(R){
-  const W=640,H=330,pl=30,pr=8,pt=10,pb=26; const az0=R.window.az; const A0=az0-95,A1=az0+95, MAXA=75;
+  const W=640,H=300,pl=30,pr=8,pt=10,pb=26; const az0=R.window.az; const A0=az0-95,A1=az0+95, MAXA=75;
   const x=a=>{let d=((a-az0+540)%360)-180;return pl+(d+95)/190*(W-pl-pr);}; const y=e=>pt+(H-pt-pb)*(1-Math.max(-2,e)/MAXA);
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Masque solaire depuis la fenêtre">`;
   s+=`<rect x="${pl}" y="${pt}" width="${W-pl-pr}" height="${H-pt-pb}" fill="${css('--sky')}"/>`;
@@ -249,7 +249,7 @@ function render(R){
     <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil sur la fenêtre</span><span><i class="sw" style="background:var(--sky);border:1px solid var(--line2)"></i>Jour</span><span><i class="sw" style="background:var(--raised)"></i>Nuit</span></div>
     <div class="figure" style="margin-top:8px"><h3>Mois par mois</h3><p class="small">Heures de soleil direct par jour, le 15 de chaque mois.</p><div class="chart">${monthChart(R)}</div>
       <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Avec les obstacles réels</span><span><i class="sw" style="border:1px dashed var(--shade-ink)"></i>Sans aucun obstacle</span>${R.climate?`<span><i class="sw" style="height:2px;background:var(--ink);border-radius:0"></i>Avec les nuages (moyenne 2019-2024)</span>`:''}</div></div>`;
-  const obs=(R.obstacles||[]);
+  const obs=(R.obstacles||[]).slice(0,5);
   const p3=`<div><div class="kicker">Le masque solaire</div><h2>Ce qui cache le ciel depuis votre fenêtre</h2></div>
     <p class="lead">Le graphique montre le ciel tel que la fenêtre le voit, de gauche à droite. La silhouette grise est l'horizon réel mesuré au laser aérien (LiDAR HD de l'IGN) : bâtiments, arbres, haies, relief. Chaque courbe est la course du soleil un jour de l'année. Là où la courbe passe au-dessus de la silhouette, le soleil entre.</p>
     <div class="chart">${maskChart(R)}</div>
@@ -264,7 +264,7 @@ function render(R){
     <div class="chart">${heatmap(R)}</div>
     <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil sur la fenêtre</span><span><i class="sw" style="background:var(--shade)"></i>Soleil caché par un obstacle</span><span><i class="sw" style="background:var(--raised)"></i>Soleil absent ou derrière la façade</span></div>
     ${views.length?`<div class="figure" style="margin-top:8px"><h3>La vue depuis la fenêtre</h3><p class="small">Reconstitution 3D à partir des données IGN, à hauteur de la fenêtre. La ligne orange est l'horizon mesuré au LiDAR, le disque le soleil à l'heure indiquée.</p>
-      <div class="views">${views.map((v,i)=>i===1?'':`<figure><div class="shot"><img src="${v}" alt="Vue depuis la fenêtre le ${vlab[i][0]}"></div><figcaption><b>${vlab[i][0]}</b> · ${vlab[i][1]} · l'arc pointillé est la course du soleil ce jour-là</figcaption></figure>`).join('')}</div></div>`:''}`;
+      <div class="views">${views.map((v,i)=>i!==0?'':`<figure><div class="shot"><img src="${v}" alt="Vue depuis la fenêtre le ${vlab[i][0]}"></div><figcaption><b>${vlab[i][0]}</b> · ${vlab[i][1]} · l'arc pointillé est la course du soleil ce jour-là</figcaption></figure>`).join('')}</div></div>`:''}`;
   const p5=`<div><div class="kicker">Méthode</div><h2>Comment ces chiffres sont calculés</h2></div>
     <div class="method">
       <div><h3>La position du soleil</h3><p>Calculée pour l'adresse exacte, toutes les 5 à 10 minutes, avec l'algorithme astronomique de la NOAA et l'heure légale française (heure d'été comprise).</p></div>
