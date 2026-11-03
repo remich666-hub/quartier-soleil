@@ -897,7 +897,7 @@ function buildScene(features){
   edgeLines=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0x4a4f56,transparent:true,opacity:0.28})); scene.add(edgeLines);
   ground.position.z=-0.15; inner.position.z=-0.09;
   if(S.camKeep){const k=S.camKeep;S.camKeep=null;cam.target.copy(k.t);cam.target.z-=S.alt0-k.alt0;cam.theta=k.th;cam.phi=k.ph;cam.dist=k.d;}
-  else{cam.target.set(0,0,10); cam.dist=isPhone()?300:380;} applyCam();
+  else{cam.target.set(0,0,10); cam.dist=isPhone()?300:380; introMove();} applyCam();
   S.obstacles=S.meshes.concat(monuments,roofMeshes);
 }
 /* ---------- trees from IGN vegetation zones ---------- */
@@ -1153,6 +1153,22 @@ function alongOf(f,p){ // inverse of pointAlong: where a tapped point sits along
 function openFloor(fi,fl){ // nearest floor of façade fi that is not blind
   const b=S.building&&blindMap(S.building)[fi]; if(!b||!b[fl])return fl;
   for(let d=1;d<b.length;d++){if(fl-d>=0&&!b[fl-d])return fl-d;if(fl+d<b.length&&!b[fl+d])return fl+d;} return fl;
+}
+/* arrival: establishing shot high above the neighbourhood, then a slow descending push-in that orbits ~35° onto the address */
+let introRing=null;
+function introMove(){
+  const t=S.target; let c=new THREE.Vector3(0,0,8), d1=isPhone()?150:130;
+  if(t){const bb=t.geometry.boundingBox||(t.geometry.computeBoundingBox(),t.geometry.boundingBox);c=new THREE.Vector3((bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2,t.userData.zBase+t.userData.h*0.4);
+    d1=Math.max(d1,Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y)*3);}
+  const th1=-0.8, a={t:new THREE.Vector3(c.x*0.3,c.y*0.3,0),th:th1+0.62,ph:1.45,d:isPhone()?1100:950};
+  cam.target.copy(a.t);cam.theta=a.th;cam.phi=a.ph;cam.dist=a.d;
+  camTw={t0:performance.now(),dur:3600,ease:'quint',a,b:{t:c,th:th1,ph:0.78,d:d1},onEnd:()=>pulseAt(c)};
+}
+function pulseAt(c){ // a ring that spreads on the ground around the address: "it's here"
+  if(introRing){scene.remove(introRing);introRing.geometry.dispose();}
+  const r=S.target?Math.max(6,(S.target.geometry.boundingSphere||(S.target.geometry.computeBoundingSphere(),S.target.geometry.boundingSphere)).radius*1.1):8;
+  introRing=new THREE.Mesh(new THREE.RingGeometry(r*0.92,r,64),new THREE.MeshBasicMaterial({color:0xd9731a,transparent:true,opacity:0.9,depthWrite:false,fog:false}));
+  introRing.position.set(c.x,c.y,(S.target?S.target.userData.zBase:0)+0.25); introRing.renderOrder=5; introRing.userData.t0=performance.now(); scene.add(introRing);
 }
 /* camera glides to face the chosen façade (orbit mode only) */
 let camTw=null;
@@ -1890,8 +1906,12 @@ function frame(now){
   const dt=Math.min(0.1,(now-lastT)/1000); lastT=now;
   if(S.playing){S.minute=(S.minute+dt*60)%1440;$('time').value=Math.round(S.minute/5)*5;update();}
   if(rain.visible){const p=rain.geometry.attributes.position.array;const sp=(rain.userData.speed||3.5)*60*dt;for(let i=0;i<RAIN_N;i++){p[i*3+2]-=sp;if(p[i*3+2]<0)p[i*3+2]=150;}rain.geometry.attributes.position.needsUpdate=true;rain.position.set(camera.position.x,camera.position.y,0);}
-  if(camTw){const k=Math.min(1,(now-camTw.t0)/camTw.dur),e=k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,a=camTw.a,b=camTw.b;
-    cam.target.lerpVectors(a.t,b.t,e);cam.theta=a.th+(b.th-a.th)*e;cam.phi=a.ph+(b.ph-a.ph)*e;cam.dist=a.d+(b.d-a.d)*e;applyCam();if(k>=1)camTw=null;}
+  if(camTw){const k=Math.max(0,Math.min(1,(now-camTw.t0)/camTw.dur)),e=camTw.ease==='quint'?k*k*k*(k*(k*6-15)+10):(k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2),a=camTw.a,b=camTw.b;
+    cam.target.lerpVectors(a.t,b.t,e);cam.theta=a.th+(b.th-a.th)*e;cam.phi=a.ph+(b.ph-a.ph)*e;
+    cam.dist=camTw.ease==='quint'?Math.exp(Math.log(a.d)+(Math.log(b.d)-Math.log(a.d))*e):a.d+(b.d-a.d)*e; applyCam();
+    if(k>=1){const cb=camTw.onEnd;camTw=null;if(cb)cb();}}
+  if(introRing){const k=Math.min(1,(now-introRing.userData.t0)/1400),e=1-Math.pow(1-k,3);introRing.scale.setScalar(1+e*1.8);introRing.material.opacity=0.9*(1-k);
+    if(k>=1){scene.remove(introRing);introRing.geometry.dispose();introRing.material.dispose();introRing=null;}}
   if(marker.visible){const ph=(now%1600)/1600,sc=(isPhone()?1.6:1.1)*(1+0.35*(0.5-0.5*Math.cos(ph*2*Math.PI)));marker.scale.setScalar(sc);}
   // keep the scene centred in the part of the screen the panel leaves visible (phone)
   {const H=view.clientHeight,W=view.clientWidth;let want=0;if(isPhone()&&H){const sr=$('sheet').getBoundingClientRect(),vr=view.getBoundingClientRect();want=Math.max(0,Math.min(H*0.6,vr.bottom-sr.top))/2;}
