@@ -1555,7 +1555,7 @@ async function fetchCloud(R){
 function carveFootprint(u,cloud,others){
   const r0=u.rings[0],sh=u.shift||{dx:0,dy:0},a=domAngle(r0),ca=Math.cos(a),sa=Math.sin(a),st=0.5,zb=u.zBase;
   let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; r0.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
-  const PAD=3;u0-=PAD;v0-=PAD;u1+=PAD;v1+=PAD;const nu=Math.ceil((u1-u0)/st)+1,nv=Math.ceil((v1-v0)/st)+1; if(nu*nv>200000)return null;
+  const PAD=6;u0-=PAD;v0-=PAD;u1+=PAD;v1+=PAD;const nu=Math.ceil((u1-u0)/st)+1,nv=Math.ceil((v1-v0)/st)+1; if(nu*nv>200000)return null;
   const IN=new Uint8Array(nu*nv),ST=new Uint8Array(nu*nv),Z=new Float32Array(nu*nv),OUTZ=new Float32Array(nu*nv).fill(NaN);
   let bx0=1e9,bx1=-1e9,by0=1e9,by1=-1e9;r0.forEach(p=>{bx0=Math.min(bx0,p.x);bx1=Math.max(bx1,p.x);by0=Math.min(by0,p.y);by1=Math.max(by1,p.y);});
   const nearOthers=(others||[]).filter(o=>o.rings[0]!==r0&&o.x1>=bx0-PAD-1&&o.x0<=bx1+PAD+1&&o.y1>=by0-PAD-1&&o.y0<=by1+PAD+1); const W=(U,V)=>({x:U*ca-V*sa,y:U*sa+V*ca}); const zs=[];
