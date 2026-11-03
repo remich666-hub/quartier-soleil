@@ -230,8 +230,8 @@ function maskChart(R){
 /* hour by hour, all year: 12 months × 10 min */
 /* what the window sees: a 180° panorama in perspective, measured skyline, sun on three key days */
 function panorama(R){
-  const W=640,H=270,hz=200,f=170; const az0=R.window.az;
-  const d=a=>((a-az0+540)%360)-180; const x=a=>W/2+d(a)/90*(W/2); const y=e=>hz-Math.tan(Math.min(78,Math.max(-5,e))*Math.PI/180)*f;
+  const W=640,H=300,hz=246,f=0; const az0=R.window.az;
+  const d=a=>((a-az0+540)%360)-180; const x=a=>W/2+d(a)/90*(W/2); const y=e=>hz-Math.sin(Math.min(88,Math.max(-5,e))*Math.PI/180)*(hz-22);
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Panorama depuis la fenêtre"><defs><linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfdde6"/><stop offset="1" stop-color="#f3eee4"/></linearGradient></defs>`;
   s+=`<rect x="0" y="0" width="${W}" height="${hz}" fill="url(#skyG)"/><rect x="0" y="${hz}" width="${W}" height="${H-hz}" fill="#e9e2d6"/>`;
   // sun paths
