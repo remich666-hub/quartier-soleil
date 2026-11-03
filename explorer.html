@@ -119,7 +119,20 @@ button.link:hover{color:var(--fg);background:none}
   #sheet{top:auto;left:0;right:0;bottom:0;width:auto;max-height:56%;gap:0}
   #left{border-radius:18px 18px 0 0;border-bottom:0;padding:14px max(16px,env(safe-area-inset-left,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px));gap:14px}
   #sheet.collapsed #left .collapsible{display:none}
-  .grab{display:block;width:40px;height:4px;border-radius:2px;background:var(--muted);opacity:.5;margin:-4px auto 0;border:0;padding:0}
+  .grab{display:flex;align-items:center;justify-content:center;width:100%;height:28px;margin:-10px 0 -6px;border:0;padding:0;background:transparent;flex:none}
+  .grab::before{content:"";width:44px;height:5px;border-radius:3px;background:var(--muted);opacity:.55}
+  /* reduced sheet: only what is needed to aim at the window, the map gets the screen */
+  #sheet.collapsed #left{gap:10px}
+  #sheet.collapsed #left>*:not(.grab):not(#winBox):not(#stepPick){display:none}
+  #sheet.collapsed #stepPick .n{display:none}
+  #sheet.collapsed #winBox>*:not(.f-fac):not(.f-floor):not(#mini){display:none}
+  #sheet.collapsed #winBox .field label{display:none}
+  #sheet.collapsed #winBox{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #sheet.collapsed #winBox[hidden]{display:none}
+  #sheet.collapsed #mini:not([hidden]){display:flex}
+  #mini{grid-column:1/-1;order:-1;align-items:baseline;gap:8px;border:0;background:transparent;padding:0;text-align:left;color:var(--fg);font-size:13px}
+  #mini b{font-family:var(--serif);font-weight:400;font-size:28px;line-height:1}
+  #mini .more{margin-left:auto;color:var(--accent-ink);font-size:13px}
   #timePill{bottom:auto;top:max(12px,env(safe-area-inset-top,0px))}
   #bottom{bottom:auto;top:calc(max(12px,env(safe-area-inset-top,0px)) + 48px)}
   .big .v{font-size:48px}
@@ -127,7 +140,7 @@ button.link:hover{color:var(--fg);background:none}
   #winBox>.n{order:-2}
   #toast{top:auto;bottom:calc(56% + 12px)}
 }
-@media (min-width:761px){.grab{display:none}}
+@media (min-width:761px){.grab{display:none}#mini{display:none!important}}
 @media (prefers-reduced-motion:reduce){#toast{transition:none}.badge.busy i{animation:none}}
 </style>
 
@@ -180,11 +193,12 @@ button.link:hover{color:var(--fg);background:none}
       </div>
 
       <div class="step" id="winBox" hidden>
+        <button type="button" id="mini" hidden><b id="miniV">—</b><span>de soleil par jour</span><span class="more">Détails ▴</span></button>
         <span class="n">02 · Fenêtre</span>
-        <div class="field"><label>Façade</label>
+        <div class="field f-fac"><label>Façade</label>
           <div class="stepper"><button type="button" id="facPrev" aria-label="Façade précédente">‹</button><div class="v" id="facLabel">—</div><button type="button" id="facNext" aria-label="Façade suivante">›</button></div>
           <select id="facade" class="legacy" aria-hidden="true" tabindex="-1"></select></div>
-        <div class="field"><label>Étage</label>
+        <div class="field f-floor"><label>Étage</label>
           <div class="stepper"><button type="button" id="floorDown" aria-label="Étage inférieur">−</button><div class="v" id="floorLabel">—</div><button type="button" id="floorUp" aria-label="Étage supérieur">+</button></div>
           <input type="number" id="floor" class="legacy" value="0" aria-hidden="true" tabindex="-1"></div>
         <div class="field"><label for="along">Position sur la façade</label><input type="range" id="along" min="5" max="95" value="50"></div>
@@ -998,7 +1012,7 @@ function pick(e){
   $('facade').value=String(idx); chooseFacade(idx);
   if(S.building!==prevB)frameBuilding();
   toast(`Façade ${idx+1}/${fac.length} · étage ${S.win.floor}`);
-  if(isPhone())showTab('right');
+  if(isPhone())$('sheet').classList.add('collapsed'); // keep the map visible while aiming at the window
 }
 /* the address follows the building being studied (reverse geocoding on the national address base) */
 let revTok=0;
@@ -1066,7 +1080,7 @@ function frameBuilding(){
 $('frameB').addEventListener('click',frameBuilding);
 $('floor').addEventListener('input',()=>{if(S.win){S.win.floor=Math.max(0,Math.min(40,+$('floor').value||0));placeMarker();}});
 $('along').addEventListener('input',()=>{if(S.win){S.win.along=(+$('along').value)/100;placeMarker();}});
-$('clearWin').addEventListener('click',()=>{if(cam.mode==='window')setMode('orbit');S.win=null;S.building=null;S.skyline=null;skyLine.visible=false;skyLine.userData.ready=false;marker.visible=false;markerArrow.visible=false;facadeLine.visible=false;$('winBox').hidden=true;$('results').hidden=true;$('viewWin').disabled=true;$('winHintText').textContent='Touchez un bâtiment dans la maquette pour choisir une façade.';});
+$('clearWin').addEventListener('click',()=>{$('mini').hidden=true;if(cam.mode==='window')setMode('orbit');S.win=null;S.building=null;S.skyline=null;skyLine.visible=false;skyLine.userData.ready=false;marker.visible=false;markerArrow.visible=false;facadeLine.visible=false;$('winBox').hidden=true;$('results').hidden=true;$('viewWin').disabled=true;$('winHintText').textContent='Touchez un bâtiment dans la maquette pour choisir une façade.';});
 
 /* ---------- LiDAR HD skyline from the window (IGN altimetry API, MNS at 50 cm) ---------- */
 const skyLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xd9731a,transparent:true,opacity:0.9,fog:false,depthTest:false}));
@@ -1680,7 +1694,7 @@ async function runSummary(){
   const kd=[[12,21],[3,20],[6,21]].map(([m,d])=>analyzeDay(S.year,m,d,5).filter(Boolean).length*5/60);
   if(tok!==sumTok)return;
   const avg=tot/nd; const m=Math.round(avg*60);
-  $('avgBig').innerHTML=`${Math.floor(m/60)}<small>h</small>${String(m%60).padStart(2,'0')}`;
+  $('avgBig').innerHTML=`${Math.floor(m/60)}<small>h</small>${String(m%60).padStart(2,'0')}`; $('miniV').textContent=`${Math.floor(m/60)} h ${String(m%60).padStart(2,'0')}`; $('mini').hidden=false;
   $('kdDec').textContent=fmtH(kd[0]); $('kdMar').textContent=fmtH(kd[1]); $('kdJun').textContent=fmtH(kd[2]);
   $('calcBadge').classList.remove('busy'); $('calcText').textContent=L?'Horizon mesuré au LiDAR HD':'Calcul sur la maquette (LiDAR indisponible ici)';
   // blind façade: a taller wall right in front across the central view
@@ -1697,6 +1711,10 @@ $('along').addEventListener('change',scheduleSummary);
 $('addrChange').addEventListener('click',()=>{$('stepAddr').hidden=false;$('addrDone').hidden=true;$('addr').focus();});
 $('clearWin').addEventListener('click',()=>{if(S.selMesh&&family(S.target).indexOf(S.selMesh)<0)setHi(S.selMesh,false);S.selMesh=null;$('stepPick').hidden=false;$('winBox').hidden=true;$('blindWarn').hidden=true;});
 $('grab').addEventListener('click',()=>{$('sheet').classList.toggle('collapsed');});
+$('mini').addEventListener('click',()=>$('sheet').classList.remove('collapsed'));
+{let y0=null;const L=$('left');L.addEventListener('touchstart',e=>{y0=(L.scrollTop<=0)?e.touches[0].clientY:null;},{passive:true});
+  L.addEventListener('touchend',e=>{if(y0==null)return;const dy=e.changedTouches[0].clientY-y0;y0=null;if(dy>40)$('sheet').classList.add('collapsed');else if(dy<-40)$('sheet').classList.remove('collapsed');},{passive:true});}
+renderer.domElement.addEventListener('pointerdown',()=>{if(isPhone()&&S.meshes.length)$('sheet').classList.add('collapsed');});
 $('timePill').addEventListener('click',()=>{const b=$('bottom');b.hidden=!b.hidden;$('timePill').setAttribute('aria-expanded',String(!b.hidden));});
 $('infoBtn').addEventListener('click',()=>{const b=$('info');b.hidden=!b.hidden;$('infoBtn').setAttribute('aria-expanded',String(!b.hidden));});
 $('photoBtn').addEventListener('click',()=>{photoMode=!photoMode;try{localStorage.setItem('qs-photo',photoMode?'1':'0');}catch(_){}applyGroundMode();toast(photoMode?'Photo aérienne affichée':'Plan épuré');});
