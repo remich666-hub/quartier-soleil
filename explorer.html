@@ -1502,7 +1502,7 @@ function planeRoofMeshes(pr,zBase,roofMat,wallMat){
 }
 function makeBlock(src,rings,model,roofSets){
   const u=src.userData,outer=rings[0],holes=rings.slice(1);
-  let pr=null; if(model.rise>0&&model.pts&&!holes.length){try{pr=planeRoof(outer,model.pts,model.h,model.h+model.rise);}catch(err){pr=null;}}
+  let pr=null; if(model.pts&&model.pts.length<8000&&!holes.length){try{const hs=model.pts.map(p=>p.h).sort((a,b)=>a-b);const top=Math.max(model.h+model.rise,hs[Math.floor(hs.length*0.98)]||0);pr=planeRoof(outer,model.pts,model.h,top);if(pr&&pr.faces.every(f=>Math.hypot(f.pl.a,f.pl.b)<0.08))pr=null;}catch(err){pr=null;}} // flat result: keep the plain block
   const h=pr?pr.hWall:model.h;
   const shape=new THREE.Shape(outer);holes.forEach(hr=>shape.holes.push(new THREE.Path(hr)));
   const floors=model.floors||Math.max(1,Math.round(h/3));const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});fitWallUVs(geo,h,floors);
