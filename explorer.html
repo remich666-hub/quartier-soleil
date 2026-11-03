@@ -1400,12 +1400,13 @@ function lidarGeometry(m,F,cell){
 }
 async function lidarBuildings(){
   const tok=refineToken; if(!S.lidarP)return; const [Ff,Fc]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns]); if(tok!==refineToken||(!Ff&&!Fc))return;
-  const cell=isPhone()?1.5:1, roofMat=lidarRoofMat(); const skip=new Set(), gone=new Set(); let n=0, tc=performance.now(); const t0=tc;
+  const MHr=await S.lidarP.mnh; const cell=isPhone()?1.5:1, roofMat=lidarRoofMat(); const skip=new Set(), gone=new Set(); let n=0, tc=performance.now(); const t0=tc;
   const list=S.meshes.slice().map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
   for(const m of list){
     if(performance.now()-tc>25){await new Promise(r=>setTimeout(r,0));tc=performance.now();if(tok!==refineToken)return;}
     const u=m.userData; if(u.lidar)continue; let ext=0; u.rings[0].forEach(p=>{ext=Math.max(ext,Math.abs(p.x),Math.abs(p.y));}); if(ext>LB_R)continue;
     const F=(Ff&&ext<Ff.R-2)?Ff:Fc; if(!F)continue;
+    if(!u.shift&&MHr&&ext<90)u.shift=registerFootprint(m,MHr); // lay the footprint on the laser roof before sampling heights
     const r=lidarGeometry(m,F,cell); if(!r)continue;
     m.geometry.dispose(); m.geometry=r.g; m.position.z=0; u.lidar=true; u.edgeArr=r.edges; u.mats=[roofMat,matsFor(u.usage,false)[1]];
     if(Math.abs(r.eave-u.h)>3){u.h=Math.max(3,r.eave);u.floors=Math.max(1,Math.round(u.h/3));} u.ridge=Math.max(r.top,u.h);
