@@ -1570,11 +1570,62 @@ async function load(q,at){
   }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;}
   $('go').disabled=false; update();
 }
-$('form').addEventListener('submit',e=>{e.preventDefault();load($('addr').value);});
+/* address autocomplete + disambiguation on the national address base (BAN) — shared by the home page and the explorer */
+function qsAddressAC(input,form,onResolved){
+  if(!document.getElementById('qsac-css')){const st=document.createElement('style');st.id='qsac-css';st.textContent=
+    '.qsac{list-style:none;margin:6px 0 0;padding:4px;border:1px solid var(--line);border-radius:12px;background:var(--raised,var(--card));box-shadow:0 10px 28px rgba(20,16,10,.12);max-width:100%;min-width:0}'+
+    '.qsac[hidden]{display:none}.qsac .hd{font:500 11px/1.3 var(--mono,monospace);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 10px 4px}'+
+    '.qsac li[role=option]{display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:8px;cursor:pointer;min-width:0}'+
+    '.qsac li[role=option] b{font-weight:500;color:var(--fg,var(--ink));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+    '.qsac li[role=option] small{color:var(--muted);font-size:12.5px}'+
+    '.qsac li[aria-selected=true],.qsac li[role=option]:hover{background:color-mix(in srgb,var(--sun,#d9731a) 14%,transparent)}';document.head.appendChild(st);}
+  const box=document.createElement('ul'); box.className='qsac'; box.setAttribute('role','listbox'); box.hidden=true; box.id='qsac-'+Math.random().toString(36).slice(2,7);
+  form.insertAdjacentElement('afterend',box);
+  input.setAttribute('autocomplete','off'); input.setAttribute('role','combobox'); input.setAttribute('aria-autocomplete','list'); input.setAttribute('aria-controls',box.id); input.setAttribute('aria-expanded','false');
+  let items=[], act=-1, picked=null, tok=0, t=null;
+  const isCoords=v=>/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(v);
+  const toGeo=f=>({lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],label:f.properties.label});
+  async function search(q,limit,auto){const r=await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit='+limit+(auto?'&autocomplete=1':''));if(!r.ok)throw new Error('BAN '+r.status);const j=await r.json();return j.features||[];}
+  function close(){box.hidden=true;input.setAttribute('aria-expanded','false');act=-1;}
+  function render(list,head){
+    items=list; act=-1; box.innerHTML=''; if(!list.length){close();return;}
+    if(head){const h=document.createElement('li');h.className='hd';h.textContent=head;box.appendChild(h);}
+    list.forEach((f,i)=>{const p=f.properties,li=document.createElement('li');li.setAttribute('role','option');li.id=box.id+'-'+i;
+      const b=document.createElement('b');b.textContent=p.name||p.label;const s=document.createElement('small');s.textContent=[p.postcode,p.city].filter(Boolean).join(' ')+(p.context?' · '+p.context.split(',').slice(-1)[0].trim():'');
+      li.append(b,s);li.addEventListener('mousedown',e=>{e.preventDefault();choose(i);});box.appendChild(li);});
+    box.hidden=false; input.setAttribute('aria-expanded','true');
+  }
+  function mark(){[...box.querySelectorAll('li[role=option]')].forEach((li,i)=>li.setAttribute('aria-selected',i===act?'true':'false'));input.setAttribute('aria-activedescendant',act>=0?box.id+'-'+act:'');}
+  function choose(i){const f=items[i];if(!f)return;picked=toGeo(f);input.value=picked.label;close();onResolved(picked);}
+  input.addEventListener('input',()=>{picked=null;clearTimeout(t);const v=input.value.trim();if(v.length<4||isCoords(v)){close();return;}
+    const my=++tok;t=setTimeout(async()=>{try{const fs=await search(v,5,true);if(my===tok&&document.activeElement===input)render(fs);}catch(_){}},180);});
+  input.addEventListener('keydown',e=>{if(box.hidden||!items.length)return;
+    if(e.key==='ArrowDown'){e.preventDefault();act=(act+1)%items.length;mark();}
+    else if(e.key==='ArrowUp'){e.preventDefault();act=(act-1+items.length)%items.length;mark();}
+    else if(e.key==='Enter'&&act>=0){e.preventDefault();choose(act);}
+    else if(e.key==='Escape'){close();}});
+  input.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==input)close();},150));
+  // validating without a suggestion: go straight on only when the answer is unambiguous
+  async function resolve(){
+    const v=input.value.trim(); if(!v)return null;
+    if(picked&&picked.label===v)return picked;
+    if(isCoords(v)){const m=v.split(',');return {lat:+m[0],lon:+m[1],label:v};}
+    ++tok; clearTimeout(t);
+    const fs=await search(v,6,false); if(!fs.length)throw new Error('Adresse introuvable — précisez la ville ou le code postal.');
+    const top=fs[0].properties.score||0, close_=fs.filter(f=>(f.properties.score||0)>=top-0.12);
+    const towns=new Set(close_.map(f=>f.properties.citycode||f.properties.city));
+    if(top<0.5||towns.size>1){render(fs.filter((f,i,a)=>a.findIndex(g=>g.properties.label===f.properties.label)===i),'Plusieurs adresses correspondent — laquelle ?');input.focus();return null;}
+    picked=toGeo(fs[0]); input.value=picked.label; return picked;
+  }
+  return {resolve,close};
+}
+const addrAC=qsAddressAC($('addr'),$('form'),g=>load(g.label,g));
+async function submitAddr(){try{const g=await addrAC.resolve();if(g)load(g.label,g);else{$('stepAddr').hidden=false;$('addrDone').hidden=true;$('sheet').classList.remove('collapsed');}}catch(err){status(err.message||'Adresse introuvable',true);}}
+$('form').addEventListener('submit',e=>{e.preventDefault();submitAddr();});
 try{const a=localStorage.getItem('qs-addr');if(a)$('addr').value=a;}catch(e){}
-{let q=null;try{q=sessionStorage.getItem('qs-pending');sessionStorage.removeItem('qs-pending');}catch(e){}
+{let q=null,geo=null;try{q=sessionStorage.getItem('qs-pending');geo=JSON.parse(sessionStorage.getItem('qs-pending-geo')||'null');sessionStorage.removeItem('qs-pending');sessionStorage.removeItem('qs-pending-geo');}catch(e){}
  const u=new URLSearchParams(location.search);if(!q&&u.get('adresse'))q=u.get('adresse');if(u.has('adresse'))history.replaceState(null,'',location.pathname);
- if(q){$('addr').value=q;setTimeout(()=>load(q),50);}}
+ if(q){$('addr').value=q;setTimeout(()=>{if(geo&&geo.label===q&&isFinite(geo.lat)&&isFinite(geo.lon))load(q,geo);else submitAddr();},50);}}
 
 /* ---------- buildings measured by the LiDAR HD (within LB_R): each IGN footprint keeps its clean outline, but its walls rise to the
    real height and its roof is draped on the laser surface (real pitches, terraces, courtyards), coloured from the orthophoto ---------- */
