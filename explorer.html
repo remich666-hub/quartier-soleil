@@ -1016,7 +1016,7 @@ function selectBuilding(obj){
   $('floor').value=fl; $('along').value=50;
   $('winBox').hidden=false; $('viewWin').disabled=false; $('results').hidden=true;
   $('winHintText').textContent='Choisissez la façade, l\'étage et la position, puis calculez.';
-  if(S.selMesh&&S.selMesh!==S.target)S.selMesh.material=baseMats(S.selMesh); if(obj!==S.target)obj.material=matsFor(u.usage,true); S.selMesh=obj;
+  if(S.selMesh&&family(S.target).indexOf(S.selMesh)<0)setHi(S.selMesh,false); setHi(obj,true); S.selMesh=obj;
   $('stepPick').hidden=true; $('stepAddr').hidden=true; $('addrDone').hidden=false; $('addrDoneText').textContent=S.label||''; refreshWinUI();
 }
 function chooseFacade(idx){
@@ -1354,6 +1354,9 @@ try{const a=localStorage.getItem('qs-addr');if(a)$('addr').value=a;}catch(e){}
    real height and its roof is draped on the laser surface (real pitches, terraces, courtyards), coloured from the orthophoto ---------- */
 const LB_R=200;
 function baseMats(m){return matsFor(m.userData.usage,false);}
+// a building cut in several volumes (main block, tower, set-back storey) is highlighted as a whole
+function family(m){const g=m&&m.userData.gid;return g?S.meshes.filter(o=>o.userData.gid===g):(m?[m]:[]);}
+function setHi(m,on){family(m).forEach(o=>{o.material=on?matsFor(o.userData.usage,true):baseMats(o);});}
 const areaOf=r=>{let s=0;for(let i=0,j=r.length-1;i<r.length;j=i++)s+=(r[j].x-r[i].x)*(r[j].y+r[i].y);return s/2;};
 function clipHalf(poly,a,b,c){ // part of a ring where a·x+b·y+c ≥ 0
   const out=[];for(let i=0;i<poly.length;i++){const p=poly[i],q=poly[(i+1)%poly.length],sp=a*p.x+b*p.y+c,sq=a*q.x+b*q.y+c;
@@ -1585,6 +1588,7 @@ function findTowers(rings,u,F,green){
 let _pcLib=null;
 function polyClip(){if(!_pcLib)_pcLib=import('https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/+esm').then(m=>{PCSYNC=m.default||m;return PCSYNC;});return _pcLib;}
 setTimeout(()=>polyClip().catch(()=>{}),800);
+let GID=0;
 async function lidarBuildings(){
   const tok=refineToken; if(!S.lidarP||S.lidarRun===tok)return; S.lidarRun=tok;
   const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(tok!==refineToken||(!Ff&&!Fc))return;
@@ -1594,7 +1598,7 @@ async function lidarBuildings(){
   console.log('LiDAR buildings',n,Math.round(performance.now()-t0)+' ms');
   async function runPass(){
     const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
-    const gone=new Set(),added=[]; let tc=performance.now();
+    const gone=new Set(),added=[],hiLater=[]; let tc=performance.now();
     const list=S.meshes.filter(m=>!m.userData.lidar).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
     for(const m of list){
       if(performance.now()-tc>25){await new Promise(r=>setTimeout(r,0));tc=performance.now();if(tok!==refineToken)return false;}
@@ -1611,18 +1615,18 @@ async function lidarBuildings(){
       const F0=u.floors; let main=null,ma=-1; vols.forEach(v=>{if(v.tower)return;const ar=Math.abs(areaOf(v.rings[0]));if(ar>ma){ma=ar;main=v;}}); if(!main)main=vols[0];
       const sH=main&&F0>0?main.md.h/F0:0, ok=sH>=2.6&&sH<=3.8; // the IGN count is trusted only if it gives a believable storey height
       vols.forEach(v=>{const hb=v.md.h;v.md.floors=ok?(v===main?F0:Math.max(1,Math.round(hb/sH))):Math.max(1,Math.floor((hb-0.5)/2.9+0.35));});
-      const blocks=vols.map(v=>{const b=makeBlock(m,v.rings,v.md,roofSets);if(v.tower)b.userData.tower=true;return b;});
+      const gid=++GID; const blocks=vols.map(v=>{const b=makeBlock(m,v.rings,v.md,roofSets);if(v.tower)b.userData.tower=true;b.userData.gid=gid;return b;});
       if(!blocks.length)continue;
       buildingsGroup.remove(m);m.geometry.dispose();gone.add(m);
       if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh.geometry.dispose();gone.add(u.roofMesh);}
       const nearB=(p)=>blocks.filter(b=>!b.userData.tower).concat(blocks).reduce((b,x)=>{const d=x.geometry.boundingSphere.center.distanceTo(new THREE.Vector3(p.x,p.y,x.geometry.boundingSphere.center.z));return !b||d<b.d?{x,d}:b;},null).x;
       blocks.forEach(b=>{buildingsGroup.add(b);added.push(b);b.children.forEach(c=>added.push(c));});
-      if(m===S.target){S.target=nearB({x:0,y:0});S.target.material=matsFor(S.target.userData.usage,true);}
-      if(m===S.building||m===S.selMesh){const nb=nearB(S.win&&S.win.pos?S.win.pos:{x:0,y:0});if(m===S.building)S.building=nb;if(m===S.selMesh)S.selMesh=nb;nb.material=matsFor(nb.userData.usage,true);}
+      if(m===S.target){S.target=nearB({x:0,y:0});hiLater.push(S.target);}
+      if(m===S.building||m===S.selMesh){const nb=nearB(S.win&&S.win.pos?S.win.pos:{x:0,y:0});if(m===S.building)S.building=nb;if(m===S.selMesh)S.selMesh=nb;hiLater.push(nb);}
       n++;
     }
     if(tok!==refineToken)return false;
-    S.meshes=S.meshes.filter(m=>!gone.has(m)).concat(added.filter(b=>b.userData&&b.userData.rings));
+    S.meshes=S.meshes.filter(m=>!gone.has(m)).concat(added.filter(b=>b.userData&&b.userData.rings)); hiLater.forEach(m=>setHi(m,true));
     // pitched roofs: IGN ones of replaced buildings dropped, laser-confirmed ones added
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
     (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
@@ -1632,7 +1636,6 @@ async function lidarBuildings(){
     return true;
   }
 }
-window.__dbg={S,get cam(){return cam;}};
 function rebuildEdges(){
   if(edgeLines){scene.remove(edgeLines);edgeLines.geometry.dispose();edgeLines=null;}
   const parts=S.meshes.map(m=>m.userData.edgeArr).filter(Boolean).concat(S.roofEdgeParts||[]);
@@ -1678,7 +1681,7 @@ $('floorDown').addEventListener('click',()=>{const f=Math.max(0,(+$('floor').val
 $('floorUp').addEventListener('click',()=>{const f=(+$('floor').value||0)+1;$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
 $('along').addEventListener('change',scheduleSummary);
 $('addrChange').addEventListener('click',()=>{$('stepAddr').hidden=false;$('addrDone').hidden=true;$('addr').focus();});
-$('clearWin').addEventListener('click',()=>{if(S.selMesh&&S.selMesh!==S.target)S.selMesh.material=baseMats(S.selMesh);S.selMesh=null;$('stepPick').hidden=false;$('winBox').hidden=true;$('blindWarn').hidden=true;});
+$('clearWin').addEventListener('click',()=>{if(S.selMesh&&family(S.target).indexOf(S.selMesh)<0)setHi(S.selMesh,false);S.selMesh=null;$('stepPick').hidden=false;$('winBox').hidden=true;$('blindWarn').hidden=true;});
 $('grab').addEventListener('click',()=>{$('sheet').classList.toggle('collapsed');});
 $('timePill').addEventListener('click',()=>{const b=$('bottom');b.hidden=!b.hidden;$('timePill').setAttribute('aria-expanded',String(!b.hidden));});
 $('infoBtn').addEventListener('click',()=>{const b=$('info');b.hidden=!b.hidden;$('infoBtn').setAttribute('aria-expanded',String(!b.hidden));});
