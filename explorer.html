@@ -1525,7 +1525,13 @@ async function fetchCloud(R){
   const o=loc(X0,Y0),e=loc(X0+100,Y0),nn=loc(X0,Y0+100),A=(e[0]-o[0])/100,B=(nn[0]-o[0])/100,C=(e[1]-o[1])/100,D=(nn[1]-o[1])/100;
   const dLat=R/110574,dLon=R/(111320*Math.cos(S.lat*RAD));
   const r=await gpf(`https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=IGNF_LIDAR-HD_METADONNEE:metadata&OUTPUTFORMAT=application/json&COUNT=10&SRSNAME=CRS:84&BBOX=${S.lon-dLon},${S.lat-dLat},${S.lon+dLon},${S.lat+dLat},CRS:84`);
-  const urls=[...new Set((((await r.json()).features)||[]).map(f=>f.properties&&f.properties.url_npl).filter(Boolean))]; if(!urls.length)return null;
+  const urlSet=new Set((((await r.json()).features)||[]).map(f=>f.properties&&f.properties.url_npl).filter(Boolean));
+  const kx=new Set([Math.floor((X0-R)/1000),Math.floor((X0+R)/1000)]),ky=new Set([Math.floor((Y0-R)/1000),Math.floor((Y0+R)/1000)]);
+  if(urlSet.size<kx.size*ky.size){ // the index sometimes answers with one tile only: ask again at each corner
+    for(const [sx,sy] of [[-1,-1],[1,-1],[1,1],[-1,1]]){const ll=proj4('EPSG:2154','EPSG:4326',[X0+sx*R*0.95,Y0+sy*R*0.95]),e2=0.00005;
+      try{const r2=await gpf(`https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=IGNF_LIDAR-HD_METADONNEE:metadata&OUTPUTFORMAT=application/json&COUNT=4&SRSNAME=CRS:84&BBOX=${ll[0]-e2},${ll[1]-e2},${ll[0]+e2},${ll[1]+e2},CRS:84`);
+        ((await r2.json()).features||[]).forEach(f=>f.properties&&f.properties.url_npl&&urlSet.add(f.properties.url_npl));}catch(_){}}}
+  const urls=[...urlSet]; if(!urls.length)return null;
   const R2=R+8,cell=0.5,N=Math.ceil(2*R2/cell); const z6=new Float32Array(N*N).fill(-1e9),gnd=new Uint8Array(N*N); let total=0;
   for(const url of urls){
     const copc=await Copc.create(url); const cube=copc.info.cube;
