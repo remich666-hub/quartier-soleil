@@ -196,6 +196,7 @@ button.link:hover{color:var(--fg);background:none}
           <div><div class="strip" id="strip"></div><div class="axis"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div><div class="hint" id="todayText"></div></div>
           <button class="cta" id="report" type="button">Voir le rapport complet</button>
           <div class="btns"><button class="primary" id="viewWin" type="button" disabled>Vue depuis la fenêtre</button><button id="frameB" type="button">Recadrer</button></div>
+          <p class="hint" id="viewHint" hidden>Glissez pour regarder autour. Les silhouettes beige clair au fond sont les obstacles mesurés au laser (LiDAR) que la maquette ne contient pas, comme un mur absent des plans IGN. Le trait orange est l'horizon réel.</p>
         </div>
         <div class="foot"><button class="link" id="clearWin" type="button">Choisir un autre bâtiment</button></div>
       </div>
@@ -389,9 +390,9 @@ function setMode(mode){
   cam.mode=mode; const win=mode==='window';
   cam.hfov=82; camera.near=win?0.3:1; setFov();
   if(win){cam.baseYaw=Math.atan2(S.win.normal.x,S.win.normal.y);cam.yaw=0;cam.pitch=0.05;}
-  marker.visible=!win&&!!S.win; markerArrow.visible=!win&&!!S.win; facadeLine.visible=!win&&!!S.win; if(lidarShell)lidarShell.visible=win;
+  marker.visible=!win&&!!S.win; markerArrow.visible=!win&&!!S.win; facadeLine.visible=!win&&!!S.win; if(lidarShell)lidarShell.visible=win; $('viewHint').hidden=!win;
   $('viewWin').textContent=win?'Retour à la maquette':'Vue depuis la fenêtre'; if(!win)$('sheet').classList.remove('collapsed');
-  $('winHintText').textContent=win?'Vous êtes à la fenêtre. Glissez pour regarder autour ; l\'arc jaune est la course du soleil ce jour-là. Onglet Temps pour faire défiler l\'heure.':'Choisissez la façade, l\'étage et la position, puis calculez.';
+  $('winHintText').textContent=win?'Vous êtes à la fenêtre. Glissez pour regarder autour. Les silhouettes beige clair au fond sont les obstacles mesurés au LiDAR que la maquette ne contient pas ; le trait orange est l\'horizon réel.':'Choisissez la façade, l\'étage et la position, puis calculez.';
   if(win&&isPhone())showTab('bottom');
   applyCam(); update();
 }
@@ -1079,17 +1080,17 @@ function horizonAt(sk,az){ // interpolated horizon angle for an azimuth; outside
   return bd>3*RAD?Math.PI/2:sk.hor[best];
 }
 // LiDAR shell: the measured obstacles around the window as a surface, so the window view shows walls the IGN footprints miss
-const shellMat=new THREE.MeshLambertMaterial({color:0xd9d0c2,side:THREE.DoubleSide,transparent:true,opacity:0.92});
+const shellMat=new THREE.MeshBasicMaterial({color:0xe3dccf,side:THREE.DoubleSide,fog:false});
 let lidarShell=null;
-function drawShell(sk){
+function drawShell(sk){ // measured horizon as a flat backdrop far away: it only shows where the 3D model has nothing in front
   if(lidarShell){scene.remove(lidarShell);lidarShell.geometry.dispose();lidarShell=null;}
-  const w=S.win; if(!w||!sk)return; const sh=sk.shift||{dx:0,dy:0}; const P=[]; const z0=-w.pos.z-0.3;
-  for(let i=0;i<sk.az.length-1;i++){const a=sk.hits[i],b=sk.hits[i+1];if(!a||!b)continue;if(sk.hor[i]<0.02&&sk.hor[i+1]<0.02)continue;
-    const pa=[sh.dx+Math.sin(sk.az[i])*a.d,sh.dy+Math.cos(sk.az[i])*a.d],pb=[sh.dx+Math.sin(sk.az[i+1])*b.d,sh.dy+Math.cos(sk.az[i+1])*b.d];
-    const ta=a.z-w.pos.z,tb=b.z-w.pos.z;
-    P.push(pa[0],pa[1],z0, pb[0],pb[1],z0, pb[0],pb[1],tb, pa[0],pa[1],z0, pb[0],pb[1],tb, pa[0],pa[1],ta);}
+  const w=S.win; if(!w||!sk)return; const R=290, zb=-0.25*R; const P=[];
+  for(let i=0;i<sk.az.length-1;i++){const h1=sk.hor[i],h2=sk.hor[i+1];if(h1<0.01&&h2<0.01)continue;
+    const a=[Math.sin(sk.az[i])*R,Math.cos(sk.az[i])*R],b=[Math.sin(sk.az[i+1])*R,Math.cos(sk.az[i+1])*R];
+    const ta=Math.tan(Math.min(Math.max(h1,0),1.35))*R,tb=Math.tan(Math.min(Math.max(h2,0),1.35))*R;
+    P.push(a[0],a[1],zb, b[0],b[1],zb, b[0],b[1],tb, a[0],a[1],zb, b[0],b[1],tb, a[0],a[1],ta);}
   if(!P.length)return; const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.computeVertexNormals();
-  lidarShell=new THREE.Mesh(g,shellMat);lidarShell.position.copy(w.pos);lidarShell.visible=cam.mode==='window';lidarShell.renderOrder=2;scene.add(lidarShell);
+  lidarShell=new THREE.Mesh(g,shellMat);lidarShell.position.copy(w.pos);lidarShell.visible=cam.mode==='window';lidarShell.renderOrder=-1;scene.add(lidarShell);
 }
 function drawSkyline(sk){ drawShell(sk);
   const pts=[];const R=300;sk.az.forEach((az,i)=>{const h=sk.hor[i];pts.push(new THREE.Vector3(Math.sin(az)*R,Math.cos(az)*R,Math.tan(Math.min(h,1.3))*R));});
