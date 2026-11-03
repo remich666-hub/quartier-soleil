@@ -148,7 +148,7 @@ function verdict(R){
   const main=R.obstacles&&R.obstacles[0];
   let t=`Cette fenêtre est <b>${level}</b> : ${hm(a)} de soleil direct par jour en moyenne, sur ${hm(R.annual.free)} possibles pour une façade ${DIRL[R.window.dir]||''} sans aucun obstacle.`;
   t+= w<0.25?` En hiver, le soleil ne l'atteint pas directement.`:` Le 21 décembre, elle reçoit ${hm(w)} de soleil.`;
-  if(main&&lost>0.5)t+=` Le principal obstacle est ${main.type==='végétation'?'de la végétation':main.type==='votre bâtiment'?'une autre partie de votre bâtiment':'un bâtiment'} au ${DIRL[main.dir]}, qui retire environ ${main.lostH} h de soleil par an.`;
+  if(main&&lost>0.5)t+=` Le principal obstacle est ${main.type==='végétation'?'de la végétation':main.type==='votre bâtiment'?'une autre partie de votre bâtiment':main.type==='bâtiment'?'un bâtiment voisin':'un mur ou le relief'} au ${DIRL[main.dir]}, qui retire environ ${main.lostH} h de soleil par an.`;
   return t;
 }
 
@@ -250,7 +250,7 @@ function render(R){
     <div class="chart">${maskChart(R)}</div>
     <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil visible</span><span><i class="sw" style="border:1px dashed var(--shade-ink)"></i>Soleil caché</span><span><i class="sw" style="background:var(--shade)"></i>Obstacles et mur de la façade</span><span><i class="sw" style="border-top:1px dashed var(--muted);border-radius:0;height:0;width:14px"></i>Heures</span></div>
     ${obs.length?`<div class="figure"><h3>Obstacles identifiés</h3><table><thead><tr><th>Obstacle</th><th>Direction</th><th class="n">Distance</th><th class="n">Hauteur</th><th class="n">Hauteur dans le ciel</th><th class="n">Soleil retiré / an</th></tr></thead><tbody>
-      ${obs.map(o=>`<tr><td><span class="tag"><i class="dot" style="background:${o.type==='végétation'?'#8aa37c':o.type==='relief'?'#b9a98f':'#b8b0a3'}"></i>${o.type==='végétation'?'Végétation':o.type==='votre bâtiment'?'Votre bâtiment':o.type==='bâtiment'?'Bâtiment voisin':'Relief'}</span></td><td>${DIRL[o.dir]} <span class="mono">${o.az0}°–${o.az1}°</span></td><td class="n">${o.d} m</td><td class="n">${o.h!=null?fr(o.h)+' m':'—'}</td><td class="n">jusqu'à ${o.deg}°</td><td class="n">${o.lostH} h</td></tr>`).join('')}
+      ${obs.map(o=>`<tr><td><span class="tag"><i class="dot" style="background:${o.type==='végétation'?'#8aa37c':o.type==='relief'?'#b9a98f':'#b8b0a3'}"></i>${o.type==='végétation'?'Végétation':o.type==='votre bâtiment'?'Votre bâtiment':o.type==='bâtiment'?'Bâtiment voisin':'Mur, clôture ou relief'}</span></td><td>${DIRL[o.dir]} <span class="mono">${o.az0}°–${o.az1}°</span></td><td class="n">${o.d} m</td><td class="n">${o.h!=null?fr(o.h)+' m':'—'}</td><td class="n">jusqu'à ${o.deg}°</td><td class="n">${o.lostH} h</td></tr>`).join('')}
       </tbody></table><p class="small">« Soleil retiré » : heures de soleil direct par an que la fenêtre recevrait si cet obstacle n'existait pas.</p></div>`:''}`;
   const views=(R.images&&R.images.views)||[];
   const vlab=[['21 décembre','12 h 30'],['20 mars','13 h'],['21 juin','13 h 30']];
@@ -284,7 +284,7 @@ function render(R){
 
 (async()=>{
   const q=new URLSearchParams(location.search); let R=null;
-  if(!q.get('ex')){try{const s=sessionStorage.getItem('qs-report');if(s)R=JSON.parse(s);}catch(e){}}
+  if(!q.get('ex')){try{const s=localStorage.getItem('qs-report');if(s)R=JSON.parse(s);}catch(e){}}
   if(!R){const ex=(q.get('ex')||'exemple').replace(/[^a-z0-9-]/g,'');try{R=await (await fetch(`exemples/${ex}.json`)).json();$('#toolbar').hidden=false;}catch(e){$('#doc').innerHTML='<p class="loading">Rapport introuvable.</p>';return;}}
   if(document.fonts&&document.fonts.ready)await document.fonts.ready;
   render(R);

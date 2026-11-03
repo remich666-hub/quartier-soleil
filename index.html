@@ -144,7 +144,7 @@ td:first-child,th:first-child{text-align:left}
           <b>Étage</b><span class="row"><input type="number" id="floor" min="0" max="40" step="1" value="2"> <span class="hint">0 = rez-de-chaussée</span></span>
           <b>Position</b><span class="row"><input type="range" id="along" min="5" max="95" value="50" style="flex:1"><span class="hint">le long de la façade</span></span>
         </div>
-        <div class="btns" style="margin-top:8px"><button class="primary" id="viewWin" type="button" disabled>Vue depuis la fenêtre</button><button id="analyze" type="button">Calculer l'année</button><button id="lidar" type="button">Vérifier au LiDAR HD</button><button id="frameB" type="button">Cadrer le bâtiment</button><button id="clearWin" type="button">Retirer</button></div>
+        <div class="btns" style="margin-top:8px"><button class="primary" id="viewWin" type="button" disabled>Vue depuis la fenêtre</button><button id="analyze" type="button">Calculer l'année</button><button id="lidar" type="button">Vérifier au LiDAR HD</button><button id="report" type="button">Rapport complet</button><button id="frameB" type="button">Cadrer le bâtiment</button><button id="clearWin" type="button">Retirer</button></div>
       </div>
       <div id="results" hidden>
         <h2>Aujourd'hui, sur cette fenêtre</h2>
@@ -1106,6 +1106,15 @@ async function captureViews(){ // aerial view of the building + views from the w
   renderer.setPixelRatio(pr); renderer.setSize(prev.x,prev.y,false); resize(); setFov(); applyCam(); update();
   return out;
 }
+$('report').addEventListener('click',async()=>{
+  if(!S.win)return; const b=$('report'); const tab=window.open('','_blank'); b.disabled=true; b.textContent='Rapport…';
+  try{ if(tab)tab.document.write('<p style="font:15px system-ui;padding:40px;color:#5e554a">Préparation du rapport d\'ensoleillement…</p>');
+    const R=await reportData(); R.images=await captureViews(); R.ref='QS-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+    try{localStorage.setItem('qs-report',JSON.stringify(R));}catch(e){R.images={};localStorage.setItem('qs-report',JSON.stringify(R));}
+    const url=new URL('rapport.html',location.href).href; if(tab&&!tab.closed)tab.location.href=url; else location.href=url;
+  }catch(e){toast(e.message||'Rapport impossible');if(tab)tab.close();}
+  b.disabled=false; b.textContent='Rapport complet';
+});
 /* ---------- sun analysis ---------- */
 function sunHits(pos,normal,inst,useLidar){
   const sp=sunPos(inst,S.lat,S.lon); if(sp.alt<=0.005)return false;
