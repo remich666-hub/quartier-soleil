@@ -983,12 +983,17 @@ const skyLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMater
 skyLine.renderOrder=6; skyLine.visible=false; scene.add(skyLine);
 function unproj(x,y){const kx=111320*Math.cos(S.lat*RAD),ky=110574;return [S.lon+x/kx,S.lat+y/ky];}
 function distToRing(x,y,ring){let best=1e9;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[j],b=ring[i];const dx=b.x-a.x,dy=b.y-a.y;const L2=dx*dx+dy*dy||1;let t=((x-a.x)*dx+(y-a.y)*dy)/L2;t=Math.max(0,Math.min(1,t));best=Math.min(best,Math.hypot(a.x+t*dx-x,a.y+t*dy-y));}return best;}
-function registerFootprint(obj,MH){ // shift (≤3 m) that best lays the IGN footprint on the LiDAR roof
-  const rings=obj.userData.rings; const r0=rings[0]; const xs=r0.map(p=>p.x),ys=r0.map(p=>p.y); const pts=[];
-  for(let x=Math.min(...xs);x<=Math.max(...xs);x+=0.5)for(let y=Math.min(...ys);y<=Math.max(...ys);y+=0.5)if(pointInPoly(x,y,r0))pts.push([x,y]);
-  if(pts.length<8)return {dx:0,dy:0}; const thr=Math.max(1.8,(obj.userData.h||3)*0.5);
-  const score=(dx,dy)=>{let s=0,n=0;pts.forEach(([x,y])=>{const v=MH.at(x+dx,y+dy);if(v!=null){n++;if(v>thr)s++;}});return n?s/n:0;};
-  let best={dx:0,dy:0,s:score(0,0)};for(let dx=-3;dx<=3;dx+=0.5)for(let dy=-3;dy<=3;dy+=0.5){const s=score(dx,dy);if(s>best.s+0.01||(Math.abs(s-best.s)<=0.01&&Math.hypot(dx,dy)<Math.hypot(best.dx,best.dy)))best={dx,dy,s};}
+function registerFootprint(obj,MH){ // shift (≤2 m) that best lays the IGN footprint on the LiDAR roof: high inside, low just outside
+  const rings=obj.userData.rings; const r0=rings[0]; const xs=r0.map(p=>p.x),ys=r0.map(p=>p.y); const pin=[],pout=[];
+  for(let x=Math.min(...xs);x<=Math.max(...xs);x+=0.5)for(let y=Math.min(...ys);y<=Math.max(...ys);y+=0.5)if(pointInPoly(x,y,r0))pin.push([x,y]);
+  for(let i=0,j=r0.length-1;i<r0.length;j=i++){const a=r0[j],b=r0[i];const L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.5)continue;let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;if(pointInPoly(mx+nx*0.6,my+ny*0.6,r0)){nx=-nx;ny=-ny;}
+    for(let t=0.5;t<L-0.4;t+=0.75){const px=a.x+(b.x-a.x)*t/L,py=a.y+(b.y-a.y)*t/L;[1,1.75].forEach(o=>{const qx=px+nx*o,qy=py+ny*o;if(!pointInPoly(qx,qy,r0))pout.push([qx,qy]);});}}
+  if(pin.length<8)return {dx:0,dy:0}; const thr=Math.max(1.8,(obj.userData.h||3)*0.5);
+  const frac=(pts,dx,dy)=>{let s=0,n=0;pts.forEach(([x,y])=>{const v=MH.at(x+dx,y+dy);if(v!=null){n++;if(v>thr)s++;}});return n?s/n:0;};
+  const score=(dx,dy)=>frac(pin,dx,dy)-0.6*frac(pout,dx,dy);
+  const s0=score(0,0); let best={dx:0,dy:0,s:s0};
+  for(let dx=-2;dx<=2;dx+=0.5)for(let dy=-2;dy<=2;dy+=0.5){const s=score(dx,dy);if(s>best.s+0.01||(Math.abs(s-best.s)<=0.01&&Math.hypot(dx,dy)<Math.hypot(best.dx,best.dy)))best={dx,dy,s};}
+  if(best.s<s0+0.04)return {dx:0,dy:0};
   return {dx:best.dx,dy:best.dy};
 }
 async function fetchSkyline(){
