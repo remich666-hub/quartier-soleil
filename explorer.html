@@ -90,7 +90,7 @@ button.link:hover{color:var(--fg);background:none}
 .badge.busy i{background:var(--accent);animation:pulse 1s var(--ease) infinite alternate}
 @keyframes pulse{to{opacity:.3}}
 .strip{display:grid;grid-template-columns:repeat(96,1fr);gap:1px;height:12px;border-radius:4px;overflow:hidden}
-.strip i{background:var(--raised)}
+.strip i{background:var(--line)}
 .strip i.on{background:var(--sun)}
 .strip i.now{outline:2px solid var(--fg);outline-offset:-1px}
 .axis{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-family:var(--mono)}
@@ -118,10 +118,12 @@ button.link:hover{color:var(--fg);background:none}
   #sheet{top:auto;left:0;right:0;bottom:0;width:auto;max-height:56%;gap:0}
   #left{border-radius:18px 18px 0 0;border-bottom:0;padding:14px max(16px,env(safe-area-inset-left,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-right,0px));gap:14px}
   #sheet.collapsed #left .collapsible{display:none}
-  .grab{display:block;width:40px;height:4px;border-radius:2px;background:var(--line);margin:-4px auto 0;border:0;padding:0}
+  .grab{display:block;width:40px;height:4px;border-radius:2px;background:var(--muted);opacity:.5;margin:-4px auto 0;border:0;padding:0}
   #timePill{bottom:auto;top:max(12px,env(safe-area-inset-top,0px))}
   #bottom{bottom:auto;top:calc(max(12px,env(safe-area-inset-top,0px)) + 48px)}
   .big .v{font-size:48px}
+  #results{order:-1;border-top:0;padding-top:0;border-bottom:1px solid var(--line);padding-bottom:14px}
+  #winBox>.n{order:-2}
   #toast{top:auto;bottom:calc(56% + 12px)}
 }
 @media (min-width:761px){.grab{display:none}}
@@ -160,6 +162,7 @@ button.link:hover{color:var(--fg);background:none}
         <div>Vos adresses ne sont enregistrées que sur cet appareil. <button class="link" type="button" id="wipe">Effacer mes données</button></div>
       </div>
 
+      <div class="addrDone" id="addrDone" hidden><span class="a" id="addrDoneText"></span><button class="link" type="button" id="addrChange">Changer d'adresse</button></div>
       <div class="step collapsible" id="stepAddr">
         <span class="n">01 · Adresse</span>
         <form id="form" class="row">
@@ -983,7 +986,7 @@ function selectBuilding(obj){
   $('floor').value=fl; $('along').value=50;
   $('winBox').hidden=false; $('viewWin').disabled=false; $('results').hidden=true;
   $('winHintText').textContent='Choisissez la façade, l\'étage et la position, puis calculez.';
-  $('stepPick').hidden=true; refreshWinUI();
+  $('stepPick').hidden=true; $('stepAddr').hidden=true; $('addrDone').hidden=false; $('addrDoneText').textContent=S.label||''; refreshWinUI();
 }
 function chooseFacade(idx){
   const obj=S.building; if(!obj)return; const f=obj.userData.facades[idx]; if(!f)return;
@@ -1270,7 +1273,7 @@ async function lidarVegGrid(){
 function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?` · végétation LiDAR HD (rayon ${CORE} m)`:c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
 /* ---------- load flow ---------- */
 async function load(q){
-  $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
+  $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('addrDone').hidden=true; $('stepAddr').hidden=false; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
     const g=await geocode(q); S.lat=g.lat;S.lon=g.lon;S.label=g.label; S.counts={}; startLidar();
@@ -1308,6 +1311,7 @@ function refreshWinUI(){
   const f=+$('floor').value||0; const u=S.building&&S.building.userData; const maxF=u?Math.max(0,(u.floors||Math.round(u.h/3))-1):40;
   $('floorLabel').innerHTML=`${floorName(f)}<small>${u?`${(u.floors||'?')} niveaux · ${Math.round(u.h)} m`:''}</small>`;
   $('floorDown').disabled=f<=0; $('floorUp').disabled=f>=maxF;
+  if(/^Quartier chargé/.test($('status').textContent))$('status').textContent='Quartier chargé.';
 }
 let sumT=null, sumTok=0;
 function scheduleSummary(){ if(!S.win)return; clearTimeout(sumT); $('results').hidden=false; $('calcBadge').classList.add('busy'); $('calcText').textContent='Calcul en cours…'; sumT=setTimeout(runSummary,280); }
@@ -1335,6 +1339,7 @@ $('facNext').addEventListener('click',()=>{refreshWinUI();scheduleSummary();});
 $('floorDown').addEventListener('click',()=>{const f=Math.max(0,(+$('floor').value||0)-1);$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
 $('floorUp').addEventListener('click',()=>{const f=(+$('floor').value||0)+1;$('floor').value=f;$('floor').dispatchEvent(new Event('input'));refreshWinUI();scheduleSummary();});
 $('along').addEventListener('change',scheduleSummary);
+$('addrChange').addEventListener('click',()=>{$('stepAddr').hidden=false;$('addrDone').hidden=true;$('addr').focus();});
 $('clearWin').addEventListener('click',()=>{$('stepPick').hidden=false;$('winBox').hidden=true;$('blindWarn').hidden=true;});
 $('grab').addEventListener('click',()=>{$('sheet').classList.toggle('collapsed');});
 $('timePill').addEventListener('click',()=>{const b=$('bottom');b.hidden=!b.hidden;$('timePill').setAttribute('aria-expanded',String(!b.hidden));});
