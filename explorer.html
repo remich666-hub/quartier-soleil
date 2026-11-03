@@ -1451,7 +1451,7 @@ function planeRoof(outer,pts,eave,top){
   const fit=idx=>{let n=idx.length,sx=0,sy=0,sz=0;idx.forEach(i=>{sx+=pts[i].x;sy+=pts[i].y;sz+=pts[i].h;});sx/=n;sy/=n;sz/=n;let xx=0,xy=0,yy=0,xz=0,yz=0;
     idx.forEach(i=>{const dx=pts[i].x-sx,dy=pts[i].y-sy,dz=pts[i].h-sz;xx+=dx*dx;xy+=dx*dy;yy+=dy*dy;xz+=dx*dz;yz+=dy*dz;});const det=xx*yy-xy*xy;if(Math.abs(det)<1e-6)return null;
     const a=(xz*yy-yz*xy)/det,b=(yz*xx-xz*xy)/det;let r=0;idx.forEach(i=>{const e=pts[i].h-(sz+a*(pts[i].x-sx)+b*(pts[i].y-sy));r+=e*e;});return {a,b,c:sz-a*sx-b*sy,rms:Math.sqrt(r/n)};};
-  const faces=[],gables=[]; let err=0,cnt=0,minEdge=Infinity;
+  const faces=[],gables=[]; let err=0,cnt=0; const hWall=Math.max(2,eave-0.05);
   for(const w of wings){
     const ring=w.ring; const inner=pts.map((p,i)=>i).filter(i=>pointInPoly(pts[i].x,pts[i].y,ring)&&distToRing(pts[i].x,pts[i].y,ring)>=0.6);
     if(inner.length<12)return null;
@@ -1475,12 +1475,11 @@ function planeRoof(outer,pts,eave,top){
     inner.forEach(i=>{const e=pts[i].h-zEnv(pts[i].x,pts[i].y);err+=e*e;cnt++;});
     planes.forEach((pl,i)=>{let poly=ring.slice();for(let j=0;j<planes.length&&poly;j++){if(j===i)continue;const q=planes[j];
         poly=clipHalf(poly,q.a-pl.a,q.b-pl.b,q.c-pl.c);} // keep where pl ≤ q
+      if(poly)poly=clipHalf(poly,pl.a,pl.b,pl.c-hWall); // below the eaves the block's own top shows
       if(poly&&Math.abs(areaOf(poly))>0.05)faces.push({poly,pl});});
-    ring.forEach(p=>{minEdge=Math.min(minEdge,zEnv(p.x,p.y));});
     w.zEnv=zEnv;
   }
   const rmse=Math.sqrt(err/Math.max(1,cnt)); if(rmse>0.7||!faces.length)return null;
-  const hWall=Math.max(2,Math.min(eave,minEdge-0.03));
   // gable / side walls between hWall and the roof edge, following every face vertex lying on the outline of each wing
   wings.forEach(w=>{const r=w.ring;for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length],L=a.distanceTo(b);if(L<0.05)continue;
       const ts=[0,1];faces.forEach(f=>f.poly.forEach(p=>{const t=((p.x-a.x)*(b.x-a.x)+(p.y-a.y)*(b.y-a.y))/(L*L);if(t>0.001&&t<0.999&&Math.abs((p.x-a.x)*(b.y-a.y)-(p.y-a.y)*(b.x-a.x))/L<0.02)ts.push(t);}));
