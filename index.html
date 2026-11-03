@@ -443,7 +443,7 @@ function orthoLayer(mesh,mat,lat,lon,z,R,fallback,segs,onDone){
 function loadOrtho(lat,lon){
   orthoLayer(ground,groundMat,lat,lon,17,3,0xe9e6df,28);          // 7×7 tiles ≈ 1.4 km, 80 cm/px
   orthoLayer(inner,innerMat,lat,lon,19,isPhone()?4:5,0,40,(raw,w,e,n,s)=>{ // 9×9 or 11×11 tiles ≈ 450–550 m, 20 cm/px
-    if(!raw)return; S.rawOrtho={raw,w,e,n,s}; try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;if(S.loading){S.pendingRefine=true;}else{applyVegetation();refineWithLidar();}}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
+    if(!raw)return; S.rawOrtho={raw,w,e,n,s}; try{const det=detectCanopy(raw,w,e,n,s);treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}catch(err){console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);}
   });
   inner.position.z=ground.position.z+0.06;
 }
@@ -712,7 +712,7 @@ function buildScene(features){
 /* ---------- trees from IGN vegetation zones ---------- */
 function pointInPoly(x,y,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const xi=ring[i].x,yi=ring[i].y,xj=ring[j].x,yj=ring[j].y;if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;}return inside;}
 /* Trees come from three sources, merged and de-duplicated: OSM tree points (exact), canopy detected in the orthophoto (works everywhere), IGN vegetation zones (fallback). */
-const treeSets={osm:[],ortho:[],ign:[],lidar:[]}; let lidarVegMesh=null; const CORE=70; const inCore=(x,y)=>Math.abs(x)<CORE&&Math.abs(y)<CORE;
+const treeSets={osm:[],ortho:[],ign:[],lidar:[]}; let lidarVegMesh=null; let CORE=70; const inCore=(x,y)=>Math.abs(x)<CORE&&Math.abs(y)<CORE;
 function vegZoneSpots(features){
   const spots=[];
   features.forEach(f=>{
@@ -785,7 +785,25 @@ async function fetchOsm(lat,lon,radius){
   return {trees,hedges};
 }
 /* LiDAR HD object heights (MNH) for a list of local points; sequential 400-point batches with retry */
+/* LiDAR HD as rasters (IGN WMS-R, float32 BIL): one request for the whole area instead of thousands of point queries */
+async function fetchLidarRaster(kind,R,res){
+  const W=Math.round(2*R/res); const [lo0,la0]=unproj(-R,-R), [lo1,la1]=unproj(R,R);
+  const u=`https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=IGNF_LIDAR-HD_${kind}_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G&STYLES=&CRS=EPSG:4326&BBOX=${la0.toFixed(7)},${lo0.toFixed(7)},${la1.toFixed(7)},${lo1.toFixed(7)}&WIDTH=${W}&HEIGHT=${W}&FORMAT=image/x-bil;bits=32`;
+  const r=await gpf(u); if(!r.ok)return null; const buf=await r.arrayBuffer(); if(buf.byteLength!==W*W*4)return null;
+  const f=new Float32Array(buf); const ok=v=>v>-500&&v<9000; let nv=0; for(let k=0;k<f.length;k+=97)if(ok(f[k]))nv++; if(nv<(f.length/97)*0.6)return null;
+  const at=(x,y)=>{const i=Math.floor((x+R)/res),j=Math.floor((R-y)/res);if(i<0||j<0||i>=W||j>=W)return null;const v=f[j*W+i];return ok(v)?v:null;};
+  const max=(x,y,rad)=>{let m=null;for(let dy=-rad;dy<=rad+1e-6;dy+=res)for(let dx=-rad;dx<=rad+1e-6;dx+=res){const v=at(x+dx,y+dy);if(v!=null&&(m==null||v>m))m=v;}return m;};
+  return {R,res,W,at,max};
+}
+function startLidar(){ // launched right after geocoding, in parallel with buildings
+  const c=p=>p.catch(()=>null);
+  S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1))};
+}
 async function lidarHeights(pts){
+  const M=S.lidarP&&await S.lidarP.mnh; if(M)return pts.map(p=>M.max(p.x,p.y,1));
+  return lidarHeightsApi(pts);
+}
+async function lidarHeightsApi(pts){
   const out=new Array(pts.length).fill(null); const B=400; const jobs=[];
   for(let s=0;s<pts.length;s+=B)jobs.push(s);
   const worker=async()=>{while(jobs.length){const s=jobs.shift();const sl=pts.slice(s,s+B);
@@ -971,6 +989,12 @@ async function fetchSkyline(){
   const own=w.obj.userData.rings[0]; const pts=[];
   AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+Math.sin(az)*d,y=w.pos.y+Math.cos(az)*d;if(d<8&&pointInPoly(x,y,own))return;const ll=unproj(x,y);pts.push({ai,d,lon:ll[0],lat:ll[1]});}));
   const winZ=S.alt0+w.pos.z; const hor=new Array(AZ.length).fill(-0.2); const hits=new Array(AZ.length).fill(null); let got=0;
+  const F=S.lidarP&&await S.lidarP.mnsFine, C=S.lidarP&&await S.lidarP.mns;
+  if(F||C){ // rasters: instant
+    pts.forEach(p=>{const ll=proj(p.lon,p.lat);let z=null;if(F&&p.d<115)z=F.at(ll[0],ll[1]);if(z==null&&C)z=C.at(ll[0],ll[1]);if(z==null)return;got++;const ang=Math.atan2(z-winZ,p.d);if(ang>hor[p.ai]){hor[p.ai]=ang;hits[p.ai]={d:p.d,z:z-S.alt0};}});
+    if(got>=pts.length*0.5)return {az:AZ,hor,hits,n:got};
+    got=0;hor.fill(-0.2);hits.fill(null);
+  }
   const B=400; // sequential: the IGN service rate-limits parallel bursts (429)
   for(let s=0;s<pts.length;s+=B){const sl=pts.slice(s,s+B);
     for(let attempt=0;attempt<3;attempt++){const c=new AbortController();const id=setTimeout(()=>c.abort(),25000);let ok=false;try{
@@ -1048,25 +1072,25 @@ function verdict(rows){
   $('verdict').textContent=t;
 }
 
-function applyVegetation(){const nt=rebuildTrees();if(S.counts)S.counts.orthoHedges=buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[]));if(S.counts)status(loadedText(nt));return nt;}
+function applyVegetation(){const nt=rebuildTrees();if(S.counts)S.counts.orthoHedges=buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[]));if(S.counts&&!S.loading)status(loadedText(nt));return nt;}
 let refineToken=0;
 async function refineWithLidar(){ // real heights for trees and hedges; drops false trees (lawn)
   const tok=++refineToken; await lidarVegGrid(); if(tok!==refineToken)return; const core=treeSets.lidar.length>0;
   const trees=treeSets.osm.concat(treeSets.ortho).filter(t=>!(core&&inCore(t.x,t.y))); const hedges=(S.osmHedges||[]).concat(S.orthoHedges||[]).filter(g=>!(core&&!g.osm&&inCore(g.cx,g.cy)));
   const hp=hedges.map(g=>{const s=g.segs;if(!s.length)return[{x:g.cx,y:g.cy}];const pick=[0,s.length>>1,s.length-1].map(i=>s[i]);return pick.map(([a,b])=>({x:(a[0]+b[0])/2,y:(a[1]+b[1])/2}));});
   const pts=trees.map(t=>({x:t.x,y:t.y})).concat(hp.flat()); if(!pts.length)return;
-  status(loadedText(trees.length)+' Hauteurs LiDAR des arbres…');
+  if(!S.loading&&!(S.lidarP&&await S.lidarP.mnh))status(loadedText(trees.length)+' Hauteurs LiDAR des arbres…');
   const hs=await lidarHeights(pts); if(tok!==refineToken)return;
   let kept=[],dropped=0; trees.forEach((t,i)=>{const z=hs[i];if(z==null){kept.push(t);return;}if(z<1.5){dropped++;return;}t.h=z;t.vs=0.85+Math.random()*0.5;kept.push(t);});
   treeSets.osm=[];treeSets.ortho=kept.concat(core?treeSets.ortho.filter(t=>inCore(t.x,t.y)):[]);
   const hg=[];let off=trees.length;hedges.forEach((g,i)=>{const zs=hp[i].map((_,k)=>hs[off+k]).filter(v=>v!=null);off+=hp[i].length;const z=zs.length?zs.sort((a,b)=>b-a)[Math.min(zs.length-1,1)]:null;if(z!=null){if(z<0.5)return;if(z>5&&!g.osm){g.segs.forEach(([a,b])=>kept.push({x:(a[0]+b[0])/2,y:(a[1]+b[1])/2,r:2,h:z,vs:1.1}));return;}g.h=Math.min(4.5,Math.max(0.8,z));}hg.push(g);});
-  S.orthoHedges=hg.filter(g=>!g.osm); S.osmHedges=hg.filter(g=>g.osm); const nt=rebuildTrees(); S.counts&&(S.counts.orthoHedges=buildHedges(hg)); S.counts&&(S.counts.lidar=true); status(loadedText(nt));
+  S.orthoHedges=hg.filter(g=>!g.osm); S.osmHedges=hg.filter(g=>g.osm); const nt=rebuildTrees(); S.counts&&(S.counts.orthoHedges=buildHedges(hg)); S.counts&&(S.counts.lidar=true); if(!S.loading)status(loadedText(nt));
 }
 /* LiDAR HD vegetation grid around the address: MNH every 2 m, crossed with the orthophoto colour → exact hedges and trees */
 async function lidarVegGrid(){
-  const tok=refineToken; const step=2, R=CORE; treeSets.lidar=[]; const n=Math.round(2*R/step)+1; const pts=[];
+  const tok=refineToken; const MH=S.lidarP&&await S.lidarP.mnh; if(tok!==refineToken)return; CORE=MH?150:70; const step=2, R=CORE; treeSets.lidar=[]; const n=Math.round(2*R/step)+1; const pts=[];
   for(let j=0;j<n;j++)for(let i=0;i<n;i++)pts.push({x:-R+i*step,y:R-j*step});
-  status('Végétation LiDAR HD autour de l\'adresse (10–15 s)…');
+  if(!MH&&!S.loading)status('Végétation LiDAR HD autour de l\'adresse (10–15 s)…');
   const hs=await lidarHeights(pts); if(tok!==refineToken)return; if(hs.filter(v=>v!=null).length<n*n*0.5)return; // no LiDAR HD here
   // building mask (+1 cell dilation)
   const mc=document.createElement('canvas');mc.width=mc.height=n;const mg=mc.getContext('2d');mg.fillStyle='#000';mg.fillRect(0,0,n,n);mg.fillStyle='#fff';mg.strokeStyle='#fff';mg.lineWidth=2.2;
@@ -1102,15 +1126,15 @@ async function lidarVegGrid(){
   if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();const k=blockers.indexOf(lidarVegMesh);if(k>=0)blockers.splice(k,1);lidarVegMesh=null;}
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
     lidarVegMesh=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0x6f9468}));lidarVegMesh.castShadow=lidarVegMesh.receiveShadow=true;scene.add(lidarVegMesh);blockers.push(lidarVegMesh);}
-  treeSets.lidar=trees.concat(bushes); S.counts&&(S.counts.lidarVeg=nv); const nt=rebuildTrees(); buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[])); S.obstacles=S.meshes.concat(monuments,roofMeshes,blockers,structures,roadMeshes.length?[roadMeshes[0]]:[]); if(treeCrown)S.obstacles.push(treeCrown); status(loadedText(nt));
+  treeSets.lidar=trees.concat(bushes); S.counts&&(S.counts.lidarVeg=nv); const nt=rebuildTrees(); buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[])); S.obstacles=S.meshes.concat(monuments,roofMeshes,blockers,structures,roadMeshes.length?[roadMeshes[0]]:[]); if(treeCrown)S.obstacles.push(treeCrown); if(!S.loading)status(loadedText(nt));
 }
-function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?' · végétation LiDAR HD (rayon 70 m)':c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
+function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?` · végétation LiDAR HD (rayon ${CORE} m)`:c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
 /* ---------- load flow ---------- */
 async function load(q){
   $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
-    const g=await geocode(q); S.lat=g.lat;S.lon=g.lon;S.label=g.label;
+    const g=await geocode(q); S.lat=g.lat;S.lon=g.lon;S.label=g.label; S.counts={}; startLidar();
     status('Bâtiments et relief IGN…');
     const [alt,feats,terrain]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000),fetchTerrain(g.lat,g.lon).catch(()=>null)]);
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
@@ -1120,12 +1144,12 @@ async function load(q){
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=440, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
-    const [veg,osm,wx,roads,pois,hedges,walls,rails,water]=await Promise.all([L('zone_de_vegetation',800),fetchOsm(g.lat,g.lon,R).catch(()=>({trees:[],hedges:[]})),fetchWeather(g.lat,g.lon).catch(()=>null),
+    const [veg,osm,wx,roads,pois,hedges,walls,rails,water]=await Promise.all([L('zone_de_vegetation',800),Promise.resolve({trees:[],hedges:[]}),fetchWeather(g.lat,g.lon).catch(()=>null),
       wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,600,4000).catch(()=>[]),L('zone_d_activite_ou_d_interet',600),L('haie',2000),L('construction_lineaire',2000),wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,600,800).catch(()=>[]),L('surface_hydrographique',500)]);
     const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,600,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); const nl=applyLandmarks(pois);
-    treeSets.ign=vegZoneSpots(veg); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts={osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}; S.wx=wx; if(!wx)toast('Météo indisponible');
-    S.loading=false; applyVegetation(); if(S.pendingRefine||treeSets.ortho.length||S.orthoHedges.length)refineWithLidar();
+    treeSets.ign=vegZoneSpots(veg); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}); S.wx=wx; if(!wx)toast('Météo indisponible');
+    S.loading=false; applyVegetation();
     try{localStorage.setItem('qs-addr',q);}catch(e){}
   }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;}
   $('go').disabled=false; update();
