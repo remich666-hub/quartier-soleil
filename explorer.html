@@ -1401,6 +1401,42 @@ function makeBlock(src,rings,model,roofSets){
   const eg=new THREE.EdgesGeometry(geo,25),arr=eg.attributes.position.array,off=new Float32Array(arr.length);for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+u.zBase-SINK;}mesh.userData.edgeArr=off;eg.dispose();
   geo.computeBoundingBox();geo.computeBoundingSphere();return mesh;
 }
+function domAngle(r){let sx=0,sy=0;for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length],L=a.distanceTo(b),t=4*Math.atan2(b.y-a.y,b.x-a.x);sx+=L*Math.cos(t);sy+=L*Math.sin(t);}return Math.atan2(sy,sx)/4;}
+/* Towers, upper storeys, roof structures: parts that stand clearly above the rest of the footprint.
+   A wall makes the height jump at once (≥ 1.4 m within 1 m), a roof slope does not: only real steps are kept.
+   Each one becomes a rectangle aligned on the building's walls, stacked on the main volume. */
+function findTowers(rings,u,F,green){
+  const r0=rings[0],a=domAngle(r0),ca=Math.cos(a),sa=Math.sin(a),sh=u.shift||{dx:0,dy:0},st=0.5,cA=st*st;
+  let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; r0.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
+  const nu=Math.ceil((u1-u0)/st),nv=Math.ceil((v1-v0)/st); if(nu<4||nv<4||nu*nv>200000)return null;
+  const H=new Float32Array(nu*nv).fill(NaN),XY=new Float32Array(nu*nv*2); let nIn=0; const hs=[];
+  for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const U=u0+(i+0.5)*st,V=v0+(j+0.5)*st,x=U*ca-V*sa,y=U*sa+V*ca,k=j*nu+i;XY[k*2]=x;XY[k*2+1]=y;
+    if(!pointInPoly(x,y,r0))continue;let hole=false;for(let q=1;q<rings.length;q++)if(pointInPoly(x,y,rings[q])){hole=true;break;}if(hole)continue;
+    nIn++;const v=F.at(x+sh.dx,y+sh.dy);if(v==null)continue;const hh=v-S.alt0-u.zBase;if(hh<2||green(x+sh.dx,y+sh.dy)>12)continue;H[k]=hh;hs.push(hh);}
+  if(hs.length<40)return null; hs.sort((p,q)=>p-q);
+  const used=new Uint8Array(nu*nv),towers=[],lab=new Int32Array(nu*nv);let id=0;
+  for(let T=qtl(hs,0.35);T<=qtl(hs,0.98);T+=0.5){
+    lab.fill(-1);
+    for(let s=0;s<nu*nv;s++){if(!(H[s]>=T)||used[s]||lab[s]>=0)continue;const cells=[s];lab[s]=++id;
+      for(let c=0;c<cells.length;c++){const ci=cells[c]%nu,cj=(cells[c]/nu)|0;for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv)continue;const nk=nj*nu+ni;if(lab[nk]<0&&!used[nk]&&H[nk]>=T){lab[nk]=id;cells.push(nk);}}}
+      const area=cells.length*cA; if(area<6||area>0.6*nIn*cA)continue;
+      const dh=[];let i0=1e9,i1=-1,j0=1e9,j1=-1;
+      cells.forEach(c=>{const ci=c%nu,cj=(c/nu)|0;i0=Math.min(i0,ci);i1=Math.max(i1,ci);j0=Math.min(j0,cj);j1=Math.max(j1,cj);
+        [[1,0],[-1,0],[0,1],[0,-1]].forEach(([di,dj])=>{const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv||lab[nj*nu+ni]===id)return;const fi=ci+2*di,fj=cj+2*dj;if(fi<0||fj<0||fi>=nu||fj>=nv)return;const f=fj*nu+fi;if(lab[f]===id||!(H[f]===H[f]))return;dh.push(H[c]-H[f]);});});
+      if(dh.length<6)continue; dh.sort((p,q)=>p-q); if(qtl(dh,0.5)<1.4)continue;
+      const fill=cells.length/((i1-i0+1)*(j1-j0+1)); if(fill<0.55)continue;
+      cells.forEach(c=>used[c]=1); towers.push({cells,i0,i1,j0,j1});
+    }
+  }
+  if(!towers.length)return null;
+  const W=(U,V)=>new THREE.Vector2(U*ca-V*sa,U*sa+V*ca), pt=c=>({x:XY[c*2],y:XY[c*2+1],h:H[c]});
+  const out=towers.map(t=>{const R=[W(u0+t.i0*st,v0+t.j0*st),W(u0+(t.i1+1)*st,v0+t.j0*st),W(u0+(t.i1+1)*st,v0+(t.j1+1)*st),W(u0+t.i0*st,v0+(t.j1+1)*st)];
+    let poly=r0.slice();for(let e=0;e<4&&poly;e++){const p=R[e],q=R[(e+1)%4];poly=clipHalf(poly,-(q.y-p.y),q.x-p.x,(q.y-p.y)*p.x-(q.x-p.x)*p.y);}
+    if(!poly)return null; let cx=0,cy=0;poly.forEach(p=>{cx+=p.x;cy+=p.y;});cx/=poly.length;cy/=poly.length;const k=1+0.06/Math.sqrt(Math.abs(areaOf(poly)));
+    return {ring:poly.map(p=>new THREE.Vector2(cx+(p.x-cx)*k,cy+(p.y-cy)*k)),pts:t.cells.map(pt)};}).filter(Boolean); // grown by a few cm so its walls sit just in front of the main volume's
+  const base=[];for(let s=0;s<nu*nv;s++)if(H[s]===H[s]&&!used[s])base.push(pt(s));
+  return {towers:out,base};
+}
 async function lidarBuildings(){
   const tok=refineToken; if(!S.lidarP||S.lidarRun===tok)return; S.lidarRun=tok;
   const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(tok!==refineToken||(!Ff&&!Fc))return;
@@ -1414,11 +1450,12 @@ async function lidarBuildings(){
     if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
     const smp=lidarSamples(u,F,green); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
     const parts=splitByLevel(u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;}),smp.pts,smp.cell,0);
-    const blocks=[];for(const pt of parts){const md=partModel(pt.pts,pt.rings);if(md)blocks.push(makeBlock(m,pt.rings,md,roofSets));}
+    const blocks=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const md=partModel(tw&&tw.base.length>=8?tw.base:pt.pts,pt.rings);if(!md)continue;blocks.push(makeBlock(m,pt.rings,md,roofSets));
+      if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){const b=makeBlock(m,[t.ring],m2,roofSets);b.userData.tower=true;blocks.push(b);}});}
     if(!blocks.length)continue;
     buildingsGroup.remove(m);m.geometry.dispose();gone.add(m);
     if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh.geometry.dispose();gone.add(u.roofMesh);}
-    const near=(p)=>blocks.reduce((b,x)=>{const d=x.geometry.boundingSphere.center.distanceTo(new THREE.Vector3(p.x,p.y,x.geometry.boundingSphere.center.z));return !b||d<b.d?{x,d}:b;},null).x;
+    const near=(p)=>blocks.filter(b=>!b.userData.tower).reduce((b,x)=>{const d=x.geometry.boundingSphere.center.distanceTo(new THREE.Vector3(p.x,p.y,x.geometry.boundingSphere.center.z));return !b||d<b.d?{x,d}:b;},null).x;
     blocks.forEach(b=>{buildingsGroup.add(b);added.push(b);});
     if(m===S.target){S.target=near({x:0,y:0});S.target.material=matsFor(S.target.userData.usage,true);}
     if(m===S.building||m===S.selMesh){const nb=near(S.win&&S.win.pos?S.win.pos:{x:0,y:0});if(m===S.building)S.building=nb;if(m===S.selMesh)S.selMesh=nb;nb.material=matsFor(nb.userData.usage,true);}
