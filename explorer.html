@@ -892,7 +892,7 @@ async function fetchLidarRaster(kind,R,res){
 }
 function startLidar(){ // launched right after geocoding, in parallel with buildings
   const c=p=>p.catch(()=>null);
-  S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1)),cloud:c(fetchCloud(isPhone()?70:120))};
+  S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1)),cloud:fetchCloud(isPhone()?70:120).catch(err=>{console.warn('LiDAR cloud',err);S.cloudErr=String(err&&err.stack||err);return null;})};
 }
 async function lidarHeights(pts){
   const M=S.lidarP&&await S.lidarP.mnh; if(M)return pts.map(p=>M.max(p.x,p.y,1));
