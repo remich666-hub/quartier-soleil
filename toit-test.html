@@ -3112,7 +3112,7 @@ function roofFacets(R){
       lab[r]=g.id; g.cells.push(r); q.push(r); if(++added%24===0)fit(g);}}
     fit(g);}
   /* scraps (under ~4 m²) join the neighbour whose plane fits them */
-  const MINC=Math.round(4/(s*s));
+  const MINC=Math.round(6/(s*s));
   for(let pass=0;pass<4;pass++)regs.forEach(g=>{if(g.cells.length>=MINC||!g.cells.length)return;
     g.cells.forEach(i=>{let best=-1,br=0.6;nb4(i).forEach(q=>{const h=regs[lab[q]];if(h===g||h.cells.length<MINC)return;const r=Math.abs(C[i].z-zOf(h,C[i].x,C[i].y));if(r<br){br=r;best=h.id;}});if(best>=0){lab[i]=best;regs[best].cells.push(i);}});
     g.cells=g.cells.filter(i=>lab[i]===g.id);});
@@ -3147,7 +3147,7 @@ function roofFacets(R){
       e.edges.forEach(([i,q])=>{const ci=C[i],cq=C[q];const x=(ci.x+cq.x)/2,y=(ci.y+cq.y)/2;const Ri=regs[lab[i]],Rq=regs[lab[q]];const zi=zOf(Ri,x,y),zq=zOf(Rq,x,y);if(Math.abs(zi-zq)<0.3)return;
         const ux=(cq.x-ci.x)/s,uy=(cq.y-ci.y)/s, sgn=zi>zq?1:-1, px=-uy*s/2, py=ux*s/2, lo=Math.min(zi,zq), hi=Math.max(zi,zq);
         g.quads.push([[x+px,y+py,lo],[x-px,y-py,lo],[x-px,y-py,hi],[x+px,y+py,hi]]); const ar=s*(hi-lo);g.a+=ar;g.nx+=ux*sgn*ar;g.ny+=uy*sgn*ar;g.mx+=x*ar;g.my+=y*ar;g.mz+=(lo+hi)/2*ar;});
-      if(g.a>1.5)steps.push(g);}});
+      if(g.a>3)steps.push(g);}});
   /* gables along the outline: wall pieces standing above the wall top up to the roof */
   const gables=[]; (R.blocks||[]).forEach(bk=>{const ring=bk.r.map(p=>({x:p.x+R.sh.dx,y:p.y+R.sh.dy}));
     for(let k=0;k<ring.length;k++){const p=ring[k],q=ring[(k+1)%ring.length],L=Math.hypot(q.x-p.x,q.y-p.y);if(L<0.8)continue;
