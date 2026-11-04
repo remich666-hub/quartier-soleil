@@ -335,15 +335,15 @@ const wallTex=(()=>{const W=140,H=120;const c=document.createElement('canvas');c
 const SINK=2.5;
 /* a house on a slope (floor above its IGN base): window rows start at the real floor, and the upper wall pieces under the roof edge
    (above the plain block) carry the same rows, so the uphill façade shows its windows; above the last storey the wall stays plain */
-function slopeWalls(m){const u=m.userData; if(!u||!u.lidar||!u.facades||nFloors(u)>2)return;
-  const off=floorBase(u)-u.zBase, key=off>=0.3?Math.round(off*20):0;
-  if(key){const r=u.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});(S.slopeHouses=S.slopeHouses||[]).push({r,x0,x1,y0,y1,fb:u.zBase+off});}
+function slopeWalls(m){const u=m.userData; if(!u||!u.lidar||!u.facades||nFloorsRaw(u)>2)return;
+  const off=floorBase(u)-u.zBase, sh=u._gl?u._sh:3, F=nFloors(u), key=(off>=0.3||u._gl)?Math.round(off*20)+'|'+Math.round(sh*20)+'|'+F:0;
+  if(key){const r=u.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});(S.slopeHouses=S.slopeHouses||[]).push({r,x0,x1,y0,y1,base:u.zBase+off,sh,n:F});}
   if((u._swK||0)===key)return; u._swK=key;
-  const F=nFloors(u), O=key?off:null; fitWallUVs(m.geometry,u.h,u.floors,O);
+  const O=key?off:null; fitWallUVs(m.geometry,u.h,u.floors,O,sh);
   const gm=m.children.find(c=>c.userData.gable); if(!gm)return;
   if(!gm.userData.src)gm.userData.src={p:gm.geometry.attributes.position.array.slice(),n:gm.geometry.attributes.normal.array.slice(),mat:gm.material};
   const src=gm.userData.src; if(!key){gm.geometry.dispose();const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(src.p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(src.n,3));gm.geometry=g;gm.material=src.mat;return;}
-  const ring=u.rings[0], zc=u.zBase+off+F*3, P=[],N=[],U=[];
+  const ring=u.rings[0], zc=u.zBase+off+F*sh, P=[],N=[],U=[];
   const edgeOf=(ax,ay,bx,by)=>{for(let i=0;i<ring.length;i++){const a=ring[i],b=ring[(i+1)%ring.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.05)continue;
     const cr=p=>Math.abs((p[0]-a.x)*(b.y-a.y)-(p[1]-a.y)*(b.x-a.x))/L; if(cr([ax,ay])<0.06&&cr([bx,by])<0.06)return {a,dx:(b.x-a.x)/L,dy:(b.y-a.y)/L,L};}return null;};
   for(let q=0;q<src.p.length;q+=18){const v=k=>[src.p[q+k*3],src.p[q+k*3+1],src.p[q+k*3+2]]; const A0=v(0),B0=v(1),B1=v(2),A1=v(5), nx=src.n[q],ny=src.n[q+1];
@@ -354,14 +354,14 @@ function slopeWalls(m){const u=m.userData; if(!u||!u.lidar||!u.facades||nFloors(
     const clip=(pl,keepBelow)=>{const o=[];for(let i=0;i<pl.length;i++){const c=pl[i],d=pl[(i+1)%pl.length],ci=keepBelow?c[1]<=zc:c[1]>=zc,di=keepBelow?d[1]<=zc:d[1]>=zc;
       if(ci)o.push(c); if(ci!==di){const t=(zc-c[1])/(d[1]-c[1]);o.push([c[0]+(d[0]-c[0])*t,zc]);}}return o;};
     [[clip(poly,true),false],[clip(poly,false),true]].forEach(([pl,plain])=>{if(pl.length<3)return;
-      const vx=p=>{const x=A0[0]+(B0[0]-A0[0])*p[0],y=A0[1]+(B0[1]-A0[1])*p[0];return [x,y,p[1],uOf(x,y),plain?F*3+0.4:p[1]-u.zBase-off];};
+      const vx=p=>{const x=A0[0]+(B0[0]-A0[0])*p[0],y=A0[1]+(B0[1]-A0[1])*p[0];return [x,y,p[1],uOf(x,y),plain?F*3+0.4:(p[1]-u.zBase-off)*3/sh];};
       for(let i=1;i<pl.length-1;i++)[pl[0],pl[i],pl[i+1]].forEach(p=>{const w=vx(p);P.push(w[0],w[1],w[2]);N.push(nx,ny,0);U.push(w[3],w[4]);});});}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
   gm.geometry.dispose(); gm.geometry=g; gm.material=patchWall(new THREE.MeshLambertMaterial({color:src.mat.color,map:wallTex,side:THREE.DoubleSide}));}
 function applySlopeWalls(){S.slopeHouses=[]; S.meshes.forEach(m=>{try{slopeWalls(m);}catch(e){console.error('slopeWalls',e);}});}
 function slopeHouseAt(x,y){for(const h of S.slopeHouses||[]){if(x<h.x0||x>h.x1||y<h.y0||y>h.y1)continue;if(pointInPoly(x,y,h.r))return h;}return null;}
-function fitWallUVs(geo,h,floors,off){ // off: a house on a slope, rows of 3 m storeys starting at its floor level (off metres above its base)
-  const bands=floors||Math.max(1,Math.round(h/3)); const k=off!=null?1:(bands*3)/h; const o=off||0; const uv=geo.attributes.uv, pos=geo.attributes.position; const grp=geo.groups&&geo.groups[1];
+function fitWallUVs(geo,h,floors,off,sh){ // off: a house on a slope, rows of sh-metre storeys starting at its lowest floor (off metres above its base)
+  const bands=floors||Math.max(1,Math.round(h/3)); const k=off!=null?3/(sh||3):(bands*3)/h; const o=off||0; const uv=geo.attributes.uv, pos=geo.attributes.position; const grp=geo.groups&&geo.groups[1];
   if(!uv||!grp)return;
   for(let s=grp.start;s<grp.start+grp.count;s+=6){ // ExtrudeGeometry writes 6 vertices (2 triangles) per wall segment
     const x0=pos.getX(s),y0=pos.getY(s); let x1=x0,y1=y0;
@@ -387,7 +387,7 @@ function buildGroundFloors(walls){ // walls: [{a,b,len,nx,ny,zBase,com,door}]
     v.forEach(q=>{P.push(q[0],q[1],q[2]);N.push(nx,ny,0);U.push(q[3],q[4]);});};
   walls.forEach(w=>{
     const bays=w.len>=2.2?Math.max(1,Math.round(w.len/3.5)):0, sl=slopeHouseAt((w.a.x+w.b.x)/2-w.nx*0.6,(w.a.y+w.b.y)/2-w.ny*0.6);
-    const zb=sl?sl.fb:wallGround(w); // street level in front of this wall (slopes); a house on a slope: its floor, like its window rows
+    const g0=wallGround(w), zb=sl?sl.base+Math.max(0,Math.min(sl.n-1,Math.ceil((g0-0.3-sl.base)/sl.sh)))*sl.sh:g0; // street level in front of this wall (slopes); a house on a slope: its floor, like its window rows
     quad(w.com?sets.com:sets.res,w.a.x,w.a.y,w.b.x,w.b.y,zb-0.3,zb+H,w.nx,w.ny,0,bays||0.02);
     if(w.door){const mx=(w.a.x+w.b.x)/2,my=(w.a.y+w.b.y)/2,dx=(w.b.x-w.a.x)/w.len,dy=(w.b.y-w.a.y)/w.len,hw=0.65;
       quad(sets.door,mx-dx*hw,my-dy*hw,mx+dx*hw,my+dy*hw,zb,zb+2.3,w.nx*1.6,w.ny*1.6,0,1);}
@@ -924,7 +924,7 @@ const WIN_CLEAR=1.2; // a window centre always stands at least this high above t
 const WIN_SILL=0.9; // window centre to sill: a level is only buried when the ground in front reaches the sill (a 30–50 cm step or terrace in front is normal)
 function streetLevel(obj,fi){ // index of the first level above the street of façade fi (0 unless the street is higher than the base)
   const u=obj.userData,f=u.facades[fi]; if(!f||facGround(f)-u.zBase<=1.2)return 0; const bc=blindMap(obj)[fi]||[]; const k=bc.findIndex(b=>b!==2); return k<0?0:k;}
-function relFloorName(obj,fi,k){const si=streetLevel(obj,fi);return floorName(k-si)+(si>0&&k===si?' (rue haute)':'');}
+function relFloorName(obj,fi,k){if(obj.userData._gl)return floorName(k-1); const si=streetLevel(obj,fi);return floorName(k-si)+(si>0&&k===si?' (rue haute)':'');}
 function selectRefresh(){const b=S.building;if(!b)return;const i=S.win?b.userData.facades.indexOf(S.win.facade):-1;if(i>=0)chooseFacade(i);else refreshWinUI();}
 function onGroundData(){S.groundKey=(S.groundKey||0)+1; applySlopeWalls(); if(S.gfWalls)buildGroundFloors(S.gfWalls); if(S.building){try{selectRefresh();}catch(e){}}}
 const MNT_R=316, MNT_ST=1;
@@ -1697,17 +1697,23 @@ async function recenterOn(obj){
 }
 /* storey height and party walls (mitoyenneté): a floor of a façade is blind when a neighbour
    rises in front of it, sampled 0.8 m out at 20 / 50 / 80 % of its length */
-const nFloors=u=>Math.max(1,u.floors||Math.round(u.h/3));
-const storeyH=u=>u.floors&&u.h?Math.max(2.5,Math.min(3.6,u.h/u.floors)):3;
+const nFloorsRaw=u=>Math.max(1,u.floors||Math.round(u.h/3));
+const storeyRaw=u=>u.floors&&u.h?Math.max(2.5,Math.min(3.6,u.h/u.floors)):3;
+// a house on a slope may gain a garden level (below its street-level floor, see floorBase): levels and storey height follow
+const nFloors=u=>{if(u.lidar&&u.facades)floorBase(u);return nFloorsRaw(u)+(u._gl||0);};
+const storeyH=u=>{if(u.lidar&&u.facades)floorBase(u);return u._gl?u._sh:storeyRaw(u);};
 const downRay=new THREE.Raycaster();
 function floorBase(u){ // ground-floor level. The IGN base is the lowest ground around the footprint; on a gentle slope (less than a storey
   // between the low and high sides) a house's floor sits at the high side, the low side having a step or a crawl space
-  if(u._fbK===S.groundKey&&u._fb!=null)return u._fb; let fb=u.zBase;
-  if(u.facades&&u.facades.length){const fh=u.facades.reduce((a,f)=>facGround(f)>facGround(a)?f:a);const d=facGround(fh)-u.zBase;if(d>0&&d<0.8*storeyH(u))fb=u.zBase+Math.min(1.5,Math.max(0,d-0.1));
+  if(u._fbK===S.groundKey&&u._fb!=null)return u._fb; let fb=u.zBase; u._gl=0; u._fbK=S.groundKey; u._fb=fb;
+  if(u.facades&&u.facades.length){const fh=u.facades.reduce((a,f)=>facGround(f)>facGround(a)?f:a);const d=facGround(fh)-u.zBase;if(d>0&&d<0.8*storeyRaw(u))fb=u.zBase+Math.min(1.5,Math.max(0,d-0.1));
     // a house on a slope: its storeys hang from the roof edge the laser measures above the uphill wall. As far as that edge allows,
     // the floor is at the uphill ground and the downhill side stands on a plinth (crawl space, garage, terrace). Houses only (≤ 2 storeys):
     // in a block of flats on a slope the storey heights vary too much to hang them from the roof
-    if(d>0&&nFloors(u)<=2){const E=facEave(u,fh); if(E!=null&&E-d>=2.4)fb=Math.max(fb,u.zBase+Math.max(0,Math.min(d-0.1,E-nFloors(u)*2.9)));}}
+    if(d>0&&nFloorsRaw(u)<=2){const E=facEave(u,fh); if(E!=null&&E-d>=2.4){fb=Math.max(fb,u.zBase+Math.max(0,Math.min(d-0.1,E-nFloorsRaw(u)*2.9)));
+      // ≥ 2.4 m of plinth on the downhill side: that is a garden level (rez-de-jardin), one more storey under the street-level floor;
+      // each façade only offers the levels standing above its own ground (the blind map does that)
+      const hg=fb-u.zBase; if(hg>=2.4){u._gl=1;u._sh=Math.min(3.2,hg);fb-=u._sh;}}}}
   u._fb=fb; u._fbK=S.groundKey; return fb;}
 function blindMap(obj){
   const u=obj.userData; if(u._blind&&u._blindN===S.meshes.length&&u._blindK===S.groundKey)return u._blind; u._blindK=S.groundKey;
@@ -1844,7 +1850,7 @@ function selectBuilding(obj){
     if(allBlind)o.disabled=true;
     sel.appendChild(o);
   });
-  const fl=Math.max(0,Math.min(40,Math.round(((u.floors||Math.round(u.h/3))-1)/2)));
+  const fl=u._gl?1:Math.max(0,Math.min(40,Math.round(((u.floors||Math.round(u.h/3))-1)/2)));
   $('floor').value=fl; $('along').value=50;
   $('winBox').hidden=false; $('viewWin').disabled=false; $('results').hidden=true;
   $('winHintText').textContent='Choisissez la façade, l\'étage et la position, puis calculez.';
@@ -1867,7 +1873,7 @@ function placeMarker(){
   const t=w.along*f.len; let acc=0,pt=null;
   for(const s of f.segs){if(acc+s.len>=t){const k=(t-acc)/s.len;pt=new THREE.Vector2(s.a.x+(s.b.x-s.a.x)*k,s.a.y+(s.b.y-s.a.y)*k);break;}acc+=s.len;}
   if(!pt)pt=f.mid;
-  const ud=w.obj.userData,sh=ud.floors&&ud.h?Math.max(2.5,Math.min(3.6,ud.h/ud.floors)):3;
+  const ud=w.obj.userData,sh=storeyH(ud);
   { // never a window in or under the ground: lift it to the first level clear of the street right in front of it
     const gl=groundAt(pt,w.normal), nF=nFloors(ud); let k=w.floor; while(k<nF-1&&floorBase(ud)+k*sh+1.5<gl+WIN_SILL)k++;
     if(k!==w.floor){w.floor=k;$('floor').value=k;setTimeout(refreshWinUI,0);} }
@@ -2039,7 +2045,7 @@ async function reportData(){
   const climate=await fetchClimate();
   const real=climate?months.map((r,i)=>climate.frac[i]!=null?+(r.h*climate.frac[i]).toFixed(2):null):null;
   return {v:1,generated:new Date().toISOString(),address:S.label,lat:+(S.bLat||S.lat).toFixed(6),lon:+(S.bLon||S.lon).toFixed(6),alt:Math.round(S.alt0),
-    window:{side:sideText(sideOf(w.obj,f))||null,az:+f.az.toFixed(0),dir:DIRS[Math.round(f.az/45)%8],floor:w.floor-streetLevel(w.obj,u.facades.indexOf(f)),heightAboveGround:+(w.pos.z-Math.max(u.zBase,facGround(f))).toFixed(1),facadeLen:+f.len.toFixed(0),building:{h:+u.h.toFixed(1),ridge:u.ridge?+u.ridge.toFixed(1):null,floors:u.floors||null,usage:u.usage||null}},
+    window:{side:sideText(sideOf(w.obj,f))||null,az:+f.az.toFixed(0),dir:DIRS[Math.round(f.az/45)%8],floor:u._gl?w.floor-1:w.floor-streetLevel(w.obj,u.facades.indexOf(f)),heightAboveGround:+(w.pos.z-Math.max(u.zBase,facGround(f))).toFixed(1),facadeLen:+f.len.toFixed(0),building:{h:+u.h.toFixed(1),ridge:u.ridge?+u.ridge.toFixed(1):null,floors:u.floors||null,usage:u.usage||null}},
     lidar:L, blind, year:Y, annual:{h:+(tot/nd).toFixed(2),free:+(ftot/nd).toFixed(2),hYear:Math.round(tot/nd*365),bare:+(btot/nd).toFixed(2),bareWinter:nwin?+(bwin/nwin).toFixed(2):0,bareT:BARE_T}, months, matrix, keyDates:kd, paths, sky, obstacles,
     climate:climate?{frac:climate.frac.map(v=>v!=null?+v.toFixed(2):null),src:climate.src,realMonths:real,realAnnual:+(real.reduce((a,b)=>a+(b||0),0)/12).toFixed(2)}:null};
 }
@@ -2622,14 +2628,14 @@ function rebuildEdges(){
 }
 /* ---------- simplified UI: steps, steppers, automatic LiDAR summary ---------- */
 function fmtH(h){const m=Math.round(h*60);const H=Math.floor(m/60),M=m%60;return H?`${H} h ${String(M).padStart(2,'0')}`:`${M} min`;}
-function floorName(f){return f===0?'Rez-de-chaussée':f===1?'1er étage':`${f}e étage`;}
+function floorName(f){return f===-1?'Rez-de-jardin':f===0?'Rez-de-chaussée':f===1?'1er étage':`${f}e étage`;}
 function refreshWinUI(){
   try{renderAddr();}catch(e){}
   const sel=$('facade'), o=sel.options[sel.selectedIndex]; const n=sel.options.length;
   if(o){const parts=o.textContent.split(' · ');$('facLabel').innerHTML=`${parts[0]}<small>${(+sel.value+1)}/${n} · ${parts.slice(1).join(' · ')}</small>`;}
-  const f=+$('floor').value||0; const u=S.building&&S.building.userData; const maxF=u?Math.max(0,(u.floors||Math.round(u.h/3))-1):40;
+  const f=+$('floor').value||0; const u=S.building&&S.building.userData; const maxF=u?Math.max(0,nFloors(u)-1):40;
   const fi=S.win&&u?u.facades.indexOf(S.win.facade):-1, si=fi>=0?streetLevel(S.building,fi):0, nF=u?nFloors(u):0;
-  $('floorLabel').innerHTML=`${fi>=0?relFloorName(S.building,fi,f):floorName(f)}<small>${u?`${si>0?`${nF-si} niveaux côté rue`:`${(u.floors||'?')} niveaux`} · ${Math.round(u.h)} m`:''}</small>`;
+  $('floorLabel').innerHTML=`${fi>=0?relFloorName(S.building,fi,f):floorName(f)}<small>${u?`${u._gl?`${nF} niveaux côté jardin`:si>0?`${nF-si} niveaux côté rue`:`${(u.floors||'?')} niveaux`} · ${Math.round(u.h)} m`:''}</small>`;
   $('floorDown').disabled=f<=0||(!!S.win&&stepFloor(f,-1)===f); $('floorUp').disabled=f>=maxF||(!!S.win&&stepFloor(f,1)===f);
   if(/^Quartier chargé/.test($('status').textContent))$('status').textContent='Quartier chargé.';
 }
