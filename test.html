@@ -378,10 +378,11 @@ async function loadLot(lat,lon){ const T0=S.T;
     /* parcel of each building: the cadastral parcel holding most of its footprint (a 5×5 grid of points inside it) */
     const PL=[]; pf.forEach(f=>{const g=f.geometry,id=f.properties&&(f.properties.idu||f.id);const polys=g&&g.type==='Polygon'?[g.coordinates]:(g&&g.type==='MultiPolygon'?g.coordinates:[]);
       polys.forEach(po=>{if(!po[0]||po[0].length<4)return;const r=ringToLocal(po[0]);let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});PL.push({id,r,x0,x1,y0,y1});});});
+    const GB=new Map(),gk=(i,j)=>i*100003+j; PL.forEach(P=>{for(let i=Math.floor(P.x0/20);i<=Math.floor(P.x1/20);i++)for(let j=Math.floor(P.y0/20);j<=Math.floor(P.y1/20);j++){const k=gk(i,j);(GB.get(k)||GB.set(k,[]).get(k)).push(P);}});
     const par=new Map(), adr=new Set(); await new Promise(r=>setTimeout(r,0));
     S.meshes.forEach(m=>{const u=m.userData;if(!u.bid||!u.rings||par.has(u.bid))return;const R=u.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;R.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});
       const votes=new Map();for(let i=0;i<5;i++)for(let j=0;j<5;j++){const x=x0+(x1-x0)*(i+0.5)/5,y=y0+(y1-y0)*(j+0.5)/5;if(!pointInPoly(x,y,R))continue;
-        for(const P of PL){if(x<P.x0||x>P.x1||y<P.y0||y>P.y1||!pointInPoly(x,y,P.r))continue;votes.set(P.id,(votes.get(P.id)||0)+1);break;}}
+        for(const P of (GB.get(gk(Math.floor(x/20),Math.floor(y/20)))||[])){if(x<P.x0||x>P.x1||y<P.y0||y>P.y1||!pointInPoly(x,y,P.r))continue;votes.set(P.id,(votes.get(P.id)||0)+1);break;}}
       if(votes.size){const top=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0][0];par.set(u.bid,new Set([top]));}});
     ab.forEach(f=>{const p=f.properties;if(p.id_bat)adr.add(p.id_bat);});
     if(!par.size)return; S.lot={par,adr}; S.T.lot=performance.now();
