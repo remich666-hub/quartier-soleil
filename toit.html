@@ -3074,18 +3074,19 @@ function roofFacets(R){
     while(h<q.length){const i=q[h++]; for(const r of nb4(i)){ if(lab[r]>=0)continue; const cr=C[r]; if(dot(cr.n,g.n)<cosT)continue; if(Math.abs(cr.z-zOf(g,cr.x,cr.y))>0.3)continue;
       lab[r]=g.id; g.cells.push(r); q.push(r); if(++added%24===0)fit(g);}}
     fit(g);}
-  /* scraps join the neighbour whose plane fits them */
-  for(let pass=0;pass<3;pass++)regs.forEach(g=>{if(g.cells.length>=6||!g.cells.length)return;
-    g.cells.forEach(i=>{let best=-1,br=0.5;nb4(i).forEach(q=>{const h=regs[lab[q]];if(h===g||h.cells.length<6)return;const r=Math.abs(C[i].z-zOf(h,C[i].x,C[i].y));if(r<br){br=r;best=h.id;}});if(best>=0){lab[i]=best;regs[best].cells.push(i);}});
+  /* scraps (under ~4 m²) join the neighbour whose plane fits them */
+  const MINC=Math.round(4/(s*s));
+  for(let pass=0;pass<4;pass++)regs.forEach(g=>{if(g.cells.length>=MINC||!g.cells.length)return;
+    g.cells.forEach(i=>{let best=-1,br=0.6;nb4(i).forEach(q=>{const h=regs[lab[q]];if(h===g||h.cells.length<MINC)return;const r=Math.abs(C[i].z-zOf(h,C[i].x,C[i].y));if(r<br){br=r;best=h.id;}});if(best>=0){lab[i]=best;regs[best].cells.push(i);}});
     g.cells=g.cells.filter(i=>lab[i]===g.id);});
   /* pans on the same plane that touch are one pan */
   const par=regs.map((_,i)=>i), find=i=>par[i]===i?i:(par[i]=find(par[i]));
   const adj=new Map(); C.forEach((c,i)=>nb4(i).forEach(q=>{const a=lab[i],b=lab[q];if(a===b)return;const k=Math.min(a,b)+'|'+Math.max(a,b);let e=adj.get(k);if(!e){e={a:Math.min(a,b),b:Math.max(a,b),cells:[]};adj.set(k,e);}e.cells.push(i);}));
-  adj.forEach(e=>{const A=regs[e.a],B=regs[e.b];if(!A.cells.length||!B.cells.length||dot(A.n,B.n)<Math.cos(8*RAD_))return;let dz=0;e.cells.forEach(i=>{dz+=Math.abs(zOf(A,C[i].x,C[i].y)-zOf(B,C[i].x,C[i].y));});if(dz/e.cells.length<0.2)par[find(e.b)]=find(e.a);});
+  adj.forEach(e=>{const A=regs[e.a],B=regs[e.b];if(!A.cells.length||!B.cells.length||dot(A.n,B.n)<Math.cos(12*RAD_))return;let dz=0;e.cells.forEach(i=>{dz+=Math.abs(zOf(A,C[i].x,C[i].y)-zOf(B,C[i].x,C[i].y));});if(dz/e.cells.length<0.3)par[find(e.b)]=find(e.a);});
   const merged=new Map(); regs.forEach((g,i)=>{const r=find(i);if(!merged.has(r))merged.set(r,{cells:[]});merged.get(r).cells.push(...g.cells);});
   regs=[...merged.values()].filter(g=>g.cells.length); regs.forEach((g,k)=>{g.id=k;g.cells.forEach(i=>lab[i]=k);fit(g);
     if(!g.n){const c=C[g.cells[0]];g.a=c.gx;g.b=c.gy;g.c=c.z-g.a*c.x-g.b*c.y;setN(g);}
-    g.tilt=Math.acos(g.n[2]);g.az=((Math.atan2(g.n[0],g.n[1])/RAD_)+360)%360;g.flat=g.tilt<8*RAD_;g.small=g.cells.length<6;});
+    g.tilt=Math.acos(g.n[2]);g.az=((Math.atan2(g.n[0],g.n[1])/RAD_)+360)%360;g.flat=g.tilt<8*RAD_;g.small=g.cells.length<MINC;});
   /* 12.5 cm label raster */
   const r=s/4, X0=x0-s, Y0=y0-s, hx=Math.ceil((x1-x0+2*s)/r)+1, hy=Math.ceil((y1-y0+2*s)/r)+1, hl=new Int32Array(hx*hy).fill(-1);
   for(let j=0;j<hy;j++)for(let i=0;i<hx;i++){const px=X0+(i+0.5)*r,py=Y0+(j+0.5)*r;const ci=cellAt(Math.round((px-x0)/s),Math.round((py-y0)/s));if(ci>=0)hl[j*hx+i]=lab[ci];}
@@ -3172,12 +3173,12 @@ function roofPans(R){
   /* one row per pan found in the laser; scraps (chimneys, vents) together; vertical faces after */
   const F=R.F, ca=R.s*R.s, rows=F.regs.map(g=>({g,k:g.flat?'Plat':DIRS[Math.round(g.az/45)%8]+' '+fmt(g.az)+'°',flat:g.flat,small:g.small,t:g.tilt,az:g.az,a:0,real:0,clear:0,bare:0,inst:0,n:0}));
   R.cells.forEach((c,i)=>{const w=rows[F.lab[i]];if(!w)return;const a=ca/Math.cos(w.g.tilt);w.a+=a;w.n++;w.real+=c.real*a;w.clear+=c.clear*a;w.bare+=c.bare*a;w.inst+=(c.inst||0)*a;});
-  const big=rows.filter(w=>!w.small&&w.a>=2).sort((a,b)=>b.a-a.a), rest=rows.filter(w=>w.small||w.a<2);
-  if(rest.length){const o={k:'Détails (cheminées…)',flat:true,detail:true,a:0,real:0,clear:0,bare:0,inst:0};rest.forEach(w=>{o.a+=w.a;o.real+=w.real;o.clear+=w.clear;o.bare+=w.bare;o.inst+=w.inst;});if(o.a>=1)big.push(o);}
+  const big=rows.filter(w=>!w.small&&w.a>=4).sort((a,b)=>b.a-a.a), rest=rows.filter(w=>w.small||w.a<4);
+  if(rest.length){const o={k:'Petits pans, cheminées…',flat:true,detail:true,a:0,real:0,clear:0,bare:0,inst:0};rest.forEach(w=>{o.a+=w.a;o.real+=w.real;o.clear+=w.clear;o.bare+=w.bare;o.inst+=w.inst;});if(o.a>=1)big.push(o);}
   return big;}
 function roofVertRows(R){const F=R.F;if(!F)return[];const by=new Map();
   F.verts.forEach(v=>{if(v.real==null)return;const k=DIRS[Math.round(v.az/45)%8];let o=by.get(k);if(!o){o={k:'Vertical '+k,a:0,real:0,clear:0,bare:0,vert:true};by.set(k,o);}o.a+=v.a;o.real+=v.real*v.a;o.clear+=v.clear*v.a;o.bare+=v.bare*v.a;});
-  return [...by.values()].filter(o=>o.a>=1).sort((a,b)=>b.a-a.a);}
+  return [...by.values()].filter(o=>o.a>=2).sort((a,b)=>b.a-a.a);}
 
 {const c=wallTex.image,g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);wallTex.needsUpdate=true;} /* plain walls: no windows on this page */
 
