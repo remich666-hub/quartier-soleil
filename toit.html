@@ -2915,7 +2915,7 @@ update(); if(!S.startPending)load($('addr').value); // an address handed over by
 var RF={sel:null,mesh:null,cells:null,mode:'real',wx:new Map(),tok:0};
 const RAMP=[[0,[43,26,79]],[0.25,[106,44,112]],[0.5,[193,64,74]],[0.75,[240,138,36]],[1,[253,225,90]]];
 function rampCol(t){t=Math.max(0,Math.min(1,t));for(let i=1;i<RAMP.length;i++){if(t<=RAMP[i][0]){const [a,ca]=RAMP[i-1],[b,cb]=RAMP[i];const u=(t-a)/(b-a);return ca.map((v,k)=>(v+(cb[k]-v)*u)/255);}}return RAMP[RAMP.length-1][1].map(v=>v/255);}
-const SCALE={real:1600,clear:2600,instant:1000};
+const SCALE={real:[700,1700],clear:[1200,2800],instant:[0,1000]};
 const UNIT={real:'kWh/m²/an',clear:'kWh/m²/an',instant:'W/m²'};
 function roofClear(){RF.tok++;if(RF.mesh){scene.remove(RF.mesh);RF.mesh.geometry.dispose();RF.mesh=null;}RF.sel=null;RF.cells=null;$('roofBox').hidden=true;}
 async function roofWeather(lat,lon){
@@ -2978,22 +2978,39 @@ function roofInstantVals(R){
   return {sp,cs};}
 function rfMesh(R){
   if(RF.mesh){scene.remove(RF.mesh);RF.mesh.geometry.dispose();}
-  const s=R.s,h=s/2,P=[],Cc=[],I=[];
-  R.cells.forEach(c=>{const b=P.length/3;[[-h,-h],[h,-h],[h,h],[-h,h]].forEach(([dx,dy])=>{P.push(c.x+dx,c.y+dy,c.z-S.alt0+0.12+c.gx*dx+c.gy*dy);Cc.push(0,0,0);});I.push(b,b+1,b+2,b,b+2,b+3);});
-  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('color',new THREE.Float32BufferAttribute(Cc,3));g.setIndex(I);
-  const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));m.renderOrder=5;scene.add(m);RF.mesh=m;}
+  /* one continuous surface: each corner is shared by up to four cells, its height and colour averaged over them */
+  const s=R.s,h=s/2,cmap=new Map(),corners=[],I=[];
+  const ck=(x,y)=>Math.round(x/s*2)+','+Math.round(y/s*2);
+  R.cells.forEach((c,ci)=>{const ids=[[-h,-h],[h,-h],[h,h],[-h,h]].map(([dx,dy])=>{const k=ck(c.x+dx,c.y+dy);let q=cmap.get(k);if(q==null){q=corners.length;cmap.set(k,q);corners.push({x:c.x+dx,y:c.y+dy,z:0,cells:[]});}const o=corners[q];o.z+=c.z+c.gx*dx+c.gy*dy;o.cells.push(ci);return q;});
+    I.push(ids[0],ids[1],ids[2],ids[0],ids[2],ids[3]);});
+  const P=new Float32Array(corners.length*3),Cc=new Float32Array(corners.length*3);
+  corners.forEach((o,i)=>{P[i*3]=o.x;P[i*3+1]=o.y;P[i*3+2]=o.z/o.cells.length-S.alt0+0.15;});
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));g.setAttribute('color',new THREE.BufferAttribute(Cc,3));g.setIndex(I);
+  const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));m.renderOrder=5;scene.add(m);RF.mesh=m;RF.corners=corners;}
 function roofPaint(){
-  const R=RF.cells; if(!R||!RF.mesh)return; const mode=RF.mode, max=SCALE[mode], col=RF.mesh.geometry.attributes.color;
-  R.cells.forEach((c,i)=>{const v=mode==='real'?c.real:mode==='clear'?c.clear:c.inst;const k=rampCol(v/max);for(let j=0;j<4;j++)col.setXYZ(i*4+j,k[0],k[1],k[2]);});
+  const R=RF.cells; if(!R||!RF.mesh)return; const mode=RF.mode, [lo,hi]=SCALE[mode], col=RF.mesh.geometry.attributes.color;
+  const val=c=>mode==='real'?c.real:mode==='clear'?c.clear:c.inst;
+  RF.corners.forEach((o,i)=>{let v=0;o.cells.forEach(ci=>v+=val(R.cells[ci]));v/=o.cells.length;const k=rampCol((v-lo)/(hi-lo));col.setXYZ(i,k[0],k[1],k[2]);});
   col.needsUpdate=true; roofLegend();}
-function roofLegend(){const mode=RF.mode,max=SCALE[mode];const st=RAMP.map(([t,c])=>`rgb(${c.join(',')}) ${t*100}%`).join(',');
-  $('rLegend').innerHTML=`<div class="rbar" style="background:linear-gradient(90deg,${st})"></div><div class="axis"><span>0</span><span>${Math.round(max/2)}</span><span>${max} ${UNIT[mode]}</span></div>`;}
+function roofLegend(){const mode=RF.mode,[lo,hi]=SCALE[mode];const st=RAMP.map(([t,c])=>`rgb(${c.join(',')}) ${t*100}%`).join(',');
+  $('rLegend').innerHTML=`<div class="rbar" style="background:linear-gradient(90deg,${st})"></div><div class="axis"><span>${lo===0?'0':'≤ '+fmt(lo)}</span><span>${fmt((lo+hi)/2)}</span><span>${fmt(hi)} ${UNIT[mode]}</span></div>`;}
 const fmt=(v,d=0)=>v.toLocaleString('fr-FR',{maximumFractionDigits:d,minimumFractionDigits:d});
 function roofPans(R){
-  const groups=new Map(); const ca=R.s*R.s;
-  R.cells.forEach(c=>{const flat=c.tilt<8*RAD;const k=flat?'plat':DIRS[Math.round(c.az/45)%8];let g=groups.get(k);if(!g){g={k,flat,n:0,a:0,t:0,real:0,clear:0,bare:0,hrs:0,sx:0,sy:0};groups.set(k,g);}
-    const a=ca/Math.cos(c.tilt);g.n++;g.a+=a;g.t+=c.tilt;g.real+=c.real*a;g.clear+=c.clear*a;g.bare+=c.bare*a;g.hrs+=c.hrs;g.sx+=Math.sin(c.az*RAD);g.sy+=Math.cos(c.az*RAD);});
-  return [...groups.values()].filter(g=>g.a>=3).sort((a,b)=>b.a-a.a);}
+  /* pans = the orientations actually present: peaks of the area-weighted azimuth histogram (10° bins, smoothed);
+     each tilted cell joins the nearest peak; under 8° of slope it is flat */
+  const ca=R.s*R.s, H=new Float32Array(36); R.cells.forEach(c=>{if(c.tilt>=8*RAD)H[Math.floor(c.az/10)%36]+=ca/Math.cos(c.tilt);});
+  const Hs=H.map((_,i)=>H[(i+35)%36]*0.25+H[i]*0.5+H[(i+1)%36]*0.25), tot=Hs.reduce((a,b)=>a+b,0);
+  let peaks=[]; for(let i=0;i<36;i++){if(Hs[i]>=Hs[(i+35)%36]&&Hs[i]>Hs[(i+1)%36]&&Hs[i]>0.04*tot)peaks.push(i*10+5);}
+  peaks.sort((a,b)=>Hs[Math.floor(b/10)]-Hs[Math.floor(a/10)]); const pk=[]; peaks.forEach(p=>{if(pk.every(q=>Math.abs(((p-q+540)%360)-180)>=40))pk.push(p);});
+  const groups=new Map();
+  R.cells.forEach(c=>{const flat=c.tilt<8*RAD; let k='plat';
+    if(!flat&&pk.length){let best=pk[0],bd=1e9;pk.forEach(p=>{const d=Math.abs(((c.az-p+540)%360)-180);if(d<bd){bd=d;best=p;}});k=best;}
+    else if(!flat)k=Math.round(c.az/45)%8*45;
+    let g=groups.get(k);if(!g){g={k,flat,n:0,a:0,t:0,real:0,clear:0,bare:0,hrs:0,sx:0,sy:0};groups.set(k,g);}
+    const a=ca/Math.cos(c.tilt);g.n++;g.a+=a;g.t+=c.tilt;g.real+=c.real*a;g.clear+=c.clear*a;g.bare+=c.bare*a;g.hrs+=c.hrs;g.sx+=Math.sin(c.az*RAD)*a;g.sy+=Math.cos(c.az*RAD)*a;});
+  const out=[...groups.values()].filter(g=>g.a>=3).sort((a,b)=>b.a-a.a);
+  out.forEach(g=>{if(!g.flat){const az=((Math.atan2(g.sx,g.sy)/RAD)+360)%360;g.az=az;g.k=DIRS[Math.round(az/45)%8]+' '+fmt(az)+'°';}});
+  return out;}
 function roofRender(){
   const R=RF.cells; if(!R)return; const mode=RF.mode; const I=mode==='instant'?roofInstantVals(R):null; roofPaint();
   $('rSeg').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.m===mode)));
@@ -3002,7 +3019,7 @@ function roofRender(){
   if(mode==='instant'){let P=0;R.cells.forEach(c=>P+=c.inst*ca/Math.cos(c.tilt));const lit=R.cells.filter(c=>c.vis).length/R.cells.length;
     const pans=roofPans(R), main=pans[0]; let th='';
     if(main&&!main.flat){const az=Math.atan2(main.sx,main.sy),t=main.t/main.n,n=[Math.sin(t)*Math.sin(az),Math.sin(t)*Math.cos(az),Math.cos(t)],ce=Math.cos(I.sp.alt),v=[ce*Math.sin(I.sp.az),ce*Math.cos(I.sp.az),Math.sin(I.sp.alt)],ci=v[0]*n[0]+v[1]*n[1]+v[2]*n[2];
-      th=`Pan principal (${main.k}, pente ${fmt(t/RAD)}°) : angle d'incidence θ = ${ci>0?fmt(Math.acos(ci)/RAD):'> 90'}°, cos θ = ${fmt(Math.max(0,ci),2)}.`;}
+      th=`Pan principal (orienté ${main.k}, pente ${fmt(t/RAD)}°) : angle d'incidence θ = ${ci>0?fmt(Math.acos(ci)/RAD):'> 90'}°, cos θ = ${fmt(Math.max(0,ci),2)}.`;}
     $('rBig').textContent=fmt(P/1000,1); $('rBigC').textContent='kW reçus par tout le toit à cet instant (ciel clair)';
     $('rK1').textContent=`${fmt(I.sp.alt/RAD)}°`; $('rK1l').textContent='Hauteur du soleil';
     $('rK2').textContent=`${fmt(I.cs.dni)} W/m²`; $('rK2l').textContent='Direct (rayons ⟂)';
@@ -3013,7 +3030,7 @@ function roofRender(){
   $('rBig').textContent=fmt(val/A); $('rBigC').textContent=`kWh par m² et par an, en moyenne sur le toit (${mode==='real'?'météo réelle '+(W?W.Y:''):'ciel toujours clair'})`;
   $('rK1').textContent=`${fmt(A)} m²`; $('rK1l').textContent='Surface de toit';
   $('rK2').textContent=`${fmt(val/1000,1)} MWh`; $('rK2l').textContent='Énergie reçue par an';
-  $('rK3').textContent=`${fmt(H,1)} h`; $('rK3l').textContent='Soleil direct / jour';
+  $('rK3').textContent=`${fmt(H,1)} h`; $('rK3l').textContent='Soleil direct / jour (ciel clair)';
   const pans=roofPans(R);
   $('rPans').innerHTML=`<thead><tr><th>Pan</th><th>Pente</th><th>Surface</th><th>${mode==='real'?'Météo réelle':'Ciel clair'}</th><th>Pertes par ombre</th></tr></thead><tbody>`+
     pans.map(g=>{const v=(mode==='real'?g.real:g.clear)/g.a, loss=g.bare>0?1-g.real/g.bare:0;return `<tr><td>${g.flat?'Plat':g.k}</td><td>${g.flat?'—':fmt(g.t/g.n/RAD)+'°'}</td><td>${fmt(g.a)} m²</td><td>${fmt(v)} kWh/m²</td><td>${fmt(loss*100)} %</td></tr>`;}).join('')+'</tbody>';
