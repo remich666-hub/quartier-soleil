@@ -146,6 +146,18 @@ button.link:hover{color:var(--fg);background:none}
 .rpans th{text-align:left;font-weight:500;color:var(--ink2);padding:4px 4px;border-bottom:1px solid var(--line)}
 .rpans td{padding:5px 4px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
 .rpans tr.rv td{color:var(--ink2)}
+#rMore{display:none}
+@media (max-width:760px){
+  #sheet.collapsed #left>#roofBox:not([hidden]){display:grid;gap:8px}
+  #sheet.collapsed #roofBox>*:not(.rseg):not(.big):not(#rLegend):not(#rMore){display:none}
+  #sheet.collapsed #roofBox .big{display:flex;align-items:baseline;gap:8px}
+  #sheet.collapsed #roofBox .big .v{font-size:34px}
+  #sheet.collapsed #roofBox .big .c{font-size:12px}
+  #sheet.collapsed #rMore{display:block;justify-self:end;color:var(--accent-ink);text-decoration:none;font-size:13px;margin-top:-4px}
+  .rpans{font-size:11px;display:block;overflow-x:auto}
+  .rpans th,.rpans td{padding:4px 3px}
+  .rseg button{font-size:12.5px;padding:7px 4px}
+}
 .rmath{font-size:12.5px;color:var(--ink2)}
 .rmath summary{cursor:pointer;color:var(--fg);font-weight:500}
 .rmath p{margin:8px 0}
@@ -229,6 +241,7 @@ button.link:hover{color:var(--fg);background:none}
         <span class="n">02 · Toit</span>
         <div class="rseg" id="rSeg" role="group" aria-label="Mode de calcul"><button type="button" data-m="real" aria-pressed="true">Année réelle</button><button type="button" data-m="clear" aria-pressed="false">Ciel clair</button><button type="button" data-m="instant" aria-pressed="false">Instant</button></div>
         <div class="big"><span class="v" id="rBig">—</span><span class="c" id="rBigC"></span></div>
+        <button type="button" class="link" id="rMore">Détails ▴</button>
         <div class="kd"><div><span id="rK1l">Surface de toit</span><b id="rK1">—</b></div><div><span id="rK2l">Énergie reçue par an</span><b id="rK2">—</b></div><div><span id="rK3l">Soleil direct / jour</span><b id="rK3">—</b></div></div>
         <div id="rLegend"></div>
         <table class="rpans" id="rPans"></table>
@@ -3014,6 +3027,7 @@ function roofRender(){
     : `Par ciel toujours clair, ce toit recevrait ${fmt(EC/A)} kWh/m² par an, soit ${fmt(EC/Math.max(1,E))} fois la météo réelle : l'écart, c'est l'effet des nuages.`;
   $('bottom').hidden=true;}
 async function roofSelect(obj){
+  if(isPhone())$('sheet').classList.add('collapsed'); /* on a phone the roof gets the screen; the details slide up */
   const tok=++RF.tok; RF.sel=obj; $('roofBox').hidden=false; $('rBig').textContent='…'; $('rBigC').textContent='Calcul en cours : lecture du relevé laser…'; $('rPans').innerHTML=''; $('rNote').textContent='';
   ['rK1','rK2','rK3'].forEach(k=>$(k).textContent='—');
   for(let i=0;i<80&&!(S.lidarR&&S.lidarR.mnh&&(S.mnsF||S.lidarR.mns));i++){await new Promise(r=>setTimeout(r,150));if(tok!==RF.tok)return;}
@@ -3179,6 +3193,8 @@ function roofPans(R){
 function roofVertRows(R){const F=R.F;if(!F)return[];const by=new Map();
   F.verts.forEach(v=>{if(v.real==null)return;const k=DIRS[Math.round(v.az/45)%8];let o=by.get(k);if(!o){o={k:'Vertical '+k,a:0,real:0,clear:0,bare:0,vert:true};by.set(k,o);}o.a+=v.a;o.real+=v.real*v.a;o.clear+=v.clear*v.a;o.bare+=v.bare*v.a;});
   return [...by.values()].filter(o=>o.a>=2).sort((a,b)=>b.a-a.a);}
+
+$('rMore').addEventListener('click',()=>$('sheet').classList.remove('collapsed'));
 
 {const c=wallTex.image,g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);wallTex.needsUpdate=true;} /* plain walls: no windows on this page */
 
