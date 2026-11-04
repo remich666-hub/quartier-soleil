@@ -2987,9 +2987,9 @@ function rfMesh(R){
   x0-=s;y0-=s; const nx=Math.round((x1-x0)/s)+2, ny=Math.round((y1-y0)/s)+2, N=nx*ny;
   const z=new Float32Array(N).fill(NaN), near=new Int32Array(N).fill(-1);
   R.cells.forEach((c,ci)=>{const i=Math.round((c.x-x0)/s),j=Math.round((c.y-y0)/s),k=j*nx+i;z[k]=c.z;near[k]=ci;});
-  for(let pass=0;pass<2;pass++){const z2=z.slice(),n2=near.slice();for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i;if(!isNaN(z[k]))continue;let sz=0,n=0,nb=-1;
+  for(let pass=0;pass<12;pass++){let ch=0;const z2=z.slice(),n2=near.slice();for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i;if(!isNaN(z[k]))continue;let sz=0,n=0,nb=-1;
       for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=nx||b>=ny)continue;const q=b*nx+a;if(isNaN(z[q]))continue;const c=R.cells[near[q]];sz+=c.z-(c.gx*di+c.gy*dj)*s;n++;if(nb<0)nb=near[q];}
-      if(n){z2[k]=sz/n;n2[k]=nb;}} z.set(z2);near.set(n2);}
+      if(n){z2[k]=sz/n;n2[k]=nb;ch++;}} z.set(z2);near.set(n2);if(!ch)break;} /* gaps inside the outline (a step between two roofs, a dormer side) are filled for the drawing only */
   const P=[],U=[],I=[],vid=new Int32Array(N).fill(-1);
   for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i;if(isNaN(z[k]))continue;vid[k]=P.length/3;P.push(x0+i*s,y0+j*s,z[k]-S.alt0+0.3);U.push((i+0.5)/nx,(j+0.5)/ny);}
   for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){const a=vid[j*nx+i],b=vid[j*nx+i+1],c=vid[(j+1)*nx+i+1],d=vid[(j+1)*nx+i];if(a<0||b<0||c<0||d<0)continue;I.push(a,b,c,a,c,d);}
