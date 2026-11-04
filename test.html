@@ -736,7 +736,7 @@ async function buildParcels(lat,lon){
       else{const gr=ng/open, t=Math.min(1,Math.max(0,(gr-0.2)/0.5)); col=(open*st*st>3000?cF:cM).clone().lerp(cG,t*t*(3-2*t));} // big open lots are fields or meadows, not paving
       const shape=new THREE.Shape(outer);holes.forEach(h=>shape.holes.push(new THREE.Path(h)));const sg=new THREE.ShapeGeometry(shape);const pos=sg.attributes.position,idx=sg.index;
       const T=[];for(let i=0;i<idx.count;i+=3)T.push([0,1,2].map(d=>{const k=idx.getX(i+d);return [pos.getX(k),pos.getY(k)];}));
-      nParc++; TP.push({outer,holes,col,garden:!(n*st*st>2500&&nb<0.05*n)}); // big unbuilt parcels (squares, public gardens, fields): plain tint, no photo-read patches const n0=P.length; drapeTris(T,0.18,P,N); for(let k=n0;k<P.length;k+=3)C.push(col.r,col.g,col.b); sg.dispose();});});
+      nParc++; TP.push({outer,holes,col,garden:!(n*st*st>2500&&nb<0.05*n)}); /* big unbuilt parcels (squares, public gardens, fields): plain tint, no photo-read patches */ const n0=P.length; drapeTris(T,0.18,P,N); for(let k=n0;k<P.length;k+=3)C.push(col.r,col.g,col.b); sg.dispose();});});
   if(tok!==parcelTok)return;
   parcelGroup=new THREE.Group();
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
@@ -747,7 +747,9 @@ async function buildParcels(lat,lon){
       if(tn){const un={value:tn}; mat.onBeforeCompile=sh=>{sh.uniforms.uNear=un; sh.fragmentShader='uniform sampler2D uNear;\n'+sh.fragmentShader.replace('#include <map_fragment>',
         `#ifdef USE_MAP
           vec2 qN=(vQsW+vec2(${GN_R}.0))/${2*GN_R}.0;
-          vec4 texelColor=(qN.x>0.002&&qN.x<0.998&&qN.y>0.002&&qN.y<0.998)?texture2D(uNear,qN):texture2D(map,vUv);
+          float qE=min(min(qN.x,1.0-qN.x),min(qN.y,1.0-qN.y));                       // distance to the edge of the fine square (0..0.5)
+          vec4 texelColor=texture2D(map,vUv);
+          if(qE>0.002) texelColor=mix(texelColor,texture2D(uNear,qN),smoothstep(0.002,0.16,qE)); // ~40 m cross-fade: no seam where the fine texture ends
           texelColor=mapTexelToLinear(texelColor); diffuseColor*=texelColor;
         #endif`);}; mat.customProgramCacheKey=()=>'qsgarden';}}}catch(err){console.error('gardens',err);}
     if(!mat)mat=new THREE.MeshLambertMaterial({vertexColors:true,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
