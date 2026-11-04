@@ -1680,7 +1680,11 @@ async function lidarVegGrid(){
   tall.sort((a,b)=>b.z-a.z); const covered=new Uint8Array(n*n); const trees=[];
   tall.forEach(t=>{if(covered[t.j*n+t.i])return;let cnt=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const u=t.i+dx,v=t.j+dy;if(u>=0&&v>=0&&u<n&&v<n&&veg[v*n+u]>=4.5)cnt++;}
     const r=Math.min(6,1.6+cnt*0.2); const rc=Math.max(1,Math.round(r/step)); for(let dy=-rc;dy<=rc;dy++)for(let dx=-rc;dx<=rc;dx++){const u=t.i+dx,v=t.j+dy;if(u>=0&&v>=0&&u<n&&v<n&&dx*dx+dy*dy<=rc*rc)covered[v*n+u]=1;}
-    trees.push({x:-R+t.i*step,y:R-t.j*step,r,h:t.z,vs:0.9+Math.random()*0.3});});
+    // a real tree is about as wide as a third of its height: a tall but thin patch (a roof edge against a façade, a lamp post)
+    // cannot carry a 20 m tree, so its height follows the width of the crown actually measured
+    let nearB=false;for(let dy=-2;dy<=2&&!nearB;dy++)for(let dx=-2;dx<=2;dx++){const u=t.i+dx,v=t.j+dy;if(u>=0&&v>=0&&u<n&&v<n&&isB(u,v)){nearB=true;break;}}
+    if(nearB&&cnt<4)return;
+    trees.push({x:-R+t.i*step,y:R-t.j*step,r,h:Math.min(t.z,r*3.5),vs:0.9+Math.random()*0.3});});
   if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();const k=blockers.indexOf(lidarVegMesh);if(k>=0)blockers.splice(k,1);lidarVegMesh=null;}
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
     lidarVegMesh=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa3bb98}));lidarVegMesh.castShadow=lidarVegMesh.receiveShadow=true;scene.add(lidarVegMesh);blockers.push(lidarVegMesh);}
