@@ -1895,7 +1895,7 @@ async function addressOf(obj){
     if(!ad.size){const P=lot.par.get(u.bid);let best=null,bd=1e9;
       if(P)P.forEach(idu=>(lot.parBats.get(idu)||[]).forEach(b=>{const m=S.meshes.find(x=>x.userData.bid===b);if(!m)return;const d=m.geometry.boundingSphere.center.distanceTo(bs.center);if(d<bd){bd=d;best=b;}}));
       if(best){addOf(best);S.dep=true;}}
-    else{ /* its numbers also belong to a bigger building: it is that building's dependency */
+    else if((u.floors||1)<=1){ /* a single-storey building whose numbers also belong to a bigger building is that building's dependency (a wing of a block of flats sharing its number is not) */
       const area=m=>Math.abs(areaOf(m.userData.rings[0])), my=family(obj).reduce((t,m)=>t+area(m),0);
       if(S.meshes.some(m=>{const B=lot.adr.get(m.userData.bid);return B&&!family(obj).includes(m)&&area(m)>my&&[...ad].every(x=>B.has(x));}))S.dep=true;}
     if(ad.size){ const tg=new Set(); if(S.addrTarget&&!S.recentered)family(S.addrTarget).forEach(m=>{const A=lot.adr.get(m.userData.bid);if(A)A.forEach(x=>tg.add(x));});
