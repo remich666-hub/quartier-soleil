@@ -1740,8 +1740,9 @@ function floorBase(u){ // ground-floor level. The IGN base is the lowest ground 
       // each façade only offers the levels standing above its own ground (the blind map does that)
       const hg=fb-u.zBase; if(hg>=2.4){u._gl=1;u._glH=Math.min(3.2,hg);fb-=u._glH;}}}}
   u._fb=fb; u._fbK=S.groundKey; return fb;}
+let MESHQ=0; const meshSetId=()=>S.meshes._qid||(S.meshes._qid=++MESHQ); // which list of buildings a cached result was made against (a laser rebuild makes a new list)
 function blindMap(obj){
-  const u=obj.userData; if(u._blind&&u._blindN===S.meshes.length&&u._blindK===S.groundKey)return u._blind; u._blindK=S.groundKey;
+  const u=obj.userData; if(u._blind&&u._blindN===meshSetId()&&u._blindL===S.meshes.length&&u._blindK===S.groundKey)return u._blind; u._blindK=S.groundKey;
   const bs0=obj.geometry.boundingSphere||(obj.geometry.computeBoundingSphere(),obj.geometry.boundingSphere);
   const others=S.meshes.filter(m=>{if(m===obj)return false;const b=m.geometry.boundingSphere||(m.geometry.computeBoundingSphere(),m.geometry.boundingSphere);return b.center.distanceTo(bs0.center)-b.radius-bs0.radius<60;}), nF=nFloors(u), sh=storeyH(u), down=new THREE.Vector3(0,0,-1);
   u._blind=u.facades.map(f=>{
@@ -1750,7 +1751,7 @@ function blindMap(obj){
       const h=downRay.intersectObjects(others,true); return h.length?h[0].point.z:-1e9;});
     const gz=facGround(f), fb=floorBase(u); /* typical ground of the façade: one high end of a wall along the slope does not bury the whole storey */ const out=[]; for(let k=0;k<nF;k++){const z=fb+k*sh+1.5; out.push(z<gz+WIN_SILL?2:(tops.every(t=>t>z+0.3)?1:0));} return out;
   });
-  u._blindN=S.meshes.length; return u._blind;
+  u._blindN=meshSetId();u._blindL=S.meshes.length; return u._blind;
 }
 /* the roof edge just above a façade, measured by the laser (metres above the building's IGN base), or null */
 function laserEave(px,py,nx,ny,zBase,sh){const F=S.mnsF;if(!F)return null;let m=null;for(const d of [0.5,0.9,1.3]){const z=F.at(px-nx*d+sh.dx,py-ny*d+sh.dy);if(z!=null&&(m==null||z<m))m=z;}return m==null?null:m-S.alt0-zBase;}
@@ -1865,7 +1866,7 @@ function selectBuilding(obj){
   S.building=obj; const u=obj.userData;
   $('bInfo').textContent=`${u.h.toFixed(0)} m à l'égout${u.ridge?`, ${u.ridge.toFixed(0)} m au faîtage`:''}${u.floors?`, ${u.floors} étages`:''}${u.usage?`, ${u.usage.toLowerCase()}`:''}`;
   const sel=$('facade'); sel.innerHTML='';
-  if(!u._vis||u._visN!==S.meshes.length){const oth=S.meshes.filter(x=>x!==obj);u._visN=S.meshes.length;u._vis=u.facades.map(f=>{const origin=new THREE.Vector3(f.mid.x,f.mid.y,u.zBase+4).addScaledVector(f.normal,0.5);
+  if(!u._vis||u._visN!==meshSetId()||u._visL!==S.meshes.length){const oth=S.meshes.filter(x=>x!==obj);u._visN=meshSetId();u._visL=S.meshes.length;u._vis=u.facades.map(f=>{const origin=new THREE.Vector3(f.mid.x,f.mid.y,u.zBase+4).addScaledVector(f.normal,0.5);
     const hh=new THREE.Raycaster(origin,f.normal,0,400).intersectObjects(oth,false);return hh.length?hh[0].distance:null;});}
   u.facades.forEach((f,i)=>{
     const o=document.createElement('option'); o.value=String(i);
