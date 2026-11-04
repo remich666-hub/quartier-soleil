@@ -2380,7 +2380,7 @@ async function lidarVegGrid(){
 function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?` · végétation LiDAR HD (rayon ${CORE} m)`:c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
 /* ---------- load flow ---------- */
 async function load(q,at){
-  roofClear();
+  roofClear(); setTimeout(roofAuto,0);
   $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('addrDone').hidden=true; $('stepAddr').hidden=false; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
@@ -3039,7 +3039,8 @@ function roofFrame(obj){const u=obj.userData,bb=obj.geometry.boundingBox||(obj.g
   const cx=(bb.min.x+bb.max.x)/2,cy=(bb.min.y+bb.max.y)/2,diag=Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y);
   camTw={t0:performance.now(),dur:1400,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(cx,cy,u.zBase+(u.ridge||u.h)),th:cam.theta,ph:0.95,d:Math.max(isPhone()?34:26,diag*(isPhone()?2:1.5))}};}
 async function roofAuto(){ /* waits for the laser rebuild of the buildings (it replaces them) before picking the address's one */
-  const T0=S.T; for(let i=0;i<100&&!S.lidarBuilt;i++){await new Promise(r=>setTimeout(r,200));if(S.T!==T0)return;}
+  const T0=S.T; for(let i=0;i<150&&!(S.T.scene&&S.lidarBuilt&&!S.loading);i++){await new Promise(r=>setTimeout(r,200));if(S.T!==T0)return;}
+  for(let i=0;i<40&&camTw;i++){await new Promise(r=>setTimeout(r,150));if(S.T!==T0)return;} /* let the establishing shot land first */
   const t=S.addrTarget; if(!t||S.building||t.userData.monu||S.meshes.indexOf(t)<0)return; selectBuilding(t); roofFrame(t);}
 
 /* ---------- facets: the roof as the laser sees it, pan by pan ----------
