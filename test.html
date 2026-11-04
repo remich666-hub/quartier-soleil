@@ -1324,7 +1324,7 @@ async function buildScene(features){ const yl=slicer();
   // the address point often falls on the street or on a carport: prefer the main dwelling nearby over annexes
   {const annex=c=>(!c.usage||/Indiff|Annexe/i.test(c.usage))&&(c.area<60||c.h<3); const sc=c=>c.de-Math.min(8,Math.sqrt(c.area)/3)-(/sidentiel/.test(c.usage)?4:0);
    const cur=cands.find(c=>c.mesh===best); if(!cur||annex(cur)||cur.de>0){const ok=cands.filter(c=>!annex(c)).sort((a,b)=>sc(a)-sc(b)); if(ok.length&&(!cur||annex(cur)||sc(ok[0])<sc(cur)))best=ok[0].mesh;}}
-  if(!best)best=monuBest; if(best){best.material=matsFor(best.userData.usage,true);S.target=best;}
+  if(!best)best=monuBest; if(best){best.material=matsFor(best.userData.usage,true);S.target=best;} S.addrTarget=best; // the building the searched address points at (S.target then follows the user's picks)
   S.roofSets=roofSets; S.roofSkip=new Set(); S.roofSetMeshes=[]; S.roofEdgeParts=buildRoofSets(new Set()); edgeArrays.push(...S.roofEdgeParts);
   S.gfWalls=walls; buildGroundFloors(walls); buildContext(ctxList);
   let total=0; edgeArrays.forEach(a=>total+=a.length); const all=new Float32Array(total); let o=0; edgeArrays.forEach(a=>{all.set(a,o);o+=a.length;});
@@ -1742,7 +1742,7 @@ async function addressOf(obj){
   // the building the searched address points at keeps that address: a corner block has several numbers, and the one nearest its
   // centre is often on the other street
   // (after a recentring on another building the centre is no longer the searched address: that building gets its own)
-  const own=!S.recentered&&((S.target&&family(S.target).includes(obj))||(obj.userData.rings||[]).some(r=>pointInPoly(0,0,r)));
+  const own=!S.recentered&&((S.addrTarget&&family(S.addrTarget).includes(obj))||(obj.userData.rings||[]).some(r=>pointInPoly(0,0,r)));
   if(own&&S.addrLabel){S.label=S.addrLabel;renderAddr();return;}
   try{const r=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon.toFixed(6)}&lat=${lat.toFixed(6)}&type=housenumber&limit=1`);const j=await r.json();if(tok!==revTok)return;
     const f=j.features&&j.features[0]; const d=f?Math.hypot((f.geometry.coordinates[0]-lon)*kx,(f.geometry.coordinates[1]-lat)*ky):1e9;
@@ -2530,6 +2530,7 @@ async function lidarBuildings(){
       const nearB=(p)=>blocks.filter(b=>!b.userData.tower).concat(blocks).reduce((b,x)=>{const d=x.geometry.boundingSphere.center.distanceTo(new THREE.Vector3(p.x,p.y,x.geometry.boundingSphere.center.z));return !b||d<b.d?{x,d}:b;},null).x;
       blocks.forEach(b=>{buildingsGroup.add(b);added.push(b);b.children.forEach(c=>added.push(c));});
       if(m===S.target){const main=blocks.filter(b=>!b.userData.tower).sort((p,q)=>Math.abs(areaOf(q.userData.rings[0]))-Math.abs(areaOf(p.userData.rings[0])))[0];S.target=main||nearB({x:0,y:0});hiLater.push(S.target);}
+      if(m===S.addrTarget){const main=blocks.filter(b=>!b.userData.tower).sort((p,q)=>Math.abs(areaOf(q.userData.rings[0]))-Math.abs(areaOf(p.userData.rings[0])))[0];S.addrTarget=main||nearB({x:0,y:0});}
       if(m===S.building||m===S.selMesh){const nb=nearB(S.win&&S.win.pos?S.win.pos:{x:0,y:0});if(m===S.building)S.building=nb;if(m===S.selMesh)S.selMesh=nb;hiLater.push(nb);}
       n++;
     }
