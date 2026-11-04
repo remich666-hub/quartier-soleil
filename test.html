@@ -639,9 +639,12 @@ function vectorTerraces(m,md,N,px,R,out,pools){
     const ca=Math.cos(ang),sa=Math.sin(ang), toU=(x,y)=>[(x-cx)*ca+(y-cy)*sa,-(x-cx)*sa+(y-cy)*ca], toW=(u,v)=>({x:cx+u*ca-v*sa,y:cy+u*sa+v*ca});
     // 1 m grid in that frame, majority rule
     const UV=P.map(([x,y])=>toU(x,y)); let u0=1e9,v0=1e9,u1=-1e9,v1=-1e9;UV.forEach(([u,v])=>{u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});
+    // a pool it surrounds is part of the slab's footprint (cut out afterwards): the surround then closes squarely around it
+    let PR=null; if(pool){const [pu,pv]=toU(pool.x,pool.y),hu=pool.hu+0.35,hv=pool.hv+0.35;PR=[pu-hu,pu+hu,pv-hv,pv+hv];u0=Math.min(u0,PR[0]);u1=Math.max(u1,PR[1]);v0=Math.min(v0,PR[2]);v1=Math.max(v1,PR[3]);}
     const G=1, gu0=Math.floor(u0/G), gv0=Math.floor(v0/G), GW=Math.floor(u1/G)-gu0+1, GH=Math.floor(v1/G)-gv0+1, cnt=new Float32Array(GW*GH);
     UV.forEach(([u,v])=>{cnt[(Math.floor(v/G)-gv0)*GW+Math.floor(u/G)-gu0]+=px*px;});
     const cell=new Uint8Array(GW*GH); let nc=0; for(let k=0;k<GW*GH;k++)if(cnt[k]>=0.5*G*G){cell[k]=1;nc++;}
+    if(PR){for(let j=0;j<GH;j++)for(let i=0;i<GW;i++){const ua=(i+gu0)*G,va=(j+gv0)*G;if(ua+G>PR[0]&&ua<PR[1]&&va+G>PR[2]&&va<PR[3]&&!cell[j*GW+i]){cell[j*GW+i]=1;nc++;}}}
     if(nc<4)continue;
     let ring;
     const box=()=>[[gu0,gv0],[gu0+GW,gv0],[gu0+GW,gv0+GH],[gu0,gv0+GH]].map(([a,b])=>toW(a*G,b*G));
@@ -655,8 +658,7 @@ function vectorTerraces(m,md,N,px,R,out,pools){
       const pts=traceOuter((i,j)=>In(i,j),si,sj); const o=[];
       for(let k=0;k<pts.length;k++){const a=pts[(k-1+pts.length)%pts.length],b=pts[k],c=pts[(k+1)%pts.length];if((a[0]===b[0]&&b[0]===c[0])||(a[1]===b[1]&&b[1]===c[1]))continue;o.push(b);}
       if(o.length<4)continue; ring=o.map(([i,j])=>toW((i+gu0)*G,(j+gv0)*G));}
-    const holes=[]; if(pool){const c=Math.cos(Math.atan2(pool.uy,pool.ux)),sn=Math.sin(Math.atan2(pool.uy,pool.ux)),hu=pool.hu+0.35,hv=pool.hv+0.35;
-      holes.push([[-hu,-hv],[hu,-hv],[hu,hv],[-hu,hv]].map(([u,v])=>({x:pool.x+u*c-v*sn,y:pool.y+u*sn+v*c})));}
+    const holes=PR?[[[PR[0],PR[2]],[PR[1],PR[2]],[PR[1],PR[3]],[PR[0],PR[3]]].map(([u,v])=>toW(u,v))]:[];
     out.push({ring,holes:holes.filter(h=>h.every(p=>pointInPoly(p.x,p.y,ring)))});}
 }
 function gardenTexture(TP,MH,GT_R,GT_N,pools,terr){
@@ -736,7 +738,7 @@ async function buildParcels(lat,lon){
   if(tok!==parcelTok)return;
   parcelGroup=new THREE.Group();
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
-    let mat=null, pools=[]; try{const pn=[],pf=[];const tr=[];const tn=gardenTexture(TP,MH,GN_R,GN_N,pn,tr);S._terr=tr;const tx=gardenTexture(TP,MH,GT_R,GT_N,pf);
+    let mat=null, pools=[]; try{const pn=[],pf=[];const tr=[];const tn=gardenTexture(TP,MH,GN_R,GN_N,pn,tr);S._terr=tr;S._pools=pn;const tx=gardenTexture(TP,MH,GT_R,GT_N,pf);
       pools=pn.concat(pf.filter(q=>Math.max(Math.abs(q.x),Math.abs(q.y))>GN_R-8));
       if(tx){const uv=new Float32Array(P.length/3*2);for(let k=0,q=0;k<P.length;k+=3,q+=2){uv[q]=(P[k]+GT_R)/(2*GT_R);uv[q+1]=(P[k+1]+GT_R)/(2*GT_R);}
       g.setAttribute('uv',new THREE.BufferAttribute(uv,2));mat=new THREE.MeshLambertMaterial({map:tx,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
