@@ -464,7 +464,7 @@ function proj(lon,lat){const kx=111320*Math.cos(S.lat*RAD),ky=110574;return [(lo
 function coordLonLat(c){if(c[0]>40&&c[0]<52&&(c[1]<40||c[1]>52))return [c[1],c[0]];return [c[0],c[1]];}
 
 /* ---------- polite fetch for the IGN Géoplateforme: 4 concurrent requests, retry on 429/5xx ---------- */
-const GPF={active:0,max:4,q:[]}; const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const GPF={active:0,max:6,q:[]}; const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 /* local cache (IndexedDB) of IGN answers: an address seen before reloads from the phone. 30 days, ~150 MB, oldest dropped first */
 const QC={db:null,ttl:30*864e5,max:150e6};
 QC.open=()=>QC.p||(QC.p=new Promise(res=>{try{const rq=indexedDB.open('qs-cache',1);rq.onupgradeneeded=()=>{const s=rq.result.createObjectStore('r',{keyPath:'u'});s.createIndex('t','t');};rq.onsuccess=()=>res(QC.db=rq.result);rq.onerror=()=>res(null);rq.onblocked=()=>res(null);}catch(e){res(null);}}));
@@ -475,12 +475,14 @@ QC.trim=async()=>{const db=await QC.open();if(!db||QC.trimming)return;QC.trimmin
     let tot=all.reduce((a,b)=>a+b[1],0);const tx=db.transaction('r','readwrite').objectStore('r');for(const [u,n,t] of all){if(tot<=QC.max*0.8&&Date.now()-t<QC.ttl)break;tx.delete(u);tot-=n;}QC.trimming=false;};}catch(e){QC.trimming=false;}};
 const cacheable=u=>/^https:\/\/data\.geopf\.fr\/(wfs\/|wms-r\/|wmts\?|altimetrie\/)/.test(u);
 function gpf(url,opt){
-  if(!cacheable(url))return new Promise((res,rej)=>{GPF.q.push({url,opt,res,rej});pump();});
+  if(!cacheable(url))return new Promise((res,rej)=>{GPF.q.push({url,opt,res,rej,p:prioOf(url)});pump();});
   return QC.get(url).then(hit=>{if(hit)return new Response(hit.blob,{status:200,headers:{'content-type':hit.type||''}});
-    return new Promise((res,rej)=>{GPF.q.push({url,opt,res,rej});pump();}).then(r=>{if(r.ok)r.clone().blob().then(b=>QC.put(url,b,r.headers.get('content-type'))).catch(()=>{});return r;});});
+    return new Promise((res,rej)=>{GPF.q.push({url,opt,res,rej,p:prioOf(url)});pump();}).then(r=>{if(r.ok)r.clone().blob().then(b=>QC.put(url,b,r.headers.get('content-type'))).catch(()=>{});return r;});});
 }
 setTimeout(()=>{QC.trim();},8000);
-function pump(){while(GPF.active<GPF.max&&GPF.q.length){const t=GPF.q.shift();GPF.active++;(async()=>{let r=null,err=null;
+// what the model needs first goes first: data (buildings, laser, relief) before the 20 cm photo, the photo before the wide/infrared ones
+const prioOf=u=>/\/wmts\?/.test(u)?(/TILEMATRIX=19&/.test(u)?1:2):0;
+function pump(){while(GPF.active<GPF.max&&GPF.q.length){let bi=0;for(let i=0;i<GPF.q.length;i++){if(GPF.q[i].p<GPF.q[bi].p)bi=i;if(GPF.q[bi].p===0)break;}const t=GPF.q.splice(bi,1)[0];GPF.active++;(async()=>{let r=null,err=null;
   for(let a=0;a<4;a++){try{r=await fetch(t.url,t.opt);if(r.status===429||r.status>=500){await sleep(700*(a+1)+Math.random()*500);continue;}err=null;break;}catch(e){err=e;await sleep(400);}}
   GPF.active--;pump();if(r&&!(r.status===429||r.status>=500))t.res(r);else t.rej(err||new Error('IGN '+(r&&r.status)));})();}}
 /* ---------- data ---------- */
@@ -765,7 +767,7 @@ async function buildParcels(lat,lon){
   if(tok!==parcelTok)return;
   parcelGroup=new THREE.Group();
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
-    let mat=null, pools=[]; try{const pn=[],pf=[];const tr=[];const tn=gardenTexture(TP,MH,GN_R,GN_N,pn,tr);S._terr=tr;S._pools=pn;const lw=[];const tx=gardenTexture(TP,MH,GT_R,GT_N,pf,null,lw);S._lawns=lw;
+    let mat=null, pools=[]; try{const pn=[],pf=[];const tr=[];const tn=gardenTexture(TP,MH,GN_R,GN_N,pn,tr);S._terr=tr;const lw=[];const tx=gardenTexture(TP,MH,GT_R,GT_N,pf,null,lw);S._lawns=lw;
       pools=pn.concat(pf.filter(q=>Math.max(Math.abs(q.x),Math.abs(q.y))>GN_R-8));
       if(tx){const uv=new Float32Array(P.length/3*2);for(let k=0,q=0;k<P.length;k+=3,q+=2){uv[q]=(P[k]+GT_R)/(2*GT_R);uv[q+1]=(P[k+1]+GT_R)/(2*GT_R);}
       g.setAttribute('uv',new THREE.BufferAttribute(uv,2));mat=new THREE.MeshLambertMaterial({map:tx,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
@@ -789,7 +791,7 @@ async function buildParcels(lat,lon){
     const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa39a8a,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}));m.receiveShadow=true;m.renderOrder=1;fadeMat(m.material);parcelGroup.add(m);}
   if(L.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(L,3));
     const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x8a8070,transparent:true,opacity:0.75}));l.renderOrder=1;fadeMat(l.material);parcelGroup.add(l);}
-  scene.add(parcelGroup); if(nParc>20)streetsFromCadastre(); applyGroundMode();
+  scene.add(parcelGroup); if(nParc>20)streetsFromCadastre(); applyGroundMode(); if(S.T)S.T.parcels=performance.now();
 }
 const STREET=0xf4f1eb, CAD_R0=200, CAD_R1=226;
 function streetsFromCadastre(){ // streets = the public space between parcels: no more estimated road ribbons inside the cadastral zone
@@ -872,14 +874,15 @@ function buildMNT(MS,MH,feats){ // bare ground from the laser (surface − heigh
   // the surface and height grids do not always agree on a building's edge or a crown's rim: thin spikes of several metres.
   // Ground is smooth: 3×3 median everywhere, then any cell still > 1 m off its 5×5 median takes that median.
   const z=new Float32Array(N*N), w=new Float32Array(25);
-  for(let j=0;j<N;j++)for(let i=0;i<N;i++){let c=0;for(let dj=-1;dj<=1;dj++){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-1;di<=1;di++){const ii=i+di;if(ii<0||ii>=N)continue;w[c++]=raw[jj*N+ii];}}
-    const a=Array.prototype.slice.call(w,0,c).sort((p,q)=>p-q);z[j*N+i]=a[c>>1];}
+  const isort=(c)=>{for(let a=1;a<c;a++){const v=w[a];let b=a-1;while(b>=0&&w[b]>v){w[b+1]=w[b];b--;}w[b+1]=v;}}; // small in-place sort, no allocation (≈10× faster than Array.sort here)
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){let c=0;for(let dj=-1;dj<=1;dj++){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-1;di<=1;di++){const ii=i+di;if(ii<0||ii>=N)continue;const v=raw[jj*N+ii];if(v===v)w[c++]=v;}}
+    if(!c){z[j*N+i]=NaN;continue;} isort(c);z[j*N+i]=w[c>>1];}
   // what is left above the ground (awnings, pergolas, a hedge the height grid missed) only ever pushes it up: a cell more than
   // 50 cm above the low part of its 5×5 neighbourhood (30th percentile) takes that value
-  {const z2=new Float32Array(z);for(let j=2;j<N-2;j++)for(let i=2;i<N-2;i++){const k=j*N+i;let c=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++)w[c++]=z[k+dj*N+di];
-    const a=Array.prototype.slice.call(w).sort((p,q)=>p-q);if(z[k]-a[7]>0.5)z2[k]=a[7];} z.set(z2);}
+  {const z2=new Float32Array(z);for(let j=2;j<N-2;j++)for(let i=2;i<N-2;i++){const k=j*N+i,lim=z[k]-0.5;let c=0,low=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++){const v=z[k+dj*N+di];w[c++]=v;if(v<lim)low++;}
+    if(low<8)continue; isort(25);z2[k]=w[7];} z.set(z2);} // the 30th percentile is under the limit only when 8 neighbours are: sort only then
   for(let j=2;j<N-2;j++)for(let i=2;i<N-2;i++){const k=j*N+i;const m4=(z[k-1]+z[k+1]+z[k-N]+z[k+N])/4;if(Math.abs(z[k]-m4)<0.6)continue;
-    let c=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++)w[c++]=z[k+dj*N+di];const a=Array.prototype.slice.call(w).sort((p,q)=>p-q);if(Math.abs(z[k]-a[12])>1)z[k]=a[12];}
+    let c=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++)w[c++]=z[k+dj*N+di];const zk=z[k];isort(25);if(Math.abs(zk-w[12])>1)z[k]=w[12];}
   return {N,z};
 }
 function terrainZ(x,y){ // metres above alt0: the laser ground grid (its edge beyond), the coarse IGN relief only when the laser is missing
@@ -1837,11 +1840,6 @@ async function fetchSkyline(){
     if(got>=pts2.length*0.5)return {az:AZ,hor,horB,decAt,hits,n:got,shift:sh,lg:LG};
     got=0;hor.fill(-0.2);hits.fill(null);
   }
-  if(false){
-    pts.forEach(p=>{const ll=proj(p.lon,p.lat);let z=null;if(F&&p.d<115)z=F.at(ll[0],ll[1]);if(z==null&&C)z=C.at(ll[0],ll[1]);if(z==null)return;got++;const ang=Math.atan2(z-winZ,p.d);if(ang>hor[p.ai]){hor[p.ai]=ang;hits[p.ai]={d:p.d,z:z-S.alt0};}});
-    if(got>=pts.length*0.5)return {az:AZ,hor,hits,n:got};
-    got=0;hor.fill(-0.2);hits.fill(null);
-  }
   const B=400; // sequential: the IGN service rate-limits parallel bursts (429)
   for(let s=0;s<pts.length;s+=B){const sl=pts.slice(s,s+B);
     for(let attempt=0;attempt<3;attempt++){const c=new AbortController();const id=setTimeout(()=>c.abort(),25000);let ok=false;try{
@@ -2111,7 +2109,7 @@ async function lidarVegGrid(){
   if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();const k=blockers.indexOf(lidarVegMesh);if(k>=0)blockers.splice(k,1);lidarVegMesh=null;}
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
     lidarVegMesh=new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true}));lidarVegMesh.castShadow=lidarVegMesh.receiveShadow=true;scene.add(lidarVegMesh);blockers.push(lidarVegMesh);}
-  treeSets.lidar=trees.concat(bushes); S.counts&&(S.counts.lidarVeg=nv); const nt=rebuildTrees(); buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[])); S.obstacles=S.meshes.concat(monuments,roofMeshes,blockers,structures,roadMeshes.length?[roadMeshes[0]]:[]); S.obstacles.push(...crownMeshes()); if(!S.loading)status(loadedText(nt));
+  if(S.T)S.T.veg=performance.now(); treeSets.lidar=trees.concat(bushes); S.counts&&(S.counts.lidarVeg=nv); const nt=rebuildTrees(); buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[])); S.obstacles=S.meshes.concat(monuments,roofMeshes,blockers,structures,roadMeshes.length?[roadMeshes[0]]:[]); S.obstacles.push(...crownMeshes()); if(!S.loading)status(loadedText(nt));
 }
 function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?` · végétation LiDAR HD (rayon ${CORE} m)`:c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
 /* ---------- load flow ---------- */
@@ -2119,27 +2117,27 @@ async function load(q,at){
   $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('addrDone').hidden=true; $('stepAddr').hidden=false; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
-    const g=at||await geocode(q); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
+    S.T={start:performance.now()}; const g=at||await geocode(q); S.T.geo=performance.now(); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
     S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; S.rgbFarP=fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS',g.lat,g.lon,18,3).catch(()=>null); {const myLat=g.lat; fetchIRC(g.lat,g.lon).then(I=>{if(!I||S.lat!==myLat)return;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();}).catch(()=>{});}
     status('Bâtiments et relief IGN…');
-    const [alt,feats,terrain]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000),Promise.resolve(null)]);
+    const [alt,feats]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]); const terrain=null;
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
     S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
-    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms)S.mnt=buildMNT(ms,mh,feats);}catch(err){S.mnt=null;}
+    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
-    S.lattices=detectLattices(feats); S.arches=detectArches(feats); buildScene(feats); applyLattices(); loadOrtho(g.lat,g.lon);
-    $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${terrain?' · relief':''}`; $('site').hidden=false;
+    S.lattices=detectLattices(feats); S.arches=detectArches(feats); buildScene(feats); applyLattices(); S.T.scene=performance.now(); loadOrtho(g.lat,g.lon);
+    $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
     const [veg,osm,wx,roads,pois,hedges,walls,rails,water]=await Promise.all([wfs('BDTOPO_V3:zone_de_vegetation',g.lat,g.lon,RW,1500).catch(()=>[]),Promise.resolve({trees:[],hedges:[]}),fetchWeather(g.lat,g.lon).catch(()=>null),
       wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,RW,5000).catch(()=>[]),L('zone_d_activite_ou_d_interet',600),L('haie',2000),L('construction_lineaire',2000),wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,RW,800).catch(()=>[]),wfs('BDTOPO_V3:surface_hydrographique',g.lat,g.lon,RW,500).catch(()=>[])]);
     const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,DETAIL_R+80,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); try{buildPlan(veg,roads);}catch(err){console.error('plan',err);} const nl=applyLandmarks(pois);
-    S.vegZoneRings=vegKinds(veg); treeSets.ign=vegZoneSpots(veg).filter(t=>Math.hypot(t.x!=null?t.x:t[0],t.y!=null?t.y:t[1])<DETAIL_R+40); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!terrain}); S.wx=wx; if(!wx)toast('Météo indisponible');
+    S.vegZoneRings=vegKinds(veg); treeSets.ign=vegZoneSpots(veg).filter(t=>Math.hypot(t.x!=null?t.x:t[0],t.y!=null?t.y:t[1])<DETAIL_R+40); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!(S.mnt||S.terrain)}); S.wx=wx; if(!wx)toast('Météo indisponible');
     try{applyFade();}catch(err){console.error('fade',err);}
-    buildParcels(g.lat,g.lon);
+    S.T.layers=performance.now(); buildParcels(g.lat,g.lon);
     S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building;
     S.introP=null; lidarBuildings(); // runs during the establishing shot; the push-in waits for it
     try{localStorage.setItem('qs-addr',q);}catch(e){}
@@ -2201,7 +2199,7 @@ $('form').addEventListener('submit',e=>{e.preventDefault();submitAddr();});
 try{const a=localStorage.getItem('qs-addr');if(a)$('addr').value=a;}catch(e){}
 {let q=null,geo=null;try{q=sessionStorage.getItem('qs-pending');geo=JSON.parse(sessionStorage.getItem('qs-pending-geo')||'null');sessionStorage.removeItem('qs-pending');sessionStorage.removeItem('qs-pending-geo');}catch(e){}
  const u=new URLSearchParams(location.search);if(!q&&u.get('adresse'))q=u.get('adresse');if(u.has('adresse'))history.replaceState(null,'',location.pathname);
- if(q){$('addr').value=q;setTimeout(()=>{if(geo&&geo.label===q&&isFinite(geo.lat)&&isFinite(geo.lon))load(q,geo);else submitAddr();},50);}}
+ if(q){S.startPending=true;$('addr').value=q;setTimeout(()=>{if(geo&&geo.label===q&&isFinite(geo.lat)&&isFinite(geo.lon))load(q,geo);else submitAddr();},50);}}
 
 /* ---------- buildings measured by the LiDAR HD (within LB_R): each IGN footprint keeps its clean outline, but its walls rise to the
    real height and its roof is draped on the laser surface (real pitches, terraces, courtyards), coloured from the orthophoto ---------- */
@@ -2509,7 +2507,7 @@ async function lidarBuildings(){
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
     (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
     roofMeshes=roofMeshes.filter(m=>!gone.has(m));S.roofEdgeParts=buildRoofSets(S.roofSkip);
-    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices();
+    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); S.T.lidarBuilt=performance.now();
     S.counts=Object.assign(S.counts||{},{lidarBuildings:n});
     return true;
   }
@@ -2601,7 +2599,7 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 window.QS={terrainZ,S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown},get treesD(){return treeCrownD},LEAF,LEAFU,classifyTrees};
-update(); load($('addr').value);
+update(); if(!S.startPending)load($('addr').value); // an address handed over by the home page is loaded once, not also the last one seen
 })();
 </script>
 
