@@ -921,7 +921,7 @@ function buildRoads(feats,rails){
         q(a[0]+nx,a[1]+ny,a[2]-T,b[0]+nx,b[1]+ny,b[2]-T,b[0]-nx,b[1]-ny,b[2]-T,a[0]-nx,a[1]-ny,a[2]-T,0,0,-1); // underside
         q(a[0]-nx,a[1]-ny,a[2]-T,b[0]-nx,b[1]-ny,b[2]-T,b[0]-nx,b[1]-ny,b[2]+0.9,a[0]-nx,a[1]-ny,a[2]+0.9,-nx/(w/2),-ny/(w/2),0); // side + parapet
         q(a[0]+nx,a[1]+ny,a[2]+0.9,b[0]+nx,b[1]+ny,b[2]+0.9,b[0]+nx,b[1]+ny,b[2]-T,a[0]+nx,a[1]+ny,a[2]-T,nx/(w/2),ny/(w/2),0);
-        for(let t=12;t<L;t+=25){const k=t/L;const x=a[0]+dx*k,y=a[1]+dy*k,zt=a[2]+(b[2]-a[2])*k-T,zg=terrainZ(x,y);if(zt-zg>2)pillars.push([x,y,zg,zt-zg]);}
+        for(let t=12;t<L;t+=25){const k=t/L;const x=a[0]+dx*k,y=a[1]+dy*k,zt=a[2]+(b[2]-a[2])*k-T,zg=terrainZ(x,y);if(zt-zg>2&&Math.hypot(x,y)<FADE.r0.value+60)pillars.push([x,y,zg,zt-zg]);} // pillars cannot fade out with the deck (instanced): only where the deck is still solid
       }
     });
   });
