@@ -260,12 +260,6 @@ try{applyFade=__w('applyFade',applyFade);}catch(e){}
 try{stepFades=__w('stepFades',stepFades);}catch(e){}
 try{buildPools=__w('buildPools',buildPools);}catch(e){}
 try{buildTerraces=__w('buildTerraces',buildTerraces);}catch(e){}
-try{traceOuter=__w('traceOuter',traceOuter);}catch(e){}
-try{smoothRing=__w('smoothRing',smoothRing);}catch(e){}
-try{rasterPolys=__w('rasterPolys',rasterPolys);}catch(e){}
-try{blurF=__w('blurF',blurF);}catch(e){}
-try{vectorTerraces=__w('vectorTerraces',vectorTerraces);}catch(e){}
-try{gardenCompute=__w('gardenCompute',gardenCompute);}catch(e){}
 try{gardenWorkerGet=__w('gardenWorkerGet',gardenWorkerGet);}catch(e){}
 try{streetsFromCadastre=__w('streetsFromCadastre',streetsFromCadastre);}catch(e){}
 try{groundStreetColours=__w('groundStreetColours',groundStreetColours);}catch(e){}
@@ -314,9 +308,7 @@ try{roofMatKey=__w('roofMatKey',roofMatKey);}catch(e){}
 try{convexity=__w('convexity',convexity);}catch(e){}
 try{buildRoofSets=__w('buildRoofSets',buildRoofSets);}catch(e){}
 try{addRoof=__w('addRoof',addRoof);}catch(e){}
-try{buildContext=__w('buildContext',buildContext);}catch(e){}
 try{monumentNature=__w('monumentNature',monumentNature);}catch(e){}
-try{pointInPoly=__w('pointInPoly',pointInPoly);}catch(e){}
 try{vegKinds=__w('vegKinds',vegKinds);}catch(e){}
 try{vegZoneSpots=__w('vegZoneSpots',vegZoneSpots);}catch(e){}
 try{hedgeChain=__w('hedgeChain',hedgeChain);}catch(e){}
@@ -355,7 +347,6 @@ try{placeMarker=__w('placeMarker',placeMarker);}catch(e){}
 try{stepFacade=__w('stepFacade',stepFacade);}catch(e){}
 try{frameBuilding=__w('frameBuilding',frameBuilding);}catch(e){}
 try{unproj=__w('unproj',unproj);}catch(e){}
-try{distToRing=__w('distToRing',distToRing);}catch(e){}
 try{registerFootprint=__w('registerFootprint',registerFootprint);}catch(e){}
 try{horizonAt=__w('horizonAt',horizonAt);}catch(e){}
 try{leafGrid=__w('leafGrid',leafGrid);}catch(e){}
@@ -1099,11 +1090,15 @@ function displace(mesh,segs){ // rebuild a plane's geometry with terrain heights
   // cell size: 1 m near the address (lanes), 2 m to 200 m, 4 m to the edge of the laser grid, coarse beyond
   const fineAt=w=>{const d=Math.abs(w);return d<80?1:d<200?2:d<MNT_R?4:0;};
   const axis=(L,o)=>{const a=[],c=L/segs;let t=-L/2;a.push(t);while(t<L/2-1e-6){const f=S.mnt?fineAt(o+t):0;t+=f&&f<c?f:c;a.push(Math.min(t,L/2));}return a;};
-  const xs=axis(W,ox), ys=axis(H,oy), nx=xs.length, ny=ys.length, P=new Float32Array(nx*ny*3), U=new Float32Array(nx*ny*2), I=[];
+  const xs=axis(W,ox), ys=axis(H,oy), nx=xs.length, ny=ys.length, P=new Float32Array(nx*ny*3), U=new Float32Array(nx*ny*2), I=new Uint32Array((nx-1)*(ny-1)*6), Nn=new Float32Array(nx*ny*3);
   for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i,x=xs[i],y=ys[ny-1-j];P[k*3]=x;P[k*3+1]=y;P[k*3+2]=terrainZ(ox+x,oy+y);U[k*2]=(x+W/2)/W;U[k*2+1]=(y+H/2)/H;}
-  for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){const a=j*nx+i,b=a+1,c=a+nx,d=c+1;I.push(a,c,b,b,c,d);}
-  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(P,3)); g.setAttribute('uv',new THREE.BufferAttribute(U,2)); g.setIndex(I);
-  g.computeVertexNormals(); g.parameters={width:W,height:H}; mesh.geometry.dispose(); mesh.geometry=g;
+  let q=0; for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){const a=j*nx+i,b=a+1,c=a+nx,d=c+1;I[q++]=a;I[q++]=c;I[q++]=b;I[q++]=b;I[q++]=c;I[q++]=d;}
+  // normals straight from the height grid (central differences): same result as computeVertexNormals on a regular grid, ~10× cheaper
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i,il=i?k-1:k,ir=i<nx-1?k+1:k,ju=j?k-nx:k,jd=j<ny-1?k+nx:k;
+    const dzx=(P[ir*3+2]-P[il*3+2])/((P[ir*3]-P[il*3])||1), dzy=(P[ju*3+2]-P[jd*3+2])/((P[ju*3+1]-P[jd*3+1])||1), l=Math.hypot(dzx,dzy,1);
+    Nn[k*3]=-dzx/l;Nn[k*3+1]=-dzy/l;Nn[k*3+2]=1/l;}
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(P,3)); g.setAttribute('uv',new THREE.BufferAttribute(U,2)); g.setAttribute('normal',new THREE.BufferAttribute(Nn,3)); g.setIndex(new THREE.BufferAttribute(I,1));
+  g.parameters={width:W,height:H}; mesh.geometry.dispose(); mesh.geometry=g;
 }
 /* draping helpers: split long edges so that flat layers follow the 2 m relief instead of cutting through it */
 function drapeTris(tris,lift,P,N){ // tris: [[x,y],[x,y],[x,y]]...
@@ -1427,12 +1422,12 @@ ctxMat.onBeforeCompile=sh=>{ // aerial perspective from the real distance to the
     float foot=smoothstep(0.0,6.0,vQsP.z-vBase);                               // feet dissolve into the ground mist
     gl_FragColor.a=0.8*(1.0-qsT)*(0.3+0.7*foot)*(1.0-0.35*qsD);`);};
 ctxMat.customProgramCacheKey=()=>'qsctx3';
-function buildContext(list){ // the wider neighbourhood: plain blocks merged into one mesh (one draw call), fading into the sky
+async function buildContext(list){ const yl=slicer(); // the wider neighbourhood: plain blocks merged into one mesh (one draw call), fading into the sky
   if(ctxMesh){scene.remove(ctxMesh);ctxMesh.geometry.dispose();ctxMesh=null;} if(!list.length)return;
   const P=[],N=[],B=[];
-  list.forEach(({outer,zBase,h})=>{const g=new THREE.ExtrudeGeometry(new THREE.Shape(outer),{depth:h+SINK,bevelEnabled:false,curveSegments:1});
+  for(const it of list){await yl(); if(list!==S._ctxList)return; (({outer,zBase,h})=>{const g=new THREE.ExtrudeGeometry(new THREE.Shape(outer),{depth:h+SINK,bevelEnabled:false,curveSegments:1});
     const pa=g.attributes.position.array,na=g.attributes.normal.array;const z0=zBase-SINK;
-    for(let i=0;i<pa.length;i+=3){P.push(pa[i],pa[i+1],pa[i+2]+z0);N.push(na[i],na[i+1],na[i+2]);B.push(zBase);} g.dispose();});
+    for(let i=0;i<pa.length;i+=3){P.push(pa[i],pa[i+1],pa[i+2]+z0);N.push(na[i],na[i+1],na[i+2]);B.push(zBase);} g.dispose();})(it);}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('aBase',new THREE.Float32BufferAttribute(B,1));
   ctxMesh=new THREE.Mesh(g,ctxMat); ctxMesh.castShadow=false; ctxMesh.receiveShadow=false; ctxMesh.renderOrder=3; scene.add(ctxMesh);
 }
@@ -1497,7 +1492,7 @@ async function buildScene(features){ const yl=slicer();
    const cur=cands.find(c=>c.mesh===best); if(!cur||annex(cur)||cur.de>0){const ok=cands.filter(c=>!annex(c)).sort((a,b)=>sc(a)-sc(b)); if(ok.length&&(!cur||annex(cur)||sc(ok[0])<sc(cur)))best=ok[0].mesh;}}
   if(!best)best=monuBest; if(best){best.material=matsFor(best.userData.usage,true);S.target=best;} S.addrTarget=best; // the building the searched address points at (S.target then follows the user's picks)
   S.roofSets=roofSets; S.roofSkip=new Set(); S.roofSetMeshes=[]; S.roofEdgeParts=buildRoofSets(new Set()); edgeArrays.push(...S.roofEdgeParts);
-  S.gfWalls=walls; buildGroundFloors(walls); buildContext(ctxList);
+  S.gfWalls=walls; buildGroundFloors(walls); S._ctxList=ctxList; await buildContext(ctxList);
   let total=0; edgeArrays.forEach(a=>total+=a.length); const all=new Float32Array(total); let o=0; edgeArrays.forEach(a=>{all.set(a,o);o+=a.length;});
   const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.BufferAttribute(all,3));
   edgeLines=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0x4a4f56,transparent:true,opacity:0.28})); scene.add(edgeLines);
