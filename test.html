@@ -1234,6 +1234,7 @@ function buildScene(features){
     polys.forEach(poly=>{
       if(!poly[0]||poly[0].length<4)return;
       const outer=ringToLocal(poly[0]); const holes=[]; for(let i=1;i<poly.length;i++)holes.push(ringToLocal(poly[i]));
+      if(monu&&!(p.hauteur>0)&&Math.abs(areaOf(outer))<30)h=3; // statues, small memorials: no IGN height → a low plinth, not a 6 m post
       let cx=0,cy=0; outer.forEach(q=>{cx+=q.x;cy+=q.y;}); cx/=outer.length; cy/=outer.length;
       let zBase=(typeof p.altitude_minimale_sol==='number'&&p.altitude_minimale_sol>-50)?p.altitude_minimale_sol-S.alt0:terrainZ(cx,cy);
       // detailed zone of DETAIL_R m; beyond it, only buildings tall enough to shade the address (> 4° above a first-floor window), as plain blocks
