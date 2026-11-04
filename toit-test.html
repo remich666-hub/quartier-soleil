@@ -3550,7 +3550,7 @@ function roofModel(R){
     for(let qi=0;qi<pieces.length&&!changed;qi++){const pc=pieces[qi];if(pc.F.best.score>=9||pc.noCut)continue;
       const pts=grid(pc.P); if(pts.length<24)continue; const e0=err(pts,p=>zFit(pc.F,p.x,p.y));
       const ax=pc.F.E[0].t,U=(x,y)=>x*ax[0]+y*ax[1],V=(x,y)=>-x*ax[1]+y*ax[0];let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;pc.P.forEach(([x,y])=>{u0=Math.min(u0,U(x,y));u1=Math.max(u1,U(x,y));v0=Math.min(v0,V(x,y));v1=Math.max(v1,V(x,y));});
-      const off=pts.filter(p=>Math.abs(p.z-zFit(pc.F,p.x,p.y))>0.6);
+      const off=pts.filter(p=>Math.abs(p.z-zFit(pc.F,p.x,p.y))>0.45);
       const key=c=>Math.round(c.x/s)+','+Math.round(c.y/s),map=new Map();off.forEach(c=>map.set(key(c),c));const seen=new Set(),groups=[];
       off.forEach(c0=>{const k0=key(c0);if(seen.has(k0))return;const sg=Math.sign(c0.z-zFit(pc.F,c0.x,c0.y));const g=[],q=[c0];seen.add(k0);while(q.length){const c=q.pop();g.push(c);const i=Math.round(c.x/s),j=Math.round(c.y/s);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const k=(i+di)+','+(j+dj);const o=map.get(k);if(o&&!seen.has(k)&&Math.sign(o.z-zFit(pc.F,o.x,o.y))===sg){seen.add(k);q.push(o);}}}groups.push(g);});
       let bestCut=null;
@@ -3579,7 +3579,7 @@ function roofModel(R){
             if(Math.abs(MK.area(Q))<5){ok=false;break;}
             const FQ=fitPiece(Q,pc.bk.top); if(FQ.best.score>=9){ok=false;break;} e+=err(gp,p=>zFit(FQ,p.x,p.y)); keep.push({P:Q,bk:pc.bk,F:FQ,cut:true});}
           if(!ok||!keep.length)continue;
-          if(e<e0*0.8&&(!bestCut||e<bestCut.e))bestCut={e,keep};}}
+          if((e<e0*0.8||e0-e>=0.25*g.length)&&(!bestCut||e<bestCut.e))bestCut={e,keep};}}
       if(bestCut){pieces.splice(qi,1,...bestCut.keep);changed=true;cuts++;}else pc.noCut=true;}
     if(!changed)break;}
   const subs=[];
@@ -3588,22 +3588,6 @@ function roofModel(R){
     const tops=pc.F.fits.slice().sort((a,b)=>a.score-b.score).slice(0,4); let bestJ=null;
     tops.forEach(fb=>{const F={...pc.F,best:fb};const r=findSubs(pc,F);DBG.push(['J',fb.c.k,fb.rms.toFixed(2),r.score.toFixed(3),r.subs.length,r.dbg]);if(!bestJ||r.score<bestJ.r.score)bestJ={F,r};});
     if(bestJ){pc.F=bestJ.F; bestJ.r.subs.forEach(sb=>subs.push(sb));}});
-  /* the roof can overhang the IGN wall line (eaves, a lower roof running past it): an outer edge is pushed out as far as the laser,
-     just beyond it, still lies on the roof plane next to it (up to 2 m), never into another building */
-  const othersR=S.meshes.filter(m=>m.userData.rings&&family(RF.sel||S.building).indexOf(m)<0).map(m=>m.userData.rings[0].map(p=>({x:p.x+R.sh.dx,y:p.y+R.sh.dy})));
-  const exts=[];
-  pieces.forEach(pc=>{if(pc.sub||pc.F.best.score>=9||!MHr)return; const P=pc.P,n=P.length;
-    for(let i=0;i<n;i++){const a=P[i],b=P[(i+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<1)continue;const ox=(b[1]-a[1])/L,oy=-(b[0]-a[0])/L,tx=(b[0]-a[0])/L,ty=(b[1]-a[1])/L;
-      const reachAt=t=>{let reach=0;const x0=a[0]+tx*t,y0=a[1]+ty*t;let zp=R.Z(x0-ox*0.25,y0-oy*0.25);if(zp==null)return 0;const zw=zp; /* the roof just inside the wall */
-        for(let o=0.25;o<=2.001;o+=0.25){const x=x0+ox*o,y=y0+oy*o;if(othersR.some(r=>pointInPoly(x,y,r))||pieces.some(q=>q!==pc&&pointInPoly(x,y,q.P.map(([u,v])=>({x:u,y:v})))))break;
-          const z=R.Z(x,y),h=MHr.at(x,y); /* still roof: not ground, no jump, not rising above the eave (a tree would) */
-          if(!(z!=null&&h!=null&&h>1.5&&Math.abs(z-zp)<0.45&&z<=zw+0.25))break; zp=z; reach=o;}return reach;};
-      const ts=[];for(let t=0.125;t<L;t+=0.25)ts.push([t,reachAt(t)]);
-      /* runs of samples reaching at least 50 cm past the wall */
-      let run=[];const flush=()=>{if(run.length*0.25>=1.0){const rs=run.map(r=>r[1]).sort((x,y)=>x-y),dep=rs[Math.floor(rs.length*0.3)];const t0=run[0][0]-0.125,t1=run[run.length-1][0]+0.125;
-          if(dep>=0.5){const A=[a[0]+tx*t0,a[1]+ty*t0],B=[a[0]+tx*t1,a[1]+ty*t1];exts.push({P:[A,B,[B[0]+ox*dep,B[1]+oy*dep],[A[0]+ox*dep,A[1]+oy*dep]],bk:pc.bk,F:pc.F,ext:true,parent:pc});}}run=[];};
-      ts.forEach(r=>{if(r[1]>=0.5)run.push(r);else flush();});flush();}});
-  exts.forEach(e=>{if(MK.area(e.P)<0)e.P.reverse(); if(Math.abs(MK.area(e.P))>=0.8)pieces.push(e);});
   subs.forEach(sb=>pieces.push(sb));
   pieces.forEach((pc,pi)=>{const P=pc.P,n=P.length,E=pc.F.E,d=pc.F.d,best=pc.F.best;
     pc.fit=best; const Eb=best.c.E, z0=best.z0, kk=best.k;
