@@ -3435,17 +3435,17 @@ function roofModel(R){
       let e2=0;use.forEach(u=>{const r=u.p.z-(z0+k*u.m);e2+=r*r;});const rms=Math.sqrt(e2/Math.max(1,use.length)),inl=use.length/Math.max(1,pts.length);
       const pen={flat:0,shed:0.03,gable:0.015,gable2:0.025,hip:0.03}[c.k];
       return {c,z0,k,score:rms*(1+2*(1-inl))+pen,rms,inl};};
-    let best=null; if(pts.length>=6)cands.forEach(c=>{const f=fit(c);if(f&&(!best||f.score<best.score))best=f;});
+    let best=null; const all=[]; if(pts.length>=6)cands.forEach(c=>{const f=fit(c);all.push(f?[c.k,f.rms.toFixed(2),(f.inl*100|0),(Math.atan(f.k)*57.3).toFixed(0),f.score.toFixed(3)]:[c.k,'x']);if(f&&(!best||f.score<best.score))best=f;});
     if(!best)best={c:{k:'flat',E:[]},z0:top,k:0,score:9,rms:9,inl:0};
-    return {best,E,d,np:pts.length};};
+    return {best,E,d,np:pts.length,all};};
   /* blocks are an IGN split, not the roof's: two neighbouring pieces are one roof when their union is convex and one model fits it as well */
   const hull=pts=>{const p=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);const lo=[],up=[];
     p.forEach(q=>{while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],q)<=1e-9)lo.pop();lo.push(q);});for(let i=p.length-1;i>=0;i--){const q=p[i];while(up.length>=2&&cr(up[up.length-2],up[up.length-1],q)<=1e-9)up.pop();up.push(q);}
     return lo.slice(0,-1).concat(up.slice(0,-1));};
-  pieces.forEach(pc=>{pc.F=fitPiece(pc.P,pc.bk.top);});
+  const DBG=[]; window.__MDBG=DBG; pieces.forEach(pc=>{pc.F=fitPiece(pc.P,pc.bk.top);});
   for(let it=0;it<20;it++){let bestM=null;
     for(let i=0;i<pieces.length;i++)for(let j=i+1;j<pieces.length;j++){const a=pieces[i],b=pieces[j];const H=hull(a.P.concat(b.P));const ah=Math.abs(MK.area(H)),aa=Math.abs(MK.area(a.P))+Math.abs(MK.area(b.P));
-      if(ah>aa*1.04+0.5)continue; const Hc=MK.clean(H,0.15); if(!Hc)continue; const f=fitPiece(Hc,Math.max(a.bk.top,b.bk.top)); if(f.best.score>=9)continue;
+      DBG.push([i,j,ah.toFixed(1),aa.toFixed(1)]); if(ah>aa*1.04+0.5)continue; const Hc=MK.clean(H,0.15); if(!Hc)continue; const f=fitPiece(Hc,Math.max(a.bk.top,b.bk.top)); DBG.push(['m',i,j,f.all,a.F.best.rms,b.F.best.rms]); if(f.best.score>=9)continue;
       const na=a.F.np,nb=b.F.np,sep=(a.F.best.rms*na+b.F.best.rms*nb)/Math.max(1,na+nb);
       if(f.best.rms<=sep*1.2+0.04&&f.best.inl>=0.7){const gain=sep-f.best.rms;if(!bestM||gain>bestM.gain)bestM={i,j,Hc,f,gain};}}
     if(!bestM)break; const a=pieces[bestM.i],b=pieces[bestM.j]; pieces.splice(bestM.j,1); pieces[bestM.i]={P:bestM.Hc,bk:a.bk.top>=b.bk.top?a.bk:b.bk,F:bestM.f};}
