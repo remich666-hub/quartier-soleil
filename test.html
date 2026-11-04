@@ -735,7 +735,8 @@ async function buildParcels(lat,lon){
   let feats=[]; try{feats=await wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',lat,lon,DETAIL_R+20,2500);}catch(e){return;}
   for(let i=0;i<80&&!S.rawOrtho&&tok===parcelTok;i++)await new Promise(r=>setTimeout(r,250));
   if(tok!==parcelTok||!feats.length)return;
-  try{S.rgbFar=S.rgbFarP?await Promise.race([S.rgbFarP,new Promise(r=>setTimeout(()=>r(null),8000))]):null;}catch(e){S.rgbFar=null;} if(tok!==parcelTok)return;
+  try{S.rgbFar=S.rgbFarP?await Promise.race([S.rgbFarP,new Promise(r=>setTimeout(()=>r(null),4000))]):null;}catch(e){S.rgbFar=null;} if(tok!==parcelTok)return;
+  if(!S.rgbFar&&S.rgbFarP){const P0=S.rgbFarP;P0.then(F=>{if(F&&S.rgbFarP===P0&&!S.rgbFar&&tok===parcelTok)buildParcels(lat,lon);});} // the wide photo came late: redo the gardens with it
   const green=orthoGreen(); let MH=null; try{MH=S.lidarP&&await Promise.race([S.lidarP.mnh,new Promise(r=>setTimeout(()=>r(null),6000))]);}catch(e){}
   if(tok!==parcelTok)return;
   // building occupancy at 1 m
