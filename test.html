@@ -1031,13 +1031,15 @@ function surfaces(feats,lift,P,N){ // flat polygons (water)
       const sg=new THREE.ShapeGeometry(shape);const pos=sg.attributes.position;const idx=sg.index;const T=[];
       for(let i=0;i<idx.count;i+=3){const q=[0,1,2].map(d=>{const k=idx.getX(i+d);return [pos.getX(k),pos.getY(k)];});T.push(q);} drapeTris(T,lift,P,N); sg.dispose();});});
 }
+function onceMat(mat,ref){ // a flat layer made of overlapping strips/discs: each pixel drawn once, so its fade-out never doubles where pieces overlap
+  mat.stencilWrite=true;mat.stencilRef=ref;mat.stencilFunc=THREE.NotEqualStencilFunc;mat.stencilZPass=THREE.ReplaceStencilOp;mat.stencilFail=THREE.KeepStencilOp;mat.stencilZFail=THREE.KeepStencilOp;return mat;}
 function meshOf(P,N,mat,shadow){if(!P.length)return null;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));const m=new THREE.Mesh(g,mat);m.receiveShadow=true;m.castShadow=!!shadow;scene.add(m);layerMeshes.push(m);return m;}
 function buildPlan(veg,roads){
   if(planLayer){planLayer.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){if(o.material.map)o.material.map.dispose();o.material.dispose();}});scene.remove(planLayer);}
   planLayer=new THREE.Group(); scene.add(planLayer);
   const P=[],N=[]; surfaces(veg||[],0.1,P,N);
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
-    const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xd0dac4}));m.receiveShadow=true;planLayer.add(m);}
+    const m=new THREE.Mesh(g,onceMat(new THREE.MeshLambertMaterial({color:0xd0dac4}),4));m.receiveShadow=true;planLayer.add(m);}
   // street names laid flat on the longest straight stretch of each street, in the site's typeface
   const nameOf=p=>p.nom_voie_ban_gauche||p.nom_voie_ban_droite||p.nom_1_gauche||p.nom_1_droite||p.nom_collaboratif_gauche||p.nom_collaboratif_droite||p.cpx_toponyme_route_nommee||'';
   const best=new Map();
@@ -1063,9 +1065,9 @@ function buildLayers(roads,hedges,walls,rails,water){
   let P=[],N=[];
   S.roadFeats=roads.filter(f=>!(+(f.properties.position_par_rapport_au_sol??0)>0));
   ribbons(S.roadFeats,roadWidth,0.18,P,N,S.cadStreets?CAD_R0-8:0);
-  S.roadMesh=meshOf(P,N,new THREE.MeshLambertMaterial({color:0xf5f2ec}),false);
-  P=[];N=[]; ribbons(rails,3.2,0.14,P,N); meshOf(P,N,new THREE.MeshLambertMaterial({color:0xc9c4bb}),false);
-  P=[];N=[]; surfaces(water,0.16,P,N); meshOf(P,N,new THREE.MeshLambertMaterial({color:0xc4d3da}),false);
+  S.roadMesh=meshOf(P,N,onceMat(new THREE.MeshLambertMaterial({color:0xf5f2ec}),1),false);
+  P=[];N=[]; ribbons(rails,3.2,0.14,P,N); meshOf(P,N,onceMat(new THREE.MeshLambertMaterial({color:0xc9c4bb}),2),false);
+  P=[];N=[]; surfaces(water,0.16,P,N); meshOf(P,N,onceMat(new THREE.MeshLambertMaterial({color:0xc4d3da}),3),false);
   P=[];N=[]; fences(hedges,1.6,p=>{const h=+p.hauteur;return (h>0.3&&h<12)?h:2.2;},P,N); const hm=meshOf(P,N,new THREE.MeshLambertMaterial({color:0xa3bb98}),true); if(hm)blockers.push(hm);
   P=[];N=[]; fences(walls,0.35,p=>{const n=(p.nature||'').toLowerCase();if(/anti-bruit/.test(n))return 4;if(/sout[eè]nement/.test(n))return 1.2;if(/muret|parapet/.test(n))return 0.9;if(/^mur|rempart/.test(n))return 2.2;if(/cl[oô]ture|grillage|barri/.test(n))return 1.6;return 0;},P,N);
   const wm=meshOf(P,N,new THREE.MeshLambertMaterial({color:0xdcd6cb}),true); if(wm)blockers.push(wm);
