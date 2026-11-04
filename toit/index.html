@@ -64,6 +64,7 @@ button:active{transform:scale(.97)}
   </div>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>if(!window.THREE)document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>');</script>
 <script>
 function qsAddressAC(input,form,onResolved){
   if(!document.getElementById('qsac-css')){const st=document.createElement('style');st.id='qsac-css';st.textContent=
@@ -122,9 +123,13 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
 /* the animated diagram: a house with two pans (south and north, 35°), the sun crossing one day at 46° N
    (21 June, 20 March, 21 December in turn); each pan takes the colour of the power it receives at that moment */
 (function(){
-  if(!window.THREE)return;
   const cv=document.getElementById('cv'), read=document.getElementById('read');
-  const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true}); R.setPixelRatio(Math.min(2,devicePixelRatio||1)); R.shadowMap.enabled=true; R.shadowMap.type=THREE.PCFSoftShadowMap;
+  const fail=m=>{read.textContent='Schéma indisponible : '+m;};
+  if(!window.THREE){fail('bibliothèque 3D non chargée');return;}
+  /* some phones refuse a WebGL option: try the full set, then simpler ones */
+  let R=null; for(const o of [{antialias:true,alpha:true},{alpha:true},{}]){try{R=new THREE.WebGLRenderer(Object.assign({canvas:cv},o));break;}catch(e){R=null;}}
+  if(!R){fail('WebGL refusé par ce navigateur');return;}
+  try{ R.setPixelRatio(Math.min(2,devicePixelRatio||1)); R.shadowMap.enabled=true; R.shadowMap.type=THREE.PCFSoftShadowMap;
   const sc=new THREE.Scene(), cam=new THREE.PerspectiveCamera(30,1,1,200);
   cam.up.set(0,0,1); cam.position.set(24,-30,15); cam.lookAt(0,0,5);
   const css=()=>getComputedStyle(document.documentElement);
@@ -164,7 +169,8 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
     const pts=[];for(let k=0;k<=64;k++){const h=-H0+2*H0*k/64;pts.push(vec(sunAt(DAYS[i][1],h),13));}pathG.setFromPoints(pts);path.computeLineDistances();}
   const ease=t=>(1-Math.cos(Math.PI*t))/2; /* gentle in and out: the sun does not linger at dawn and dusk */
   const t0=performance.now(); let lastW=0,lastH=0;
-  function frame(now){
+  let dead=false;
+  function frame(now){ if(dead)return; try{
     const r=cv.getBoundingClientRect(); if(Math.abs(r.width-lastW)>1||Math.abs(r.height-lastH)>1){lastW=r.width;lastH=r.height;size();} /* the canvas may have no size yet on the first frames */
     const T_=(now-t0)/1000, cyc=DUR+PAUSE, k=still?0:Math.floor(T_/cyc)%3, u=still?0.5:Math.min(1,(T_%cyc)/DUR);
     if(k!==cur)setDay(k);
@@ -175,8 +181,9 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
     rays.forEach((l,i)=>{const [x,y]=roofPts[i],z=H+rise*(1-Math.abs(y)/(D/2)),a=l.geometry.attributes.position;const d=new THREE.Vector3(x,y,z).add(vec(s,9));a.setXYZ(0,d.x,d.y,d.z);a.setXYZ(1,x,y,z);a.needsUpdate=true;l.visible=s.alt>0.02&&pS>40;});
     const m5=Math.round((720+h/(Math.PI/12)*60)/5)*5, hh=Math.floor(m5/60), mm=m5%60;
     read.innerHTML=`${DAYS[k][0]} · ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} solaire — pan sud <b>${Math.round(pS)} W/m²</b> · pan nord <b>${Math.round(pN)} W/m²</b>`;
-    R.render(sc,cam); requestAnimationFrame(frame);} /* reduced motion: the scene holds at noon on 21 June, but keeps drawing */
+    R.render(sc,cam);}catch(e){dead=true;fail(e.message);return;} requestAnimationFrame(frame);} /* reduced motion: the scene holds at noon on 21 June, but keeps drawing */
   requestAnimationFrame(frame);
+  }catch(e){fail(e.message);}
 })();
 </script>
 </body>
