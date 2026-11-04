@@ -3453,7 +3453,7 @@ function roofModel(R){
     for(let i=0;i<pieces.length;i++)for(let j=i+1;j<pieces.length;j++){const a=pieces[i],b=pieces[j];const H=hull(a.P.concat(b.P));const ah=Math.abs(MK.area(H)),aa=Math.abs(MK.area(a.P))+Math.abs(MK.area(b.P));
       DBG.push([i,j,ah.toFixed(1),aa.toFixed(1)]); if(ah>aa*1.04+0.5)continue; const Hc=MK.clean(H,0.15); if(!Hc)continue; const f=fitPiece(Hc,Math.max(a.bk.top,b.bk.top)); DBG.push(['m',i,j,f.all,a.F.best.rms,b.F.best.rms]); if(f.best.score>=9)continue;
       const na=a.F.np,nb=b.F.np,sep=(a.F.best.rms*na+b.F.best.rms*nb)/Math.max(1,na+nb);
-      if(f.best.rms<=Math.max(sep*1.5+0.05,0.2)&&f.best.inl>=0.75){const gain=sep-f.best.rms;if(!bestM||gain>bestM.gain)bestM={i,j,Hc,f,gain};}}
+      if(f.best.rms<=Math.min(sep*1.4+0.04,0.2)&&f.best.inl>=0.75){const gain=sep-f.best.rms;if(!bestM||gain>bestM.gain)bestM={i,j,Hc,f,gain};}}
     if(!bestM)break; const a=pieces[bestM.i],b=pieces[bestM.j]; pieces.splice(bestM.j,1); pieces[bestM.i]={P:bestM.Hc,bk:a.bk.top>=b.bk.top?a.bk:b.bk,F:bestM.f};}
   pieces.forEach((pc,pi)=>{const P=pc.P,n=P.length,E=pc.F.E,d=pc.F.d,best=pc.F.best;
     pc.fit=best; const Eb=best.c.E, z0=best.z0, kk=best.k;
