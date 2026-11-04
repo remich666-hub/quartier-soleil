@@ -172,7 +172,7 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   let dead=false;
   function frame(now){ if(dead)return; try{
     const r=cv.getBoundingClientRect(); if(Math.abs(r.width-lastW)>1||Math.abs(r.height-lastH)>1){lastW=r.width;lastH=r.height;size();} /* the canvas may have no size yet on the first frames */
-    const T_=(now-t0)/1000, cyc=DUR+PAUSE, k=still?0:Math.floor(T_/cyc)%3, u=still?0.5:Math.min(1,(T_%cyc)/DUR);
+    const T_=Math.max(0,(now-t0)/1000), cyc=DUR+PAUSE, k=still?0:Math.floor(T_/cyc)%3, u=still?0.5:Math.min(1,(T_%cyc)/DUR);
     if(k!==cur)setDay(k);
     const h=-0.9*H0+1.8*H0*ease(u), s=sunAt(DAYS[k][1],h), p=vec(s,13);
     sun.position.copy(p); sunL.position.copy(vec({alt:Math.max(s.alt,0.17),az:s.az},40)); /* shadows kept on the ground at dawn and dusk */ sunL.target.position.set(0,0,0);
