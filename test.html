@@ -2358,7 +2358,8 @@ async function load(q,at){
     /* the address point is often on the road, far from the house (countryside): centre the model on the building the number belongs to */
     if(!(at&&at.recenter)){S.addrBats=null; const lk=await Promise.race([addrLink(g),new Promise(r=>setTimeout(()=>r(null),2500))]).catch(()=>null);
       if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
-    S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; S.rgbFarP=fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS',g.lat,g.lon,18,3).catch(()=>null); S.ircP=null; {const myLat=g.lat,myLon=g.lon; // the infrared photo (deciduous trees) is only fetched once the model is up: it never competes with it
+    S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; /* the wide photo only paints the far gardens: 80 cm/px is plenty (25 tiles instead of 49 at 40 cm); none on a phone (plain far lots) */
+    S.rgbFarP=(isPhone()&&matchMedia('(pointer:coarse)').matches)?null:fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS',g.lat,g.lon,17,2).catch(()=>null); S.ircP=null; {const myLat=g.lat,myLon=g.lon; // the infrared photo (deciduous trees) is only fetched once the model is up: it never competes with it
       S.startIRC=()=>{if(S.ircP||S.lat!==myLat)return S.ircP;S.ircP=fetchIRC(myLat,myLon).then(I=>{if(!I||S.lat!==myLat)return null;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();return I;}).catch(()=>null);return S.ircP;};
       setTimeout(()=>{if(S.lat===myLat)S.startIRC();},9000);}
     status('Bâtiments et relief IGN…');
