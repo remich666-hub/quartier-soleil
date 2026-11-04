@@ -3413,12 +3413,12 @@ function roofModel(R){
     MK.convexParts(P,0).forEach(Q=>{if(MK.area(Q)<0)Q.reverse(); if(MK.area(Q)>0.5)pieces.push({P:Q,bk,bi});});});
   if(!pieces.length)return null;
   const pans=[], cells=[], verts=[], segs=[];
-  const fitPiece=(P,top)=>{const n=P.length;
+  const fitPiece=(P,top,ptsOv)=>{const n=P.length;
     /* edges with their inward normal (counter-clockwise ring: inward is to the left) */
     const E=P.map((a,i)=>{const b=P[(i+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]),t=[(b[0]-a[0])/L,(b[1]-a[1])/L];return {a,b,L,t,nin:[-t[1],t[0]]};});
     const d=(e,x,y)=>(x-e.a[0])*e.nin[0]+(y-e.a[1])*e.nin[1];
     /* the laser points of the piece (a little inside: wall tops and gutters are noisy) */
-    const pts=C.filter(c=>E.every(e=>d(e,c.x,c.y)>0.3));
+    const pts=ptsOv||C.filter(c=>E.every(e=>d(e,c.x,c.y)>0.3));
     /* the roof planes rise from the sides of the piece's oriented rectangle (axis: its longest wall), not from every jog of the outline */
     const ax=E.reduce((m,e)=>e.L>m.L?e:m,E[0]).t; let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; P.forEach(([x,y])=>{const u=x*ax[0]+y*ax[1],v=-x*ax[1]+y*ax[0];u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});
     const X=(u,v)=>[u*ax[0]-v*ax[1],u*ax[1]+v*ax[0]], RC=[X(u0,v0),X(u1,v0),X(u1,v1),X(u0,v1)];
@@ -3461,6 +3461,33 @@ function roofModel(R){
       const na=a.F.np,nb=b.F.np,sep=(a.F.best.rms*na+b.F.best.rms*nb)/Math.max(1,na+nb);
       if(f.best.rms<=Math.min(sep*1.4+0.04,0.2)&&f.best.inl>=0.75){const gain=sep-f.best.rms;if(!bestM||gain>bestM.gain)bestM={i,j,Hc,f,gain};}}
     if(!bestM)break; const a=pieces[bestM.i],b=pieces[bestM.j]; pieces.splice(bestM.j,1); pieces[bestM.i]={P:bestM.Hc,bk:a.bk.top>=b.bk.top?a.bk:b.bk,F:bestM.f};}
+  /* added volumes: the laser points standing well above the main roof (a cross gable, a dormer, a raised part) are grouped;
+     each group large enough gets its own small volume and typical roof, fitted on its points only; the higher roof wins */
+  const zFit=(F,x,y)=>{const b=F.best,Eb=b.c.E;if(!Eb.length)return b.z0;const KS=b.ks||Eb.map(()=>b.k),ZS=b.zs||Eb.map(()=>b.z0);return Math.min(...Eb.map((e,i)=>ZS[i]+KS[i]*F.d(e,x,y)));};
+  const subs=[];
+  pieces.forEach(pc=>{if(pc.F.best.score>=9)return; const Pp=pc.P.map(([x,y])=>({x,y}));
+    let pts=C.filter(c=>pointInPoly(c.x,c.y,Pp));
+    for(let round=0;round<3;round++){
+      const up=pts.filter(c=>c.z-Math.max(zFit(pc.F,c.x,c.y),...subs.filter(sb=>sb.parent===pc&&pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y})))).map(sb=>zFit(sb.F,c.x,c.y)))>0.45);
+      if(up.length*s*s<4)break;
+      const key=(c)=>Math.round(c.x/s)+','+Math.round(c.y/s), map=new Map(); up.forEach(c=>map.set(key(c),c)); const seen=new Set(), groups=[];
+      up.forEach(c0=>{const k0=key(c0);if(seen.has(k0))return;const g=[];const q=[c0];seen.add(k0);while(q.length){const c=q.pop();g.push(c);const i=Math.round(c.x/s),j=Math.round(c.y/s);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const k=(i+di)+','+(j+dj);if(!seen.has(k)&&map.has(k)){seen.add(k);q.push(map.get(k));}}}groups.push(g);});
+      let added=false;
+      groups.filter(g=>g.length*s*s>=4).sort((a,b)=>b.length-a.length).forEach(g=>{
+        /* its rectangle, aligned on the main volume's axes */
+        const ax=pc.F.E[0].t; let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; g.forEach(c=>{const u=c.x*ax[0]+c.y*ax[1],v=-c.x*ax[1]+c.y*ax[0];u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});
+        u0-=s/2;u1+=s/2;v0-=s/2;v1+=s/2; if(u1-u0<1.5||v1-v0<1.5)return;
+        const X=(u,v)=>[u*ax[0]-v*ax[1],u*ax[1]+v*ax[0]]; let Q=[X(u0,v0),X(u1,v0),X(u1,v1),X(u0,v1)];
+        for(let i=0;i<pc.P.length;i++){const p0=pc.P[i],p1=pc.P[(i+1)%pc.P.length];Q=MK.clipHalf(Q,p=>-((p1[0]-p0[0])*(p[1]-p0[1])-(p1[1]-p0[1])*(p[0]-p0[0])));if(Q.length<3)return;}
+        if(MK.area(Q)<0)Q.reverse(); if(Math.abs(MK.area(Q))<3)return;
+        const Qp=Q.map(([x,y])=>({x,y})), inner=g.filter(c=>pointInPoly(c.x,c.y,Qp)); if(inner.length<8)return;
+        const F=fitPiece(Q,pc.bk.top,inner); if(F.best.score>=9||F.best.rms>0.15)return;
+        /* it must really stand above the main roof */
+        const lift=inner.map(c=>zFit(F,c.x,c.y)-zFit(pc.F,c.x,c.y)).sort((a,b)=>a-b)[inner.length>>1]; if(lift<0.3)return;
+        subs.push({P:Q,bk:pc.bk,F,parent:pc,sub:true}); added=true;});
+      if(!added)break;}
+  });
+  subs.forEach(sb=>pieces.push(sb));
   pieces.forEach((pc,pi)=>{const P=pc.P,n=P.length,E=pc.F.E,d=pc.F.d,best=pc.F.best;
     pc.fit=best; const Eb=best.c.E, z0=best.z0, kk=best.k;
     const KS=best.ks||Eb.map(()=>kk), ZS=best.zs||Eb.map(()=>z0); pc.roofZ=(x,y)=>Eb.length?Math.min(...Eb.map((e,i)=>ZS[i]+KS[i]*d(e,x,y))):z0;
@@ -3482,9 +3509,12 @@ function roofModel(R){
         /* triangles of this bit, each vertex with its bilinear weights on the four nodes */
         const V=sq.map(([x,y])=>{const u=x/s-i,v=y/s-j;return {x,y,z:z(x,y),ids,ws:[(1-u)*(1-v),u*(1-v),u*v,(1-u)*v]};});
         for(let t=1;t<V.length-1;t++)pan.tris.push(V[0],V[t],V[t+1]);}});});
+  /* where an added volume and the main roof overlap, only the higher roof counts */
+  pieces.forEach((pc,pi)=>{const others=pieces.filter(o=>o!==pc&&(o.parent===pc||pc.parent===o||(pc.parent&&o.parent===pc.parent)));if(!others.length)return;
+    pc.pans.forEach(p=>{cells.forEach(c=>{if(c.pan!==p.id||!c.w)return;for(const o of others){if(pointInPoly(c.x,c.y,o.P.map(([x,y])=>({x,y})))&&o.roofZ(c.x,c.y)>c.z+0.05){c.w=0;break;}}});});});
   /* vertical faces counted in the energy: gables, where the roof edge climbs along an outer wall above the eaves */
   const outerSeg=(pc,a,b)=>{const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,L=Math.hypot(b[0]-a[0],b[1]-a[1]),ox=(b[1]-a[1])/L,oy=-(b[0]-a[0])/L; /* outward for counter-clockwise */
-    return !pieces.some(o=>o!==pc&&pointInPoly(mx+ox*0.3,my+oy*0.3,o.P.map(([x,y])=>({x,y}))));};
+    return !pieces.some(o=>o!==pc&&o.parent!==pc&&pointInPoly(mx+ox*0.3,my+oy*0.3,o.P.map(([x,y])=>({x,y}))));};
   pieces.forEach(pc=>{pc.edgeProfiles=[];const P=pc.P;for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<0.05)continue;
       /* the roof edge along this wall: its breakpoints are the pan corners lying on it */
       const ts=[0,1];pc.pans.forEach(p=>p.Q.forEach(([x,y])=>{const t=((x-a[0])*(b[0]-a[0])+(y-a[1])*(b[1]-a[1]))/(L*L);const dist=Math.abs((x-a[0])*(b[1]-a[1])-(y-a[1])*(b[0]-a[0]))/L;if(dist<0.02&&t>0.001&&t<0.999)ts.push(t);}));
