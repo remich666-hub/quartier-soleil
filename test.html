@@ -1233,7 +1233,7 @@ function classifyTrees(){ // sets s.ev (evergreen) on every tree spot; returns t
 }
 function setLeafTarget(now){const t=leafOffAt(S.doy);if(Math.abs(t-LEAF.to)>0.001){LEAF.from=LEAF.cur;LEAF.to=t;LEAF.t0=now||performance.now();}}
 function applyLeaf(){const L=LEAF.cur, m=treeCrownD&&treeCrownD.material; if(!m)return;
-  m.opacity=1-0.62*L; m.transparent=L>0.01; m.depthWrite=L<0.3; m.color.setRGB(1-0.06*L,1-0.14*L,1-0.2*L); treeCrownD.userData.cut.value=L*BARE_T;}
+  m.opacity=1-0.45*L; m.transparent=L>0.01; m.depthWrite=L<0.3; m.color.setRGB(1-0.1*L,1-0.2*L,1-0.28*L); treeCrownD.userData.cut.value=L*BARE_T;}
 let treeCrownD=null;
 const crownMeshes=()=>[treeCrown,treeCrownD].filter(Boolean);
 function rebuildTrees(){
