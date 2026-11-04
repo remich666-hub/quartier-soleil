@@ -185,11 +185,22 @@ body{letter-spacing:.005em}
 .rseg{border-radius:6px}.rseg button{border-radius:4px;font-family:"Barlow Condensed",sans-serif;font-size:15px;letter-spacing:.02em;text-transform:uppercase}
 .rseg button[aria-pressed="true"]{background:var(--btn);color:var(--btn-fg);box-shadow:none}
 .panel{border-radius:10px}
+
+#rVeil{position:absolute;inset:0;z-index:4;background:var(--bg);display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity .7s cubic-bezier(.45,0,.55,1)}
+#rVeil.out{opacity:0;pointer-events:none}
+#rVeil .rv-in{display:flex;flex-direction:column;align-items:center;gap:14px;transform:translateY(-12vh);padding:0 24px}
+@media (min-width:761px){#rVeil .rv-in{transform:translateX(-200px)}}
+#rVeil .rv-bar{width:180px;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+#rVeil .rv-bar i{display:block;height:100%;width:40%;border-radius:2px;background:linear-gradient(90deg,#6a2c70,#f08a24,#fde15a);animation:rvslide 1.6s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes rvslide{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+#rVeil p{margin:0;font:400 12px/1.5 var(--mono);color:var(--muted);text-align:center;max-width:30ch}
+@media (prefers-reduced-motion:reduce){#rVeil{transition:none}#rVeil .rv-bar i{animation:none;width:100%}}
 </style>
 
 <script>document.documentElement.dataset.theme="dark";</script>
 <div id="app">
   <div id="view"></div>
+  <div id="rVeil" hidden><div class="rv-in"><svg width="44" height="44" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="rvg" x1="0" x2="1"><stop offset="0" stop-color="#6a2c70"/><stop offset=".5" stop-color="#f08a24"/><stop offset="1" stop-color="#fde15a"/></linearGradient></defs><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="url(#rvg)" stroke-width="1.6" stroke-linecap="round"/></svg><div class="rv-bar"><i></i></div><p id="rVeilT">Recherche de l'adresse…</p></div></div>
   <div id="toast" role="status"></div>
 
   <button type="button" id="timePill" aria-expanded="false" aria-controls="bottom"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="currentColor"/></svg><span>Soleil le <span id="pillDate">—</span> à <span id="pillTime">—</span></span></button>
@@ -1925,7 +1936,7 @@ function introMove(){
   // time-lapse: from a long-shadow summer evening (21 June, 18:30) to right now, date and hour sliding together with the camera
   const np=tzParts(new Date()), dNow=Math.round((Date.UTC(np.y,np.m-1,np.d)-Date.UTC(np.y,0,1))/86400000)+1, dJun=Math.round((Date.UTC(np.y,5,21)-Date.UTC(np.y,0,1))/86400000)+1;
   const tl={y:np.y,d0:dJun,m0:18*60+30,d1:dNow,m1:np.h*60+np.mi}; S.playing=false; setTL(tl,0);
-  camTw={t0:performance.now(),tHold:performance.now(),hold:true,dur:3600,ease:'quint',tl,a,b:{t:c,th:th1,ph:ph1,d:d1},onEnd:()=>{pulseAt(hc);done();roofAuto();}};
+  camTw={t0:performance.now(),tHold:performance.now(),hold:true,dur:400,ease:'quint',tl,a,b:{t:c,th:th1,ph:ph1,d:d1},onEnd:()=>{pulseAt(hc);done();roofAuto();}};
 }
 function setTL(tl,e){S.year=tl.y;S.doy=Math.round(tl.d0+(tl.d1-tl.d0)*e);S.minute=tl.m0+(tl.m1-tl.m0)*e;$('day').value=S.doy;$('time').value=Math.round(S.minute/5)*5;update();}
 function pulseAt(c){ // a ring that spreads on the ground around the address: "it's here"
@@ -2417,7 +2428,7 @@ async function lidarVegGrid(){
 function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?` · végétation LiDAR HD (rayon ${CORE} m)`:c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
 /* ---------- load flow ---------- */
 async function load(q,at){
-  roofClear(); setTimeout(roofAuto,0);
+  roofClear(); veil(true); setTimeout(roofAuto,0);
   $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('addrDone').hidden=true; $('stepAddr').hidden=false; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
@@ -2443,22 +2454,22 @@ async function load(q,at){
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
     // the roads are the heaviest IGN answer (2–3 MB) and the IGN is sometimes slow on it: the model does not wait more than
     // 1.5 s for them; when they come later they are laid in then (roads, plan, the street-coloured lots), the rest is already there
-    const roadsP=wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,RW,5000).catch(()=>[]), T0=S.T;
-    const [veg,osm,wx,roads0,pois,hedges,walls,rails,water]=await Promise.all([wfs('BDTOPO_V3:zone_de_vegetation',g.lat,g.lon,RW,1500).catch(()=>[]),Promise.resolve({trees:[],hedges:[]}),fetchWeather(g.lat,g.lon).catch(()=>null),
-      Promise.race([roadsP,new Promise(r=>setTimeout(()=>r(null),1500))]),L('zone_d_activite_ou_d_interet',600),L('haie',2000),L('construction_lineaire',2000),wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,RW,800).catch(()=>[]),wfs('BDTOPO_V3:surface_hydrographique',g.lat,g.lon,RW,500).catch(()=>[])]);
-    const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,DETAIL_R+80,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
+    const roadsP=Promise.resolve([]), T0=S.T;
+    const [veg,osm,wx,roads0,pois,hedges,walls,rails,water]=await Promise.all([wfs('BDTOPO_V3:zone_de_vegetation',g.lat,g.lon,DETAIL_R+40,800).catch(()=>[]),Promise.resolve({trees:[],hedges:[]}),null,
+      Promise.race([roadsP,new Promise(r=>setTimeout(()=>r(null),1500))]),[],[],[],[],[]]);
+    const [surf,reservoirs,points,pylons,postes]=[[],[],[],[],[]];
     const roads=roads0||[];
     if(!roads0)roadsP.then(rs=>{if(S.T!==T0||!rs.length)return; try{buildRoads(rs,rails);buildLayers(rs,hedges,walls,rails,water);try{buildPlan(veg,rs);}catch(err){}applyFade();
       if(roadMeshes.length&&S.obstacles&&!S.obstacles.includes(roadMeshes[0]))S.obstacles.push(roadMeshes[0]); if(S.T)S.T.roadsLate=performance.now();
       buildParcels(g.lat,g.lon);}catch(err){console.error('late roads',err);}});
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); try{buildPlan(veg,roads);}catch(err){console.error('plan',err);} const nl=applyLandmarks(pois);
-    S.vegZoneRings=vegKinds(veg); treeSets.ign=vegZoneSpots(veg).filter(t=>Math.hypot(t.x!=null?t.x:t[0],t.y!=null?t.y:t[1])<DETAIL_R+40); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!(S.mnt||S.terrain)}); S.wx=wx; if(!wx)toast('Météo indisponible');
+    S.vegZoneRings=vegKinds(veg); treeSets.ign=vegZoneSpots(veg).filter(t=>Math.hypot(t.x!=null?t.x:t[0],t.y!=null?t.y:t[1])<DETAIL_R+40); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!(S.mnt||S.terrain)}); S.wx=wx;
     try{applyFade();}catch(err){console.error('fade',err);}
-    S.T.layers=performance.now(); buildParcels(g.lat,g.lon);
+    S.T.layers=performance.now();
     S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building;
     S.introP=null; lidarBuildings(); // runs during the establishing shot; the push-in waits for it
     try{localStorage.setItem('qs-addr',q);}catch(e){}
-  }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;}
+  }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;veil(false);}
   $('go').disabled=false; update();
 }
 /* address autocomplete + disambiguation on the national address base (BAN) — shared by the home page and the explorer */
@@ -3055,8 +3066,8 @@ async function roofSelect(obj){
   ['rK1','rK2','rK3'].forEach(k=>$(k).textContent='—');
   for(let i=0;i<80&&!(S.lidarR&&S.lidarR.mnh&&(S.mnsF||S.lidarR.mns));i++){await new Promise(r=>setTimeout(r,150));if(tok!==RF.tok)return;}
   const R=roofCells(obj); if(tok!==RF.tok)return;
-  if(!R||R.cells.length<4){$('rBig').textContent='—';$('rBigC').textContent=(S.lidarR&&S.lidarR.mnh)?'Pas de relevé laser exploitable sur ce toit (bâtiment trop loin de l\'adresse).':'Le relevé laser de l\'IGN (LiDAR HD) n\'est pas encore publié pour ce secteur : le toit ne peut pas être mesuré ici. Essayez une autre adresse.';return;}
-  try{R.F=roofFacets(R);}catch(e){console.error('facets',e);$('rBigC').textContent='Reconstruction du toit impossible ici.';return;}
+  if(!R||R.cells.length<4){veil(false);$('rBig').textContent='—';$('rBigC').textContent=(S.lidarR&&S.lidarR.mnh)?'Pas de relevé laser exploitable sur ce toit (bâtiment trop loin de l\'adresse).':'Le relevé laser de l\'IGN (LiDAR HD) n\'est pas encore publié pour ce secteur : le toit ne peut pas être mesuré ici. Essayez une autre adresse.';return;}
+  try{R.F=roofFacets(R);}catch(e){console.error('facets',e);veil(false);$('rBigC').textContent='Reconstruction du toit impossible ici.';return;}
   rfMesh(R); roofHide(obj,true); RF.cells=null; R.V={cells:R.F.verts,Z:R.Z};
   const wP=roofWeather(S.lat,S.lon).catch(e=>null);
   $('rBigC').textContent=`Calcul en cours : horizon de ${R.cells.length} carrés de toit…`;
@@ -3064,7 +3075,7 @@ async function roofSelect(obj){
   $('rBigC').textContent='Calcul en cours : une année heure par heure…';
   const W=await wP; if(tok!==RF.tok)return;
   RF.W=W; if(!W){ $('rNote').textContent='Météo réelle indisponible : affichage par ciel clair.'; RF.mode=RF.mode==='real'?'clear':RF.mode; }
-  const WW=W||{Y:'',t:clearYearTimes(),dni:[],dhi:[],ghi:[]}; roofYear(R,WW); if(R.V.cells.length)roofYear(R.V,WW); RF.cells=R; roofRender();
+  const WW=W||{Y:'',t:clearYearTimes(),dni:[],dhi:[],ghi:[]}; roofYear(R,WW); if(R.V.cells.length)roofYear(R.V,WW); RF.cells=R; roofRender(); requestAnimationFrame(()=>veil(false));
 }
 function clearYearTimes(){const Y=new Date().getFullYear()-1,t0=Date.UTC(Y,0,1,1),o=[];for(let h=0;h<8760;h++)o.push(t0+h*3600e3);return o;}
 $('rSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.m==='real'&&!RF.W){toast('Météo réelle indisponible');return;}RF.mode=b.dataset.m;roofRender();});
@@ -3078,7 +3089,12 @@ function roofFrame(obj){const u=obj.userData,bb=obj.geometry.boundingBox||(obj.g
 async function roofAuto(){ /* waits for the laser rebuild of the buildings (it replaces them) before picking the address's one */
   const T0=S.T; for(let i=0;i<150&&!(S.T.scene&&S.lidarBuilt&&!S.loading);i++){await new Promise(r=>setTimeout(r,200));if(S.T!==T0)return;}
   for(let i=0;i<40&&camTw;i++){await new Promise(r=>setTimeout(r,150));if(S.T!==T0)return;} /* let the establishing shot land first */
-  const t=S.addrTarget; if(!t||S.building||t.userData.monu||S.meshes.indexOf(t)<0)return; selectBuilding(t); roofFrame(t);}
+  if(S.T!==T0)return; const t=S.addrTarget; if(S.building)return; if(!t||t.userData.monu||S.meshes.indexOf(t)<0){veil(false);return;} selectBuilding(t); roofFrame(t);}
+/* the loading veil: the model shows once its roof is coloured, already framed (no buildings popping in one by one) */
+let veilT=0;
+function veil(on){const v=$('rVeil'); if(!v)return; clearInterval(veilT); clearTimeout(veil.to);
+  if(on){v.hidden=false; v.classList.remove('out'); const tick=()=>{const t=(!$('roofBox').hidden&&$('rBigC').textContent)||$('status').textContent; if(t&&!/^kWh|^W\/m/.test(t))$('rVeilT').textContent=t;}; tick(); veilT=setInterval(tick,250); veil.to=setTimeout(()=>veil(false),90000);}
+  else{ if(v.hidden)return; v.classList.add('out'); setTimeout(()=>{if(v.classList.contains('out'))v.hidden=true;},800);}}
 
 /* ---------- facets: the roof as the laser sees it, pan by pan ----------
    1. region growing on the 50 cm cells: neighbours join a pan when their slope agrees (< 14°) and they lie on its plane (< 30 cm);
