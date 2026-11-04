@@ -3491,7 +3491,7 @@ function roofModel(R){
   pieces.forEach(pc=>{if(pc.F.best.score>=9)return;
     /* the main roof is chosen together with its additions: a 2-pan roof plus a cross gable beats a hip roof that half-explains both */
     const tops=pc.F.fits.slice().sort((a,b)=>a.score-b.score).slice(0,4); let bestJ=null;
-    tops.forEach(fb=>{const F={...pc.F,best:fb};const r=findSubs(pc,F);DBG.push(['J',fb.c.k,fb.rms.toFixed(2),r.score.toFixed(3),r.subs.length,r.dbg]);if(!bestJ||r.score<bestJ.score)bestJ={F,r};});
+    tops.forEach(fb=>{const F={...pc.F,best:fb};const r=findSubs(pc,F);DBG.push(['J',fb.c.k,fb.rms.toFixed(2),r.score.toFixed(3),r.subs.length,r.dbg]);if(!bestJ||r.score<bestJ.r.score)bestJ={F,r};});
     if(bestJ){pc.F=bestJ.F; bestJ.r.subs.forEach(sb=>subs.push(sb));}});
   subs.forEach(sb=>pieces.push(sb));
   pieces.forEach((pc,pi)=>{const P=pc.P,n=P.length,E=pc.F.E,d=pc.F.d,best=pc.F.best;
