@@ -2931,7 +2931,7 @@ function clearSky(alt){if(alt<=0)return {dni:0,dhi:0,ghi:0};const e=alt/RAD;cons
 const NAZ=72;
 function roofCells(obj){
   const F=S.mnsF||(S.lidarR&&S.lidarR.mnsFine), MH=S.lidarR&&S.lidarR.mnh, C=S.lidarR&&S.lidarR.mns; if(!(F||C)||!MH)return null;
-  const fam=family(obj), rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]);
+  const fam=family(obj), rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]), blocks=fam.filter(m=>m.userData.rings).map(m=>({r:m.userData.rings[0],top:S.alt0+m.userData.zBase+m.userData.h}));
   const sh=registerFootprint(obj,MH);
   let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; rings.forEach(r=>r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
   const area=rings.reduce((a,r)=>a+Math.abs(areaOf(r)),0), s=area>500?1:0.5;
@@ -2942,13 +2942,13 @@ function roofCells(obj){
     if(!rings.some(r=>pointInPoly(x,y,r)))continue; const X=x+sh.dx,Y=y+sh.dy;
     const hg=MH.at(X,Y); if(hg==null||hg<1.8)continue; const z=Z(X,Y); if(z==null)continue;
     const zx1=Z(X+1,Y),zx0=Z(X-1,Y),zy1=Z(X,Y+1),zy0=Z(X,Y-1); if([zx1,zx0,zy1,zy0].some(v=>v==null))continue;
-    cells.push({x:X,y:Y,z,gx:(zx1-zx0)/2,gy:(zy1-zy0)/2});}
+    const bl=blocks.find(b=>pointInPoly(x,y,b.r)); cells.push({x:X,y:Y,z,gx:(zx1-zx0)/2,gy:(zy1-zy0)/2,top:bl?bl.top:-1e9});}
   if(!cells.length)return null;
   /* smoothed slope: average gradient of the neighbours (the laser surface is noisy at 50 cm) */
   const key=(x,y)=>Math.round(x/s)+','+Math.round(y/s), idx=new Map(); cells.forEach((c,i)=>idx.set(key(c.x,c.y),i));
   cells.forEach(c=>{let gx=0,gy=0,n=0;for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){const k=idx.get(key(c.x+i*s,c.y+j*s));if(k!=null){gx+=cells[k].gx;gy+=cells[k].gy;n++;}}c.sx=gx/n;c.sy=gy/n;});
   const out=[]; cells.forEach(c=>{const nx=-c.sx,ny=-c.sy,l=Math.hypot(nx,ny,1);const n=[nx/l,ny/l,1/l];const tilt=Math.acos(n[2]);if(tilt>65*RAD)return; /* a wall edge, not a roof */
-    out.push({x:c.x,y:c.y,z:c.z,gx:c.sx,gy:c.sy,n,tilt,az:((Math.atan2(n[0],n[1])/RAD)+360)%360});});
+    out.push({x:c.x,y:c.y,z:c.z,top:c.top,gx:c.sx,gy:c.sy,n,tilt,az:((Math.atan2(n[0],n[1])/RAD)+360)%360});});
   return {cells:out,s,Z,sh,rings};}
 async function roofHorizons(R,tok){
   const D=[]; for(let d=1;d<=10;d+=0.5)D.push(d); for(let d=11;d<=40;d+=1.5)D.push(d); for(let d=44;d<=120;d+=4)D.push(d); for(let d=130;d<=320;d+=10)D.push(d);
@@ -2986,7 +2986,7 @@ function rfMesh(R){
   const s=R.s; let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; R.cells.forEach(c=>{x0=Math.min(x0,c.x);x1=Math.max(x1,c.x);y0=Math.min(y0,c.y);y1=Math.max(y1,c.y);});
   x0-=s;y0-=s; const nx=Math.round((x1-x0)/s)+2, ny=Math.round((y1-y0)/s)+2, N=nx*ny;
   const z=new Float32Array(N).fill(NaN), near=new Int32Array(N).fill(-1);
-  R.cells.forEach((c,ci)=>{const i=Math.round((c.x-x0)/s),j=Math.round((c.y-y0)/s),k=j*nx+i;z[k]=c.z;near[k]=ci;});
+  R.cells.forEach((c,ci)=>{const i=Math.round((c.x-x0)/s),j=Math.round((c.y-y0)/s),k=j*nx+i;z[k]=Math.max(c.z,c.top+0.05);near[k]=ci;}); /* drawn over the block's flat top where the laser roof dips below it */
   for(let pass=0;pass<12;pass++){let ch=0;const z2=z.slice(),n2=near.slice();for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i;if(!isNaN(z[k]))continue;let sz=0,n=0,nb=-1;
       for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=nx||b>=ny)continue;const q=b*nx+a;if(isNaN(z[q]))continue;const c=R.cells[near[q]];sz+=c.z-(c.gx*di+c.gy*dj)*s;n++;if(nb<0)nb=near[q];}
       if(n){z2[k]=sz/n;n2[k]=nb;ch++;}} z.set(z2);near.set(n2);if(!ch)break;} /* gaps inside the outline (a step between two roofs, a dormer side) are filled for the drawing only */
