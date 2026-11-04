@@ -3432,20 +3432,17 @@ function roofModel(R){
         const res=use.map(u=>Math.abs(u.p.z-(z0+k*u.m))).sort((a,b)=>a-b),mad=res[Math.floor(res.length/2)];const lim=Math.max(0.3,3*mad);
         use=pts.map(p=>({p,m:m(p)})).filter(u=>Math.abs(u.p.z-(z0+k*u.m))<lim);}
       if(c.E.length&&(k<Math.tan(7*RAD)||k>Math.tan(62*RAD)))return null;
-      let ks=c.E.map(()=>k); const zf=p=>z0+(c.E.length?Math.min(...c.E.map((e,i)=>ks[i]*d(e,p.x,p.y))):0);
-      if(c.E.length>=2){ /* each eave edge its own slope, one eave height: assign each point to its lowest plane, solve, repeat */
-        for(let it=0;it<6;it++){const m1=c.E.length+1,A=[...Array(m1)].map(()=>new Float64Array(m1+1));
-          use.forEach(u=>{let bi=0,bv=1e9;c.E.forEach((e,i)=>{const v=ks[i]*d(e,u.p.x,u.p.y);if(v<bv){bv=v;bi=i;}});const row=new Float64Array(m1);row[0]=1;row[bi+1]=d(c.E[bi],u.p.x,u.p.y);
-            for(let r=0;r<m1;r++){if(!row[r])continue;for(let q=0;q<m1;q++)A[r][q]+=row[r]*row[q];A[r][m1]+=row[r]*u.p.z;}});
-          for(let r=0;r<m1;r++)A[r][r]+=1e-6; /* Gauss */
-          let okS=true;for(let col=0;col<m1&&okS;col++){let pv=col;for(let r=col+1;r<m1;r++)if(Math.abs(A[r][col])>Math.abs(A[pv][col]))pv=r;if(Math.abs(A[pv][col])<1e-9){okS=false;break;}[A[col],A[pv]]=[A[pv],A[col]];for(let r=0;r<m1;r++){if(r===col)continue;const f=A[r][col]/A[col][col];for(let q=col;q<=m1;q++)A[r][q]-=f*A[col][q];}}
-          if(!okS)break; const sol=[...Array(m1)].map((_,r)=>A[r][m1]/A[r][r]); z0=sol[0]; ks=sol.slice(1).map(v=>Math.max(Math.tan(7*RAD),Math.min(Math.tan(62*RAD),v)));
+      let ks=c.E.map(()=>k), zs=c.E.map(()=>z0); const zf=p=>c.E.length?Math.min(...c.E.map((e,i)=>zs[i]+ks[i]*d(e,p.x,p.y))):z0;
+      if(c.E.length>=2){ /* each pan its own plane, anchored on its eave edge: assign each point to its lowest plane, refit each, repeat */
+        for(let it=0;it<8;it++){const G=c.E.map(()=>[]);use.forEach(u=>{let bi=0,bv=1e9;c.E.forEach((e,i)=>{const v=zs[i]+ks[i]*d(e,u.p.x,u.p.y);if(v<bv){bv=v;bi=i;}});G[bi].push(u.p);});
+          G.forEach((g,i)=>{if(g.length<6)return;let S1=0,Sm=0,Smm=0,Sz=0,Smz=0;g.forEach(p=>{const m=d(c.E[i],p.x,p.y);S1++;Sm+=m;Smm+=m*m;Sz+=p.z;Smz+=m*p.z;});const D=S1*Smm-Sm*Sm;if(Math.abs(D)<1e-6)return;
+            const kk=(S1*Smz-Sm*Sz)/D; if(kk<Math.tan(5*RAD)||kk>Math.tan(65*RAD))return; ks[i]=kk; zs[i]=(Sz-kk*Sm)/S1;});
           const res=pts.map(p=>Math.abs(p.z-zf(p))).sort((a,b)=>a-b),lim=Math.max(0.3,3*res[Math.floor(res.length/2)]);use=pts.filter(p=>Math.abs(p.z-zf(p))<lim).map(p=>({p,m:0}));}}
       let e2=0;use.forEach(u=>{const r=u.p.z-zf(u.p);e2+=r*r;});const rms=Math.sqrt(e2/Math.max(1,use.length)),inl=use.length/Math.max(1,pts.length);
       const pen={flat:0,shed:0.03,gable:0.015,gable2:0.025,hip:0.03}[c.k];
-      return {c,z0,k,ks,score:rms*(1+2*(1-inl))+pen,rms,inl};};
+      return {c,z0,k,ks,zs,score:rms*(1+2*(1-inl))+pen,rms,inl};};
     let best=null; const all=[]; if(pts.length>=6)cands.forEach(c=>{const f=fit(c);all.push(f?[c.k,f.rms.toFixed(2),(f.inl*100|0),(Math.atan(f.k)*57.3).toFixed(0),f.score.toFixed(3)]:[c.k,'x']);if(f&&(!best||f.score<best.score))best=f;});
-    if(!best)best={c:{k:'flat',E:[]},z0:top,k:0,ks:[],score:9,rms:9,inl:0};
+    if(!best)best={c:{k:'flat',E:[]},z0:top,k:0,ks:[],zs:[],score:9,rms:9,inl:0};
     return {best,E,d,np:pts.length,all};};
   /* blocks are an IGN split, not the roof's: two neighbouring pieces are one roof when their union is convex and one model fits it as well */
   const hull=pts=>{const p=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);const lo=[],up=[];
@@ -3460,12 +3457,12 @@ function roofModel(R){
     if(!bestM)break; const a=pieces[bestM.i],b=pieces[bestM.j]; pieces.splice(bestM.j,1); pieces[bestM.i]={P:bestM.Hc,bk:a.bk.top>=b.bk.top?a.bk:b.bk,F:bestM.f};}
   pieces.forEach((pc,pi)=>{const P=pc.P,n=P.length,E=pc.F.E,d=pc.F.d,best=pc.F.best;
     pc.fit=best; const Eb=best.c.E, z0=best.z0, kk=best.k;
-    const KS=best.ks||Eb.map(()=>kk); pc.roofZ=(x,y)=>z0+(Eb.length?Math.min(...Eb.map((e,i)=>KS[i]*d(e,x,y))):0);
+    const KS=best.ks||Eb.map(()=>kk), ZS=best.zs||Eb.map(()=>z0); pc.roofZ=(x,y)=>Eb.length?Math.min(...Eb.map((e,i)=>ZS[i]+KS[i]*d(e,x,y))):z0;
     /* pans */
-    const panPolys=Eb.length?Eb.map((e,ie)=>{let Q=P.slice();Eb.forEach((f,jf)=>{if(f===e)return;Q=MK.clipHalf(Q,p=>KS[ie]*d(e,p[0],p[1])-KS[jf]*d(f,p[0],p[1]));});return {e,Q,ke:KS[ie]};}).filter(o=>o.Q.length>=3&&MK.area(o.Q)>0.05):[{e:null,Q:P}];
+    const panPolys=Eb.length?Eb.map((e,ie)=>{let Q=P.slice();Eb.forEach((f,jf)=>{if(f===e)return;Q=MK.clipHalf(Q,p=>(ZS[ie]+KS[ie]*d(e,p[0],p[1]))-(ZS[jf]+KS[jf]*d(f,p[0],p[1])));});return {e,Q,ke:KS[ie],ze:ZS[ie]};}).filter(o=>o.Q.length>=3&&MK.area(o.Q)>0.05):[{e:null,Q:P}];
     pc.pans=[];
-    panPolys.forEach(({e,Q,ke})=>{ /* plane z = a x + b y + c */
-      let a=0,b=0,c=z0; if(e){a=ke*e.nin[0];b=ke*e.nin[1];c=z0-ke*(e.a[0]*e.nin[0]+e.a[1]*e.nin[1]);}
+    panPolys.forEach(({e,Q,ke,ze})=>{ /* plane z = a x + b y + c */
+      let a=0,b=0,c=z0; if(e){a=ke*e.nin[0];b=ke*e.nin[1];c=ze-ke*(e.a[0]*e.nin[0]+e.a[1]*e.nin[1]);}
       const l=Math.hypot(a,b,1),nrm=[-a/l,-b/l,1/l],tilt=Math.acos(nrm[2]),az=((Math.atan2(nrm[0],nrm[1])/RAD)+360)%360;
       const pan={id:pans.length,piece:pi,Q,a,b,c,n:nrm,tilt,az,flat:tilt<8*RAD,area:Math.abs(MK.area(Q))/Math.cos(tilt)};pan.small=pan.area<4;pans.push(pan);pc.pans.push(pan);
       /* energy nodes on a grid; each grid square clipped to the pan carries the area */
