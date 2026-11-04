@@ -374,14 +374,21 @@ async function addrLink(g){
   const lon=M.reduce((s,o)=>s+o.b[0],0)/M.length, lat=M.reduce((s,o)=>s+o.b[1],0)/M.length;
   return {ids:new Set(M.map(o=>o.f.properties.id_bat)),lat,lon,d:Math.hypot((lon-g.lon)*kx,(lat-g.lat)*ky)};}
 async function loadLot(lat,lon){ const T0=S.T;
-  try{const [bp,ab]=await Promise.all([wfs('BAN-PLUS:lien_bati_parcelle',lat,lon,DETAIL_R+20,8000),wfs('BAN-PLUS:lien_adresse_bati',lat,lon,DETAIL_R+60,8000)]); if(S.T!==T0)return;
-    const par=new Map(), adr=new Set(); bp.forEach(f=>{const p=f.properties;if(!p.id_bat||!p.idu)return;(par.get(p.id_bat)||par.set(p.id_bat,new Set()).get(p.id_bat)).add(p.idu);});
+  try{const [pf,ab]=await Promise.all([wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',lat,lon,DETAIL_R+20,2500),wfs('BAN-PLUS:lien_adresse_bati',lat,lon,DETAIL_R+60,8000)]); if(S.T!==T0)return;
+    /* parcel of each building: the cadastral parcel holding most of its footprint (a 5×5 grid of points inside it) */
+    const PL=[]; pf.forEach(f=>{const g=f.geometry,id=f.properties&&(f.properties.idu||f.id);const polys=g&&g.type==='Polygon'?[g.coordinates]:(g&&g.type==='MultiPolygon'?g.coordinates:[]);
+      polys.forEach(po=>{if(!po[0]||po[0].length<4)return;const r=ringToLocal(po[0]);let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});PL.push({id,r,x0,x1,y0,y1});});});
+    const par=new Map(), adr=new Set(); await new Promise(r=>setTimeout(r,0));
+    S.meshes.forEach(m=>{const u=m.userData;if(!u.bid||!u.rings||par.has(u.bid))return;const R=u.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;R.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});
+      const votes=new Map();for(let i=0;i<5;i++)for(let j=0;j<5;j++){const x=x0+(x1-x0)*(i+0.5)/5,y=y0+(y1-y0)*(j+0.5)/5;if(!pointInPoly(x,y,R))continue;
+        for(const P of PL){if(x<P.x0||x>P.x1||y<P.y0||y>P.y1||!pointInPoly(x,y,P.r))continue;votes.set(P.id,(votes.get(P.id)||0)+1);break;}}
+      if(votes.size){const top=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0][0];par.set(u.bid,new Set([top]));}});
     ab.forEach(f=>{const p=f.properties;if(p.id_bat)adr.add(p.id_bat);});
     if(!par.size)return; S.lot={par,adr}; S.T.lot=performance.now();
     if(S.target)setHi(S.target,false); linkAnnexes(); if(S.target)setHi(S.target,true);
   }catch(e){}}
 /* buildings touching a house that belong to the same lot (garage, shed, veranda: separate IGN footprints) are one selection, one colour.
-   With the address base: same cadastral parcel, no address of their own, single storey, not taller nor bigger than the house.
+   With the cadastre and the address base: same cadastral parcel, no address of their own, single storey, not taller nor bigger than the house.
    Without it: small low buildings touching a much bigger one */
 function linkAnnexes(){ // re-run after the laser rebuild: undo the previous links first (their houses may have been replaced)
   S.meshes.forEach(m=>{const u=m.userData;if(u.annexOf){u.gid=u._gid0;delete u.annexOf;}});
