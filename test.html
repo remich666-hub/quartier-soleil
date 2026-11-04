@@ -385,11 +385,11 @@ async function loadLot(lat,lon){ const T0=S.T;
         for(const P of (GB.get(gk(Math.floor(x/20),Math.floor(y/20)))||[])){if(x<P.x0||x>P.x1||y<P.y0||y>P.y1||!pointInPoly(x,y,P.r))continue;votes.set(P.id,(votes.get(P.id)||0)+1);break;}}
       if(votes.size){const top=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0][0];par.set(u.bid,new Set([top]));}});
     ab.forEach(f=>{const p=f.properties;if(p.id_bat)adr.add(p.id_bat);});
-    if(!par.size)return; S.lot={par,adr}; S.T.lot=performance.now();
+    if(!par.size)return; const adrPar=new Set(); adr.forEach(b=>{const P=par.get(b);if(P)P.forEach(x=>adrPar.add(x));}); S.lot={par,adr,adrPar}; S.T.lot=performance.now();
     if(S.target)setHi(S.target,false); linkAnnexes(); if(S.target)setHi(S.target,true);
   }catch(e){}}
 /* buildings touching a house that belong to the same lot (garage, shed, veranda: separate IGN footprints) are one selection, one colour.
-   With the cadastre and the address base: same cadastral parcel, no address of their own, single storey, not taller nor bigger than the house.
+   With the cadastre and the address base: same cadastral parcel (or a parcel with no address at all: the plot next to the house), no address of their own, single storey, not taller nor bigger than the house.
    Without it: small low buildings touching a much bigger one */
 function linkAnnexes(){ // re-run after the laser rebuild: undo the previous links first (their houses may have been replaced)
   S.meshes.forEach(m=>{const u=m.userData;if(u.annexOf){u.gid=u._gid0;delete u.annexOf;}});
@@ -406,7 +406,7 @@ function linkAnnexes(){ // re-run after the laser rebuild: undo the previous lin
     else if(a.area>=35||!(a.h<=3.5||!a.u||/indiff/i.test(a.u)))return;
     let best=null;
     G.forEach(b=>{if(b===a||b.annex)return;
-      if(a.byLot){if(!b.byLot||b.area<=a.area||b.h<a.h-0.3||![...a.par].some(x=>b.par.has(x)))return;}
+      if(a.byLot){if(!b.byLot||b.area<=a.area||b.h<a.h-0.3||!([...a.par].some(x=>b.par.has(x))||[...a.par].every(x=>!lot.adrPar.has(x))))return;}
       else if(b.area<2.5*a.area||b.area<40)return;
       const near=a.os.some(o=>b.os.some(q=>o.x0<q.x1+0.6&&q.x0<o.x1+0.6&&o.y0<q.y1+0.6&&q.y0<o.y1+0.6&&dist(o.r,q.r)<0.6)); if(near&&(!best||b.area>best.area))best=b;});
     if(!best)return; a.annex=true; const main=best.os[0].m; if(!main.userData.gid){main.userData.gid=++GID;best.os.forEach(o=>o.m.userData.gid=main.userData.gid);}
