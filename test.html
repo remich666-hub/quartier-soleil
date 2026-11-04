@@ -2063,7 +2063,7 @@ async function fetchSkyline(){
   const F=S.lidarP&&await S.lidarP.mnsFine, C=S.lidarP&&await S.lidarP.mns, MH=S.lidarP&&await S.lidarP.mnh;
   if(F||C){ // rasters: instant. First register the IGN footprint on the LiDAR roof (they can be 1–2 m apart), then sample from the shifted window
     const ud=w.obj.userData; const sh=MH?(ud._sh&&ud._shMH===MH?ud._sh:(ud._shMH=MH,ud._sh=registerFootprint(w.obj,MH))):{dx:0,dy:0};
-    const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8));};
+    const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8)||(push>0&&distToRing(q.x,q.y,r)<push+0.6));}; /* pushed out to the real wall: the house's own roof around it is not an obstacle either */
     /* the IGN footprint is often smaller than the house (an extension, a porch, a deep eave left out): the laser roof then carries on,
        at eave height and without a step, past the IGN wall, and that piece of the house's own roof would shade its own window.
        The real wall is the roof edge less a 50 cm eave: the window is read from there (≤ 3 m out). A lower roof in front (veranda,
