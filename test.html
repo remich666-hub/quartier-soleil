@@ -791,7 +791,7 @@ async function buildParcels(lat,lon){
     const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa39a8a,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}));m.receiveShadow=true;m.renderOrder=1;fadeMat(m.material);parcelGroup.add(m);}
   if(L.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(L,3));
     const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x8a8070,transparent:true,opacity:0.75}));l.renderOrder=1;fadeMat(l.material);parcelGroup.add(l);}
-  scene.add(parcelGroup); if(nParc>20)streetsFromCadastre(); applyGroundMode();
+  scene.add(parcelGroup); if(nParc>20)streetsFromCadastre(); applyGroundMode(); if(S.T)S.T.parcels=performance.now();
 }
 const STREET=0xf4f1eb, CAD_R0=200, CAD_R1=226;
 function streetsFromCadastre(){ // streets = the public space between parcels: no more estimated road ribbons inside the cadastral zone
@@ -2108,7 +2108,7 @@ async function lidarVegGrid(){
   if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();const k=blockers.indexOf(lidarVegMesh);if(k>=0)blockers.splice(k,1);lidarVegMesh=null;}
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
     lidarVegMesh=new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true}));lidarVegMesh.castShadow=lidarVegMesh.receiveShadow=true;scene.add(lidarVegMesh);blockers.push(lidarVegMesh);}
-  treeSets.lidar=trees.concat(bushes); S.counts&&(S.counts.lidarVeg=nv); const nt=rebuildTrees(); buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[])); S.obstacles=S.meshes.concat(monuments,roofMeshes,blockers,structures,roadMeshes.length?[roadMeshes[0]]:[]); S.obstacles.push(...crownMeshes()); if(!S.loading)status(loadedText(nt));
+  if(S.T)S.T.veg=performance.now(); treeSets.lidar=trees.concat(bushes); S.counts&&(S.counts.lidarVeg=nv); const nt=rebuildTrees(); buildHedges((S.osmHedges||[]).concat(S.orthoHedges||[])); S.obstacles=S.meshes.concat(monuments,roofMeshes,blockers,structures,roadMeshes.length?[roadMeshes[0]]:[]); S.obstacles.push(...crownMeshes()); if(!S.loading)status(loadedText(nt));
 }
 function loadedText(nt){const c=S.counts||{};return `Chargé · ${nt} arbres${c.osm?` (dont ${c.osm} OSM)`:''}${(c.hedges||0)+(c.orthoHedges||0)?` · ${(c.hedges||0)+(c.orthoHedges||0)} haies`:''}${c.lidarVeg?` · végétation LiDAR HD (rayon ${CORE} m)`:c.lidar?' · hauteurs LiDAR':''}${c.walls?` · ${c.walls} murs/clôtures`:''}${c.viaduct?' · viaduc':''}${c.structures?` · ${c.structures} ouvrages`:''}${c.landmarks?` · ${c.landmarks} monument${c.landmarks>1?'s':''}`:''}${c.terrain?' · relief':' · relief indisponible'}. Touchez un bâtiment pour choisir une façade.`;}
 /* ---------- load flow ---------- */
@@ -2116,7 +2116,7 @@ async function load(q,at){
   $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('addrDone').hidden=true; $('stepAddr').hidden=false; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
-    const g=at||await geocode(q); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
+    S.T={start:performance.now()}; const g=at||await geocode(q); S.T.geo=performance.now(); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
     S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; S.rgbFarP=fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS',g.lat,g.lon,18,3).catch(()=>null); {const myLat=g.lat; fetchIRC(g.lat,g.lon).then(I=>{if(!I||S.lat!==myLat)return;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();}).catch(()=>{});}
     status('Bâtiments et relief IGN…');
     const [alt,feats]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]); const terrain=null;
@@ -2124,9 +2124,9 @@ async function load(q,at){
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
     S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
-    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms)S.mnt=buildMNT(ms,mh,feats);}catch(err){S.mnt=null;}
+    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
-    S.lattices=detectLattices(feats); S.arches=detectArches(feats); buildScene(feats); applyLattices(); loadOrtho(g.lat,g.lon);
+    S.lattices=detectLattices(feats); S.arches=detectArches(feats); buildScene(feats); applyLattices(); S.T.scene=performance.now(); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
@@ -2136,7 +2136,7 @@ async function load(q,at){
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); try{buildPlan(veg,roads);}catch(err){console.error('plan',err);} const nl=applyLandmarks(pois);
     S.vegZoneRings=vegKinds(veg); treeSets.ign=vegZoneSpots(veg).filter(t=>Math.hypot(t.x!=null?t.x:t[0],t.y!=null?t.y:t[1])<DETAIL_R+40); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!(S.mnt||S.terrain)}); S.wx=wx; if(!wx)toast('Météo indisponible');
     try{applyFade();}catch(err){console.error('fade',err);}
-    buildParcels(g.lat,g.lon);
+    S.T.layers=performance.now(); buildParcels(g.lat,g.lon);
     S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building;
     S.introP=null; lidarBuildings(); // runs during the establishing shot; the push-in waits for it
     try{localStorage.setItem('qs-addr',q);}catch(e){}
@@ -2506,7 +2506,7 @@ async function lidarBuildings(){
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
     (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
     roofMeshes=roofMeshes.filter(m=>!gone.has(m));S.roofEdgeParts=buildRoofSets(S.roofSkip);
-    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices();
+    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); S.T.lidarBuilt=performance.now();
     S.counts=Object.assign(S.counts||{},{lidarBuildings:n});
     return true;
   }
