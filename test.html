@@ -587,10 +587,11 @@ function buildPools(list){
   return grp;
 }
 const terrMat=new THREE.MeshLambertMaterial({color:0xefebe3,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}); fadeMat(terrMat);
-function buildTerraces(rings){ // slabs 8 cm proud of the lot, draped on the ground, with their edge
+function buildTerraces(list){ // slabs 9 cm proud of the lot, draped on the ground, with their edge; pools cut out
   const P=[],N=[];
-  rings.forEach(r=>{if(r.length<3)return;let a=0;for(let i=0;i<r.length;i++){const p=r[i],q=r[(i+1)%r.length];a+=p.x*q.y-q.x*p.y;}if(Math.abs(a)/2<4)return; if(a<0)r=r.slice().reverse();
-    const sg=new THREE.ShapeGeometry(new THREE.Shape(r.map(p=>new THREE.Vector2(p.x,p.y))));const pos=sg.attributes.position,idx=sg.index;const T=[];
+  list.forEach(({ring:r,holes})=>{if(!r||r.length<3)return;let a=0;for(let i=0;i<r.length;i++){const p=r[i],q=r[(i+1)%r.length];a+=p.x*q.y-q.x*p.y;}if(Math.abs(a)/2<4)return; if(a<0)r=r.slice().reverse();
+    const sh=new THREE.Shape(r.map(p=>new THREE.Vector2(p.x,p.y))); (holes||[]).forEach(h=>sh.holes.push(new THREE.Path(h.map(p=>new THREE.Vector2(p.x,p.y)))));
+    const sg=new THREE.ShapeGeometry(sh);const pos=sg.attributes.position,idx=sg.index;const T=[];
     for(let i=0;i<idx.count;i+=3)T.push([0,1,2].map(d=>{const k=idx.getX(i+d);return [pos.getX(k),pos.getY(k)];})); drapeTris(T,0.27,P,N); sg.dispose();
     for(let i=0;i<r.length;i++){const p=r[i],q=r[(i+1)%r.length];const seg=drapeLine([p.x,p.y],[q.x,q.y],2);const dx=q.x-p.x,dy=q.y-p.y,L=Math.hypot(dx,dy)||1,n=[dy/L,-dx/L,0];
       for(let k=0;k<seg.length-1;k++){const A=seg[k],B=seg[k+1],za=terrainZ(A[0],A[1]),zb=terrainZ(B[0],B[1]);pushQuad(P,N,[A[0],A[1],za+0.16],[B[0],B[1],zb+0.16],[B[0],B[1],zb+0.27],[A[0],A[1],za+0.27],n);}}});
@@ -616,30 +617,47 @@ function smoothRing(pts,tol,iters){
   for(let it=0;it<iters;it++){const o=[];for(let k=0;k<sm.length;k++){const a=sm[k],b=sm[(k+1)%sm.length];o.push([a[0]*0.75+b[0]*0.25,a[1]*0.75+b[1]*0.25],[a[0]*0.25+b[0]*0.75,a[1]*0.25+b[1]*0.75]);}sm=o;}
   return sm;
 }
-/* terraces, paths and paved yards as clean slabs: each light-mineral patch ≥ 6 m² of the smoothed mask becomes an outline —
-   a sharp rectangle when it is one (most terraces), a simplified, softened polygon otherwise */
-function vectorTerraces(m,md,N,px,R,out){
+/* terraces, pool surrounds, paths and paved yards as geometric slabs. Each light-mineral patch ≥ 6 m² is redrawn in the frame
+   of what it belongs to — the pool it surrounds, else the house it runs along (its longest wall), else its own main axis — on a
+   1 m grid of that frame (majority rule), so its outline is made of straight, square edges only. A pool surround that fills its
+   box is that box. Pools are cut out of the slab. */
+function vectorTerraces(m,md,N,px,R,out,pools){
   const on=k=>m[k]>0.5&&md[k*4+3]>127, lab=new Int32Array(N*N), minPx=6/(px*px), maxPx=900/(px*px); let id=0;
-  for(let k0=0;k0<N*N;k0++){if(lab[k0]||!on(k0))continue;id++;const q=[k0];lab[k0]=id;let i0=1e9,i1=-1,j0=1e9,j1=-1;
-    for(let h=0;h<q.length;h++){const k=q[h],i=k%N,j=(k/N)|0;if(i<i0)i0=i;if(i>i1)i1=i;if(j<j0)j0=j;if(j>j1)j1=j;
+  const bAxes=S.meshes.map(mm=>{const u=mm.userData;if(!u.rings||!u.facades||!u.facades.length)return null;const f=u.facades.reduce((a,b)=>b.len>a.len?b:a);return {rings:u.rings,ang:Math.atan2(f.normal.x,-f.normal.y)};}).filter(Boolean);
+  for(let k0=0;k0<N*N;k0++){if(lab[k0]||!on(k0))continue;id++;const q=[k0];lab[k0]=id;
+    for(let h=0;h<q.length;h++){const k=q[h],i=k%N,j=(k/N)|0;
       if(i>0&&!lab[k-1]&&on(k-1)){lab[k-1]=id;q.push(k-1);} if(i<N-1&&!lab[k+1]&&on(k+1)){lab[k+1]=id;q.push(k+1);}
       if(j>0&&!lab[k-N]&&on(k-N)){lab[k-N]=id;q.push(k-N);} if(j<N-1&&!lab[k+N]&&on(k+N)){lab[k+N]=id;q.push(k+N);}}
     if(q.length<minPx||q.length>maxPx)continue;
-    const W=(i,j)=>({x:-R+i*px,y:R-j*px});
-    // oriented box (PCA)
-    let mx=0,my=0;q.forEach(k=>{mx+=k%N;my+=(k/N)|0;});mx/=q.length;my/=q.length;let sxx=0,syy=0,sxy=0;q.forEach(k=>{const dx=k%N-mx,dy=((k/N)|0)-my;sxx+=dx*dx;syy+=dy*dy;sxy+=dx*dy;});
-    const ang=0.5*Math.atan2(2*sxy,sxx-syy),ca=Math.cos(ang),sa=Math.sin(ang);let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;
-    q.forEach(k=>{const dx=k%N-mx,dy=((k/N)|0)-my,u=dx*ca+dy*sa,v=-dx*sa+dy*ca;if(u<u0)u0=u;if(u>u1)u1=u;if(v<v0)v0=v;if(v>v1)v1=v;});u1+=1;v1+=1;
-    const fill=q.length/((u1-u0)*(v1-v0)), thin=Math.min(u1-u0,v1-v0)*px;
-    if(thin<1.2)continue; // a 1 m strip is a path line on the texture already
+    const P=q.map(k=>[-R+((k%N)+0.5)*px, R-(((k/N)|0)+0.5)*px]); let cx=0,cy=0;P.forEach(p=>{cx+=p[0];cy+=p[1];});cx/=P.length;cy/=P.length;
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;P.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);});
+    // frame: the pool it touches, else the nearest house within 6 m, else its principal axis
+    let ang=null, pool=null;
+    for(const pl of pools||[]){const r=Math.max(pl.hu,pl.hv)+1.5;if(pl.x>x0-r&&pl.x<x1+r&&pl.y>y0-r&&pl.y<y1+r){const dd=P.reduce((a,[x,y])=>Math.min(a,Math.hypot(x-pl.x,y-pl.y)),1e9);if(dd<Math.max(pl.hu,pl.hv)+1.2){pool=pl;ang=Math.atan2(pl.uy,pl.ux);break;}}}
+    if(ang==null){let best=6;for(const b of bAxes){for(const ring of b.rings){const d=distToRing(cx,cy,ring);if(d<best){best=d;ang=b.ang;}}}}
+    if(ang==null){let sxx=0,syy=0,sxy=0;P.forEach(([x,y])=>{const dx=x-cx,dy=y-cy;sxx+=dx*dx;syy+=dy*dy;sxy+=dx*dy;});ang=0.5*Math.atan2(2*sxy,sxx-syy);}
+    const ca=Math.cos(ang),sa=Math.sin(ang), toU=(x,y)=>[(x-cx)*ca+(y-cy)*sa,-(x-cx)*sa+(y-cy)*ca], toW=(u,v)=>({x:cx+u*ca-v*sa,y:cy+u*sa+v*ca});
+    // 1 m grid in that frame, majority rule
+    const UV=P.map(([x,y])=>toU(x,y)); let u0=1e9,v0=1e9,u1=-1e9,v1=-1e9;UV.forEach(([u,v])=>{u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});
+    const G=1, gu0=Math.floor(u0/G), gv0=Math.floor(v0/G), GW=Math.floor(u1/G)-gu0+1, GH=Math.floor(v1/G)-gv0+1, cnt=new Float32Array(GW*GH);
+    UV.forEach(([u,v])=>{cnt[(Math.floor(v/G)-gv0)*GW+Math.floor(u/G)-gu0]+=px*px;});
+    const cell=new Uint8Array(GW*GH); let nc=0; for(let k=0;k<GW*GH;k++)if(cnt[k]>=0.5*G*G){cell[k]=1;nc++;}
+    if(nc<4)continue;
     let ring;
-    if(fill>0.82){ring=[[u0,v0],[u1,v0],[u1,v1],[u0,v1]].map(([u,v])=>W(mx+0.5+u*ca-v*sa-0.5,my+0.5+u*sa+v*ca-0.5));}
-    else{ // trace the outer boundary (square tracing on pixel corners), then simplify and soften
-      const In=(i,j)=>i>=0&&j>=0&&i<N&&j<N&&lab[j*N+i]===id; let si=-1,sj=-1;
-      for(let j=j0;j<=j1&&si<0;j++)for(let i=i0;i<=i1;i++)if(In(i,j)){si=i;sj=j;break;}
-      const sm=smoothRing(traceOuter(In,si,sj),0.35/px,2); if(!sm)continue;
-      ring=sm.map(([a,b])=>W(a,b));}
-    out.push(ring);}
+    const box=()=>[[gu0,gv0],[gu0+GW,gv0],[gu0+GW,gv0+GH],[gu0,gv0+GH]].map(([a,b])=>toW(a*G,b*G));
+    if(nc/(GW*GH)>(pool?0.6:0.85))ring=box();
+    else{ // outline of the largest 4-connected set of cells, straight edges only (collinear corners dropped)
+      const In=(i,j)=>i>=0&&j>=0&&i<GW&&j<GH&&cell[j*GW+i]===1; let si=-1,sj=-1,bestN=0; const seen=new Uint8Array(GW*GH);
+      for(let k=0;k<GW*GH;k++){if(!cell[k]||seen[k])continue;const qq=[k];seen[k]=1;for(let h=0;h<qq.length;h++){const kk=qq[h],i=kk%GW,j=(kk/GW)|0;[[1,0],[-1,0],[0,1],[0,-1]].forEach(([di,dj])=>{const ii=i+di,jj=j+dj;if(In(ii,jj)&&!seen[jj*GW+ii]){seen[jj*GW+ii]=1;qq.push(jj*GW+ii);}});}
+        if(qq.length>bestN){bestN=qq.length;let mk=qq.reduce((a,b)=>b<a?b:a);si=mk%GW;sj=(mk/GW)|0;}}
+      if(bestN<4)continue;
+      // grid j grows with v here (not downwards): flip so the walk keeps the blob on its right in a y-down sense
+      const pts=traceOuter((i,j)=>In(i,j),si,sj); const o=[];
+      for(let k=0;k<pts.length;k++){const a=pts[(k-1+pts.length)%pts.length],b=pts[k],c=pts[(k+1)%pts.length];if((a[0]===b[0]&&b[0]===c[0])||(a[1]===b[1]&&b[1]===c[1]))continue;o.push(b);}
+      if(o.length<4)continue; ring=o.map(([i,j])=>toW((i+gu0)*G,(j+gv0)*G));}
+    const holes=[]; if(pool){const c=Math.cos(Math.atan2(pool.uy,pool.ux)),sn=Math.sin(Math.atan2(pool.uy,pool.ux)),hu=pool.hu+0.35,hv=pool.hv+0.35;
+      holes.push([[-hu,-hv],[hu,-hv],[hu,hv],[-hu,hv]].map(([u,v])=>({x:pool.x+u*c-v*sn,y:pool.y+u*sn+v*c})));}
+    out.push({ring,holes:holes.filter(h=>h.every(p=>pointInPoly(p.x,p.y,ring)))});}
 }
 function gardenTexture(TP,MH,GT_R,GT_N,pools,terr){
   const RO=S.rawOrtho; if(!RO)return null; const W=RO.raw.width,Hh=RO.raw.height,mpp=(RO.e-RO.w)/W,od=RO.raw.getContext('2d').getImageData(0,0,W,Hh).data;
@@ -669,7 +687,6 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr){
     const d=g2.getImageData(0,0,N,N).data,out=new Float32Array(N*N);for(let k=0;k<N*N;k++){const v=d[k*4+3]/255;out[k]=Math.max(0,Math.min(1,(v-0.5)*9+0.5));}return out;};
   const paint=(m,col)=>{for(let k=0;k<N*N;k++){const a=m[k]*(md[k*4+3]>127?1:0);if(a<=0)continue;id[k*4]+= (col[0]-id[k*4])*a;id[k*4+1]+=(col[1]-id[k*4+1])*a;id[k*4+2]+=(col[2]-id[k*4+2])*a;}};
   const bp=Math.max(2,Math.round(0.6/px)); const m2=shape(2,bp); paint(shape(1,bp),[205,219,185]); paint(m2,[235,230,220]);
-  if(terr)vectorTerraces(m2,md,N,px,GT_R,terr);
   g.putImageData(img,0,0);
   // pools: each connected blue patch ≥ 8 m² becomes a clean shape — an oriented rounded rectangle when it is one (most are),
   // a smoothed blob otherwise — with a thin light coping, like on an architect's plan
@@ -682,6 +699,7 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr){
     const u0=pc(us,0.03),u1=pc(us,0.97)+1,v0=pc(vs,0.03),v1=pc(vs,0.97)+1,fill=q.length/((u1-u0)*(v1-v0));
     if(pools){const uc=(u0+u1)/2,vc=(v0+v1)/2,pi=mx+0.5+uc*ca-vc*sa,pj=my+0.5+uc*sa+vc*ca;
       pools.push({x:-GT_R+pi*px,y:GT_R-pj*px,ux:ca,uy:-sa,hu:(u1-u0)/2*px,hv:(v1-v0)/2*px,rect:fill>0.68});}}
+  if(terr)try{vectorTerraces(m2,md,N,px,GT_R,terr,pools);}catch(err){console.error('terraces',err);}
   const tx=new THREE.CanvasTexture(cv); tx.encoding=THREE.sRGBEncoding; tx.anisotropy=8; tx.wrapS=tx.wrapT=THREE.ClampToEdgeWrapping; return tx;
 }
 async function buildParcels(lat,lon){
@@ -1455,6 +1473,11 @@ async function recenterOn(obj){
 const nFloors=u=>Math.max(1,u.floors||Math.round(u.h/3));
 const storeyH=u=>u.floors&&u.h?Math.max(2.5,Math.min(3.6,u.h/u.floors)):3;
 const downRay=new THREE.Raycaster();
+function floorBase(u){ // ground-floor level. The IGN base is the lowest ground around the footprint; on a gentle slope (less than a storey
+  // between the low and high sides) a house's floor sits at the high side, the low side having a step or a crawl space
+  if(u._fbK===S.groundKey&&u._fb!=null)return u._fb; let fb=u.zBase;
+  if(u.facades&&u.facades.length){const hi=Math.max(...u.facades.map(f=>facGround(f)));const d=hi-u.zBase;if(d>0&&d<0.8*storeyH(u))fb=u.zBase+Math.min(1.5,Math.max(0,d-0.1));}
+  u._fb=fb; u._fbK=S.groundKey; return fb;}
 function blindMap(obj){
   const u=obj.userData; if(u._blind&&u._blindN===S.meshes.length&&u._blindK===S.groundKey)return u._blind; u._blindK=S.groundKey;
   const bs0=obj.geometry.boundingSphere||(obj.geometry.computeBoundingSphere(),obj.geometry.boundingSphere);
@@ -1463,7 +1486,7 @@ function blindMap(obj){
     const tops=[0.2,0.5,0.8].map(t=>{const p=pointAlong(f,t);
       downRay.set(new THREE.Vector3(p.x+f.normal.x*0.8,p.y+f.normal.y*0.8,u.zBase+u.h+300),down);downRay.far=1000;
       const h=downRay.intersectObjects(others,true); return h.length?h[0].point.z:-1e9;});
-    const gz=facGroundMax(f); const out=[]; for(let k=0;k<nF;k++){const z=u.zBase+k*sh+1.5; out.push(z<gz+WIN_SILL?2:(tops.every(t=>t>z+0.3)?1:0));} return out;
+    const gz=facGroundMax(f), fb=floorBase(u); const out=[]; for(let k=0;k<nF;k++){const z=fb+k*sh+1.5; out.push(z<gz+WIN_SILL?2:(tops.every(t=>t>z+0.3)?1:0));} return out;
   });
   u._blindN=S.meshes.length; return u._blind;
 }
@@ -1587,9 +1610,9 @@ function placeMarker(){
   if(!pt)pt=f.mid;
   const ud=w.obj.userData,sh=ud.floors&&ud.h?Math.max(2.5,Math.min(3.6,ud.h/ud.floors)):3;
   { // never a window in or under the ground: lift it to the first level clear of the street right in front of it
-    const gl=groundAt(pt,w.normal), nF=nFloors(ud); let k=w.floor; while(k<nF-1&&ud.zBase+k*sh+1.5<gl+WIN_SILL)k++;
+    const gl=groundAt(pt,w.normal), nF=nFloors(ud); let k=w.floor; while(k<nF-1&&floorBase(ud)+k*sh+1.5<gl+WIN_SILL)k++;
     if(k!==w.floor){w.floor=k;$('floor').value=k;setTimeout(refreshWinUI,0);} }
-  const z=Math.max(ud.zBase+w.floor*sh+1.5,groundAt(pt,w.normal)+WIN_CLEAR);
+  const z=Math.max(floorBase(ud)+w.floor*sh+1.5,groundAt(pt,w.normal)+WIN_CLEAR);
   const p=new THREE.Vector3(pt.x,pt.y,z).addScaledVector(w.normal,0.45);
   w.pos=p; marker.position.copy(p); markerArrow.position.copy(p); markerArrow.setDirection(w.normal); skyLine.position.copy(p); if(S.skyline&&(w.floor!==S.skyline.floor)){S.skyline=null;skyLine.visible=false;skyLine.userData.ready=false;}
   // outline the selected façade: its base, its top and the chosen floor line
