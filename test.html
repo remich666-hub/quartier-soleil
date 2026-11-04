@@ -336,7 +336,9 @@ const SINK=2.5;
 /* a house on a slope (floor above its IGN base): window rows start at the real floor, and the upper wall pieces under the roof edge
    (above the plain block) carry the same rows, so the uphill façade shows its windows; above the last storey the wall stays plain */
 function slopeWalls(m){const u=m.userData; if(!u||!u.lidar||!u.facades||nFloors(u)>2)return;
-  const off=floorBase(u)-u.zBase, key=off>=0.3?Math.round(off*20):0; if((u._swK||0)===key)return; u._swK=key;
+  const off=floorBase(u)-u.zBase, key=off>=0.3?Math.round(off*20):0;
+  if(key){const r=u.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});(S.slopeHouses=S.slopeHouses||[]).push({r,x0,x1,y0,y1,fb:u.zBase+off});}
+  if((u._swK||0)===key)return; u._swK=key;
   const F=nFloors(u), O=key?off:null; fitWallUVs(m.geometry,u.h,u.floors,O);
   const gm=m.children.find(c=>c.userData.gable); if(!gm)return;
   if(!gm.userData.src)gm.userData.src={p:gm.geometry.attributes.position.array.slice(),n:gm.geometry.attributes.normal.array.slice(),mat:gm.material};
@@ -355,7 +357,9 @@ function slopeWalls(m){const u=m.userData; if(!u||!u.lidar||!u.facades||nFloors(
       const vx=p=>{const x=A0[0]+(B0[0]-A0[0])*p[0],y=A0[1]+(B0[1]-A0[1])*p[0];return [x,y,p[1],uOf(x,y),plain?F*3+0.4:p[1]-u.zBase-off];};
       for(let i=1;i<pl.length-1;i++)[pl[0],pl[i],pl[i+1]].forEach(p=>{const w=vx(p);P.push(w[0],w[1],w[2]);N.push(nx,ny,0);U.push(w[3],w[4]);});});}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
-  gm.geometry.dispose(); gm.geometry=g; gm.material=new THREE.MeshLambertMaterial({color:src.mat.color,map:wallTex,side:THREE.DoubleSide});}
+  gm.geometry.dispose(); gm.geometry=g; gm.material=patchWall(new THREE.MeshLambertMaterial({color:src.mat.color,map:wallTex,side:THREE.DoubleSide}));}
+function applySlopeWalls(){S.slopeHouses=[]; S.meshes.forEach(m=>{try{slopeWalls(m);}catch(e){console.error('slopeWalls',e);}});}
+function slopeHouseAt(x,y){for(const h of S.slopeHouses||[]){if(x<h.x0||x>h.x1||y<h.y0||y>h.y1)continue;if(pointInPoly(x,y,h.r))return h;}return null;}
 function fitWallUVs(geo,h,floors,off){ // off: a house on a slope, rows of 3 m storeys starting at its floor level (off metres above its base)
   const bands=floors||Math.max(1,Math.round(h/3)); const k=off!=null?1:(bands*3)/h; const o=off||0; const uv=geo.attributes.uv, pos=geo.attributes.position; const grp=geo.groups&&geo.groups[1];
   if(!uv||!grp)return;
@@ -382,7 +386,8 @@ function buildGroundFloors(walls){ // walls: [{a,b,len,nx,ny,zBase,com,door}]
     const v=[[ax+ox,ay+oy,z0,u0,0],[bx+ox,by+oy,z0,u1,0],[bx+ox,by+oy,z1,u1,1],[ax+ox,ay+oy,z0,u0,0],[bx+ox,by+oy,z1,u1,1],[ax+ox,ay+oy,z1,u0,1]];
     v.forEach(q=>{P.push(q[0],q[1],q[2]);N.push(nx,ny,0);U.push(q[3],q[4]);});};
   walls.forEach(w=>{
-    const bays=w.len>=2.2?Math.max(1,Math.round(w.len/3.5)):0, zb=wallGround(w); // street level in front of this wall (slopes)
+    const bays=w.len>=2.2?Math.max(1,Math.round(w.len/3.5)):0, sl=slopeHouseAt((w.a.x+w.b.x)/2-w.nx*0.6,(w.a.y+w.b.y)/2-w.ny*0.6);
+    const zb=sl?sl.fb:wallGround(w); // street level in front of this wall (slopes); a house on a slope: its floor, like its window rows
     quad(w.com?sets.com:sets.res,w.a.x,w.a.y,w.b.x,w.b.y,zb-0.3,zb+H,w.nx,w.ny,0,bays||0.02);
     if(w.door){const mx=(w.a.x+w.b.x)/2,my=(w.a.y+w.b.y)/2,dx=(w.b.x-w.a.x)/w.len,dy=(w.b.y-w.a.y)/w.len,hw=0.65;
       quad(sets.door,mx-dx*hw,my-dy*hw,mx+dx*hw,my+dy*hw,zb,zb+2.3,w.nx*1.6,w.ny*1.6,0,1);}
@@ -391,7 +396,10 @@ function buildGroundFloors(walls){ // walls: [{a,b,len,nx,ny,zBase,com,door}]
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(s.p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(s.n,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(s.u,2));
     const m=new THREE.Mesh(g,mat);m.receiveShadow=true;scene.add(m);groundBands.push(m);});
 }
-const patchWall=m=>m;
+/* window grid: below the floor (V < 0: the plinth of a house on a slope, the part sunk into the ground) the wall is plain */
+const patchWall=m=>{m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <map_fragment>',
+  '#ifdef USE_MAP\n vec4 texelColor = vUv.y < 0.0 ? vec4(1.0) : texture2D( map, vUv );\n texelColor = mapTexelToLinear( texelColor );\n diffuseColor *= texelColor;\n#endif');};
+  m.customProgramCacheKey=()=>'qswall'; return m;};
 const USAGE={ 'Résidentiel':[0xf3efe6,0xe2ddd2], 'Commercial et services':[0xeef0f0,0xdadedf], 'Industriel':[0xe8ebec,0xd3d8da], 'Religieux':[0xefe9dc,0xdbd3c4], 'Agricole':[0xeeeadf,0xd9d4c6], 'Sportif':[0xeceff0,0xd8dcdc] };
 const matCache={};
 function matsFor(usage,target){
@@ -918,7 +926,7 @@ function streetLevel(obj,fi){ // index of the first level above the street of fa
   const u=obj.userData,f=u.facades[fi]; if(!f||facGround(f)-u.zBase<=1.2)return 0; const bc=blindMap(obj)[fi]||[]; const k=bc.findIndex(b=>b!==2); return k<0?0:k;}
 function relFloorName(obj,fi,k){const si=streetLevel(obj,fi);return floorName(k-si)+(si>0&&k===si?' (rue haute)':'');}
 function selectRefresh(){const b=S.building;if(!b)return;const i=S.win?b.userData.facades.indexOf(S.win.facade):-1;if(i>=0)chooseFacade(i);else refreshWinUI();}
-function onGroundData(){S.groundKey=(S.groundKey||0)+1; if(S.gfWalls)buildGroundFloors(S.gfWalls); S.meshes.forEach(m=>{try{slopeWalls(m);}catch(e){}}); if(S.building){try{selectRefresh();}catch(e){}}}
+function onGroundData(){S.groundKey=(S.groundKey||0)+1; applySlopeWalls(); if(S.gfWalls)buildGroundFloors(S.gfWalls); if(S.building){try{selectRefresh();}catch(e){}}}
 const MNT_R=316, MNT_ST=1;
 async function buildMNT(MS,MH,feats){ const yl=slicer(); // bare ground from the laser (surface − heights, same 1 m grid), metres above alt0
   const N=Math.floor(2*MNT_R/MNT_ST)+1, raw=new Float32Array(N*N);
@@ -1867,7 +1875,9 @@ function placeMarker(){
   const p=new THREE.Vector3(pt.x,pt.y,z).addScaledVector(w.normal,0.45);
   w.pos=p; marker.position.copy(p); markerArrow.position.copy(p); markerArrow.setDirection(w.normal); skyLine.position.copy(p); if(S.skyline&&(w.floor!==S.skyline.floor)){S.skyline=null;skyLine.visible=false;skyLine.userData.ready=false;}
   // outline the selected façade: its base, its top and the chosen floor line
-  const zb=Math.max(w.obj.userData.zBase,Math.min(facGround(f),w.obj.userData.zBase+w.obj.userData.h-1)), zt=w.obj.userData.zBase+w.obj.userData.h, zf=z, pts=[];
+  // a house on a slope: the wall rises to the roof edge the laser measures above it, and starts at its floor when that is above the ground
+  const U=w.obj.userData, ev=U._swK?facEave(U,f):null, zt=U.zBase+(ev!=null&&ev>U.h&&ev<U.h+6?ev:U.h);
+  let zb=Math.max(U.zBase,Math.min(facGround(f),zt-1)); if(U._swK)zb=Math.max(zb,Math.min(floorBase(U),zt-1)); const zf=z, pts=[];
   f.segs.forEach(s=>{[zb,zf,zt].forEach(zz=>{pts.push(new THREE.Vector3(s.a.x+w.normal.x*0.3,s.a.y+w.normal.y*0.3,zz),new THREE.Vector3(s.b.x+w.normal.x*0.3,s.b.y+w.normal.y*0.3,zz));});});
   const s0=f.segs[0],sN=f.segs[f.segs.length-1]; [s0.a,sN.b].forEach(q=>pts.push(new THREE.Vector3(q.x+w.normal.x*0.3,q.y+w.normal.y*0.3,zb),new THREE.Vector3(q.x+w.normal.x*0.3,q.y+w.normal.y*0.3,zt)));
   facadeLine.geometry.dispose(); facadeLine.geometry=new THREE.BufferGeometry().setFromPoints(pts);
@@ -2598,7 +2608,7 @@ async function lidarBuildings(){
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
     (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
     roofMeshes=roofMeshes.filter(m=>!gone.has(m));S.roofEdgeParts=buildRoofSets(S.roofSkip);
-    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); if(S.gfWalls)buildGroundFloors(S.gfWalls); S.meshes.forEach(m=>{try{slopeWalls(m);}catch(e){console.error('slopeWalls',e);}}); S.T.lidarBuilt=performance.now();
+    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); applySlopeWalls(); if(S.gfWalls)buildGroundFloors(S.gfWalls); S.T.lidarBuilt=performance.now();
     S.counts=Object.assign(S.counts||{},{lidarBuildings:n});
     return true;
   }
