@@ -534,10 +534,47 @@ function applyFade(){
 /* cadastral parcels of the detailed zone, tinted by what covers their unbuilt part:
    green where the orthophoto or the laser sees vegetation, mineral grey otherwise */
 let parcelGroup=null, parcelTok=0;
+/* pools as clean objects: a light stone coping in relief and a water surface whose shading gives the depth (dark blue walls at the
+   rim, light floor in the middle), with slow ripples and the sun's glints — one mesh for all of them */
+const poolUni={uT:{value:0},uSun:{value:new THREE.Vector3(0,0,1)},uLight:{value:1}};
+const poolMat=new THREE.ShaderMaterial({uniforms:poolUni,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-12,
+  vertexShader:'attribute vec2 aE; varying vec2 vE; varying vec3 vW; void main(){vE=aE; vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w;}',
+  fragmentShader:`uniform float uT; uniform vec3 uSun; uniform float uLight; varying vec2 vE; varying vec3 vW;
+    void main(){ float d=min(vE.x,vE.y);                               // metres to the nearest rim
+      vec3 deep=vec3(0.13,0.42,0.56), shallow=vec3(0.50,0.80,0.87);
+      vec3 c=mix(deep,shallow,smoothstep(0.05,1.3,d));                    // walls dark at the rim, floor lighter
+      float w1=sin(vW.x*2.7+uT*1.1)+sin(vW.y*3.3-uT*0.9)+sin((vW.x+vW.y)*4.1+uT*1.7);
+      vec3 n=normalize(vec3(cos(vW.x*2.7+uT*1.1)*0.05,cos(vW.y*3.3-uT*0.9)*0.05,1.0));
+      vec3 v=normalize(cameraPosition-vW); float sp=pow(max(dot(reflect(-normalize(uSun),n),v),0.0),80.0)*step(0.0,uSun.z);
+      c=c*(0.94+0.05*w1)*uLight + vec3(sp)*0.9 + vec3(0.03)*smoothstep(0.6,1.0,sin(vW.x*6.0+uT*2.0)*sin(vW.y*5.0-uT*1.6));
+      float t=clamp((length(vW.xy)-180.0)/240.0,0.0,1.0);
+      gl_FragColor=vec4(c,1.0-t*t*(3.0-2.0*t)); }`});
+function buildPools(list){
+  const grp=new THREE.Group(), WP=[],WE=[],WI=[], copeMat=new THREE.MeshLambertMaterial({color:0xf1ede4,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}); fadeMat(copeMat);
+  const CP=[],CN=[];
+  list.forEach(q=>{const z=terrainZ(q.x,q.y), W=(u,v)=>[q.x+q.ux*u-q.uy*v, q.y+q.uy*u+q.ux*v];
+    const outline=(hu,hv,r,steps)=>{const pts=[];if(q.rect){const cr=Math.min(r,hu*0.4,hv*0.4);[[hu-cr,hv-cr,0],[-hu+cr,hv-cr,Math.PI/2],[-hu+cr,-hv+cr,Math.PI],[hu-cr,-hv+cr,1.5*Math.PI]].forEach(([cu,cv,a0])=>{for(let k=0;k<=steps;k++){const a=a0+k/steps*Math.PI/2;pts.push([cu+Math.cos(a)*cr,cv+Math.sin(a)*cr]);}});}
+      else for(let k=0;k<32;k++){const a=k/32*Math.PI*2;pts.push([Math.cos(a)*hu,Math.sin(a)*hv]);}return pts;};
+    // water: a fan from the centre, each vertex knows its distance to the rim
+    const inner=outline(q.hu,q.hv,0.4,4), b=WP.length/3; WP.push(q.x,q.y,z+0.24); WE.push(q.hu,q.hv);
+    inner.forEach(([u,v])=>{const p=W(u,v);WP.push(p[0],p[1],z+0.24);WE.push(0,0);});
+    for(let k=0;k<inner.length;k++)WI.push(b,b+1+k,b+1+(k+1)%inner.length);
+    // coping: a 35 cm stone ring, 8 cm proud
+    const outer=outline(q.hu+0.35,q.hv+0.35,0.6,4); const sh=new THREE.Shape(outer.map(([u,v])=>new THREE.Vector2(...W(u,v))));
+    sh.holes.push(new THREE.Path(inner.map(([u,v])=>new THREE.Vector2(...W(u,v)))));
+    const eg=new THREE.ExtrudeGeometry(sh,{depth:0.16,bevelEnabled:false,curveSegments:1}); const pa=eg.attributes.position.array,na=eg.attributes.normal.array;
+    for(let k=0;k<pa.length;k+=3){CP.push(pa[k],pa[k+1],pa[k+2]+z+0.16);CN.push(na[k],na[k+1],na[k+2]);} eg.dispose();});
+  // the radial "distance to rim": centre gets the half-size, rim 0 → interpolated across the fan
+  const wg=new THREE.BufferGeometry(); wg.setAttribute('position',new THREE.Float32BufferAttribute(WP,3)); wg.setAttribute('aE',new THREE.Float32BufferAttribute(WE,2)); wg.setIndex(WI);
+  const wm=new THREE.Mesh(wg,poolMat); wm.renderOrder=2; grp.add(wm);
+  const cg=new THREE.BufferGeometry(); cg.setAttribute('position',new THREE.Float32BufferAttribute(CP,3)); cg.setAttribute('normal',new THREE.Float32BufferAttribute(CN,3));
+  const cm=new THREE.Mesh(cg,copeMat); cm.receiveShadow=true; cm.castShadow=false; cm.renderOrder=2; grp.add(cm);
+  return grp;
+}
 /* gardens, minimalist: every lot painted in its base tint, then what the aerial photo and the laser see on its open part —
    lawn, gravel/terraces, asphalt, pools — as flat plan colours on one texture (computed once, then free to draw) */
-const GT_R=330, GT_N=1536;
-function gardenTexture(TP,MH){
+const GT_R=330, GT_N=1024, GN_R=128, GN_N=1280; // far texture 0.64 m/px over the whole cadastral zone, near one 0.2 m/px around the address
+function gardenTexture(TP,MH,GT_R,GT_N,pools){
   const RO=S.rawOrtho; if(!RO)return null; const W=RO.raw.width,Hh=RO.raw.height,mpp=(RO.e-RO.w)/W,od=RO.raw.getContext('2d').getImageData(0,0,W,Hh).data;
   const N=GT_N,px=2*GT_R/N,cv=document.createElement('canvas');cv.width=cv.height=N;const g=cv.getContext('2d');
   const X=x=>(x+GT_R)/px, Y=y=>(GT_R-y)/px;
@@ -562,9 +599,9 @@ function gardenTexture(TP,MH){
   const shape=(c,blurPx)=>{const a=new Uint8ClampedArray(N*N*4);for(let k=0;k<N*N;k++)if(cls[k]===c){a[k*4]=a[k*4+1]=a[k*4+2]=255;a[k*4+3]=255;}
     const c1=document.createElement('canvas');c1.width=c1.height=N;c1.getContext('2d').putImageData(new ImageData(a,N,N),0,0);
     const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.filter=`blur(${blurPx}px)`;g2.drawImage(c1,0,0);
-    const d=g2.getImageData(0,0,N,N).data,out=new Float32Array(N*N);for(let k=0;k<N*N;k++){const v=d[k*4+3]/255;out[k]=Math.max(0,Math.min(1,(v-0.5)*5+0.5));}return out;};
+    const d=g2.getImageData(0,0,N,N).data,out=new Float32Array(N*N);for(let k=0;k<N*N;k++){const v=d[k*4+3]/255;out[k]=Math.max(0,Math.min(1,(v-0.5)*9+0.5));}return out;};
   const paint=(m,col)=>{for(let k=0;k<N*N;k++){const a=m[k]*(md[k*4+3]>127?1:0);if(a<=0)continue;id[k*4]+= (col[0]-id[k*4])*a;id[k*4+1]+=(col[1]-id[k*4+1])*a;id[k*4+2]+=(col[2]-id[k*4+2])*a;}};
-  paint(shape(1,3),[205,219,185]); paint(shape(2,3),[235,230,220]);
+  const bp=Math.max(2,Math.round(0.6/px)); paint(shape(1,bp),[205,219,185]); paint(shape(2,bp),[235,230,220]);
   g.putImageData(img,0,0);
   // pools: each connected blue patch ≥ 8 m² becomes a clean shape — an oriented rounded rectangle when it is one (most are),
   // a smoothed blob otherwise — with a thin light coping, like on an architect's plan
@@ -575,10 +612,8 @@ function gardenTexture(TP,MH){
     const ang=0.5*Math.atan2(2*sxy,sxx-syy),ca=Math.cos(ang),sa=Math.sin(ang);const us=[],vs=[];q.forEach(k=>{const dx=k%N-mx,dy=((k/N)|0)-my;us.push(dx*ca+dy*sa);vs.push(-dx*sa+dy*ca);});
     us.sort((a,b)=>a-b);vs.sort((a,b)=>a-b);const pc=(a,t)=>a[Math.min(a.length-1,Math.max(0,Math.round(t*(a.length-1))))];
     const u0=pc(us,0.03),u1=pc(us,0.97)+1,v0=pc(vs,0.03),v1=pc(vs,0.97)+1,fill=q.length/((u1-u0)*(v1-v0));
-    g.save();g.translate(mx+0.5,my+0.5);g.rotate(ang);g.beginPath();
-    if(fill>0.68){const rr=0.35/px;g.roundRect?g.roundRect(u0,v0,u1-u0,v1-v0,rr):g.rect(u0,v0,u1-u0,v1-v0);}
-    else{g.ellipse((u0+u1)/2,(v0+v1)/2,(u1-u0)/2,(v1-v0)/2,0,0,Math.PI*2);}
-    g.fillStyle='#a9d5e3';g.fill();g.lineWidth=0.45/px;g.strokeStyle='#f6f3ec';g.stroke();g.restore();}
+    if(pools){const uc=(u0+u1)/2,vc=(v0+v1)/2,pi=mx+0.5+uc*ca-vc*sa,pj=my+0.5+uc*sa+vc*ca;
+      pools.push({x:-GT_R+pi*px,y:GT_R-pj*px,ux:ca,uy:-sa,hu:(u1-u0)/2*px,hv:(v1-v0)/2*px,rect:fill>0.68});}}
   const tx=new THREE.CanvasTexture(cv); tx.encoding=THREE.sRGBEncoding; tx.anisotropy=8; tx.wrapS=tx.wrapT=THREE.ClampToEdgeWrapping; return tx;
 }
 async function buildParcels(lat,lon){
@@ -615,10 +650,19 @@ async function buildParcels(lat,lon){
   if(tok!==parcelTok)return;
   parcelGroup=new THREE.Group();
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
-    let mat=null; try{const tx=gardenTexture(TP,MH);if(tx){const uv=new Float32Array(P.length/3*2);for(let k=0,q=0;k<P.length;k+=3,q+=2){uv[q]=(P[k]+GT_R)/(2*GT_R);uv[q+1]=(P[k+1]+GT_R)/(2*GT_R);}
-      g.setAttribute('uv',new THREE.BufferAttribute(uv,2));mat=new THREE.MeshLambertMaterial({map:tx,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});}}catch(err){console.error('gardens',err);}
+    let mat=null, pools=[]; try{const pn=[],pf=[];const tn=gardenTexture(TP,MH,GN_R,GN_N,pn);const tx=gardenTexture(TP,MH,GT_R,GT_N,pf);
+      pools=pn.concat(pf.filter(q=>Math.max(Math.abs(q.x),Math.abs(q.y))>GN_R-8));
+      if(tx){const uv=new Float32Array(P.length/3*2);for(let k=0,q=0;k<P.length;k+=3,q+=2){uv[q]=(P[k]+GT_R)/(2*GT_R);uv[q+1]=(P[k+1]+GT_R)/(2*GT_R);}
+      g.setAttribute('uv',new THREE.BufferAttribute(uv,2));mat=new THREE.MeshLambertMaterial({map:tx,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
+      if(tn){const un={value:tn}; mat.onBeforeCompile=sh=>{sh.uniforms.uNear=un; sh.fragmentShader='uniform sampler2D uNear;\n'+sh.fragmentShader.replace('#include <map_fragment>',
+        `#ifdef USE_MAP
+          vec2 qN=(vQsW+vec2(${GN_R}.0))/${2*GN_R}.0;
+          vec4 texelColor=(qN.x>0.002&&qN.x<0.998&&qN.y>0.002&&qN.y<0.998)?texture2D(uNear,qN):texture2D(map,vUv);
+          texelColor=mapTexelToLinear(texelColor); diffuseColor*=texelColor;
+        #endif`);}; mat.customProgramCacheKey=()=>'qsgarden';}}}catch(err){console.error('gardens',err);}
     if(!mat)mat=new THREE.MeshLambertMaterial({vertexColors:true,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
-    const m=new THREE.Mesh(g,mat);m.receiveShadow=true;m.renderOrder=0;m.userData.fill=true;fadeMat(m.material);parcelGroup.add(m);}
+    const m=new THREE.Mesh(g,mat);m.receiveShadow=true;m.renderOrder=0;m.userData.fill=true;fadeMat(m.material);parcelGroup.add(m);
+    if(pools.length)try{parcelGroup.add(buildPools(pools));}catch(err){console.error('pools',err);}}
   if(BP.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(BP,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(BN,3));
     const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa39a8a,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}));m.receiveShadow=true;m.renderOrder=1;fadeMat(m.material);parcelGroup.add(m);}
   if(L.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(L,3));
@@ -2185,6 +2229,7 @@ function frame(now){
     cam.target.lerpVectors(a.t,b.t,e);cam.theta=a.th+(b.th-a.th)*e;cam.phi=a.ph+(b.ph-a.ph)*e;
     cam.dist=camTw.ease==='quint'?Math.exp(Math.log(a.d)+(Math.log(b.d)-Math.log(a.d))*e):a.d+(b.d-a.d)*e; applyCam(); if(camTw.tl&&!camTw.hold)setTL(camTw.tl,e);
     if(k>=1){const cb=camTw.onEnd;camTw=null;if(cb)cb();}}
+  poolUni.uT.value=now/1000; if(S.sunDir){poolUni.uSun.value.copy(S.sunDir);poolUni.uLight.value=Math.max(0.18,Math.min(1,S.sunDir.z*2.5+0.3));}
   if(introRing){const k=Math.min(1,(now-introRing.userData.t0)/1400),e=1-Math.pow(1-k,3);introRing.scale.setScalar(1+e*1.8);introRing.material.opacity=0.9*(1-k);
     if(k>=1){scene.remove(introRing);introRing.geometry.dispose();introRing.material.dispose();introRing=null;}}
   if(marker.visible){const ph=(now%1600)/1600,sc=(isPhone()?1.6:1.1)*(1+0.35*(0.5-0.5*Math.cos(ph*2*Math.PI)));marker.scale.setScalar(sc);}
