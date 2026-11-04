@@ -8,6 +8,7 @@
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-family:system-ui,sans-serif;font-size:14px}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;800&family=DM+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -170,9 +171,23 @@ button.link:hover{color:var(--fg);background:none}
 .rmath summary{cursor:pointer;color:var(--fg);font-weight:500}
 .rmath p{margin:8px 0}
 .rmath .mono{font-family:var(--mono);color:var(--fg);overflow-x:auto}
+
+:root:not(#_),:root[data-theme]:not(#_){
+  --bg:#0b0a0c; --panel:rgba(17,15,19,.94); --fg:#f3ede6; --ink2:#a9a2ad; --muted:#7f7884; --line:rgba(255,255,255,.09); --raised:#1c191f;
+  --accent:#f08a24; --accent-ink:#fdb44b; --accent-fg:#0b0a0c; --btn:#fde15a; --btn-fg:#0b0a0c; --sun:#f08a24; --shade:#2a262d;
+  --display:"Barlow",ui-sans-serif,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace; color-scheme:dark}
+body{letter-spacing:.005em}
+.big .v,#mini b{font-family:"Barlow Condensed",ui-sans-serif,system-ui,sans-serif!important;font-weight:600!important;letter-spacing:-.01em}
+.brand{font-family:"Barlow Condensed",ui-sans-serif,sans-serif;font-weight:600;font-size:17px;letter-spacing:.02em;text-transform:uppercase}
+.step .n{font-family:var(--mono);letter-spacing:.08em}
+#themeBtn{display:none!important}
+.rbar{height:8px;border-radius:2px}
+.rseg{border-radius:6px}.rseg button{border-radius:4px;font-family:"Barlow Condensed",sans-serif;font-size:15px;letter-spacing:.02em;text-transform:uppercase}
+.rseg button[aria-pressed="true"]{background:var(--btn);color:var(--btn-fg);box-shadow:none}
+.panel{border-radius:10px}
 </style>
 
-<script>try{var qsT=localStorage.getItem("qs-theme");if(qsT)document.documentElement.dataset.theme=qsT;}catch(e){}</script>
+<script>document.documentElement.dataset.theme="dark";</script>
 <div id="app">
   <div id="view"></div>
   <div id="toast" role="status"></div>
@@ -1748,6 +1763,7 @@ function update(){
   sun.position.copy(v).multiplyScalar(1800); sun.target.position.set(0,0,0); sun.castShadow=sp.alt>0.01;
   const wx=weatherAt(inst); updateSky(sp,wx);
   if(RF&&RF.cells&&RF.mode==='instant')roofRenderSoon();
+  thermalSky();
   S.sunDir=v; sunDisc.visible=sp.alt>-0.03; sunDisc.material.opacity=Math.max(0.15,1-(wx?wx.cloud/100:0)*0.9);
   const pk=S.year+':'+S.doy+':'+S.lat.toFixed(3);
   if(pk!==pathKey){pathKey=pk;const md=dayOfYearToMD(S.year,S.doy);const pts=[];for(let t=0;t<=1440;t+=10){const q=sunPos(localToInstant(S.year,md.m,md.d,Math.floor(t/60),t%60),S.lat,S.lon);if(q.alt>-0.01)pts.push(sunVec(q).multiplyScalar(1900));}
@@ -3203,6 +3219,13 @@ function roofVertRows(R){const F=R.F;if(!F)return[];const by=new Map();
   return [...by.values()].filter(o=>o.a>=2).sort((a,b)=>b.a-a.a);}
 
 $('rMore').addEventListener('click',()=>$('sheet').classList.remove('collapsed'));
+
+/* "caméra thermique": the model is drawn dark so that only the studied roof glows; materials are darkened once, as they appear */
+function thermalSky(){try{skyUni.top.value.set(0x0b0a0c);skyUni.horizon.value.set(0x17141a);skyUni.ground.value.set(0x0b0a0c);}catch(e){}}
+function thermalize(){scene.traverse(o=>{if(!(o.isMesh||o.isLine||o.isInstancedMesh||o.isPoints))return;if(o===RF.mesh||o===RF.vmesh||o===RF.lines)return;
+  const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(!m||!m.color||m.userData.thermal||m===sunDisc.material)return;m.userData.thermal=true;
+    if(o.isLine)m.color.setRGB(0.42,0.39,0.44);else m.color.multiplyScalar(o.material.vertexColors?0.16:0.2);});});}
+setInterval(thermalize,700);
 
 {const c=wallTex.image,g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);wallTex.needsUpdate=true;} /* plain walls: no windows on this page */
 
