@@ -3466,7 +3466,20 @@ function roofModel(R){
         const rms=Math.sqrt(e2s/Math.max(1,inl)),fi=inl/pts.length,sc=rms*(1+2*(1-fi));
         if(!best||sc<best.sc)best={sc,rms,inl:fi,fa,fb};}
       if(!best)return null; const pen={gable:0.015,gable2:0.025}[c.k];
-      return {c,z0:(best.fa.z0+best.fb.z0)/2,k:(best.fa.k+best.fb.k)/2,ks:[best.fa.k,best.fb.k],zs:[best.fa.z0,best.fb.z0],score:best.sc+pen,rms:best.rms,inl:best.inl};};
+      let out={c,z0:(best.fa.z0+best.fb.z0)/2,k:(best.fa.k+best.fb.k)/2,ks:[best.fa.k,best.fb.k],zs:[best.fa.z0,best.fb.z0],score:best.sc+pen,rms:best.rms,inl:best.inl};
+      /* hipped ends (croupe, demi-croupe): at each short end, the laser points lying clearly under the two-pan roof get their own plane,
+         rising from that end wall; it is kept only if the whole roof is explained better */
+      const evalM=(E,ks,zs)=>{let e2=0,inl=0;pts.forEach(p=>{const z=Math.min(...E.map((e,i)=>zs[i]+ks[i]*d(e,p.x,p.y)));const r=p.z-z;if(Math.abs(r)<0.3){e2+=r*r;inl++;}});const rms=Math.sqrt(e2/Math.max(1,inl)),fi=inl/pts.length;return {rms,fi,sc:rms*(1+2*(1-fi))};};
+      const ends=RS.filter(e=>c.E.indexOf(e)<0), Llong=Math.max(...c.E.map(e=>e.L));
+      let E=c.E.slice(),KS=out.ks.slice(),ZS=out.zs.slice(),cur=evalM(E,KS,ZS),nh=0;
+      ends.forEach(en=>{const zg=p=>Math.min(...E.map((e,i)=>ZS[i]+KS[i]*d(e,p.x,p.y)));
+        const g=pts.filter(p=>d(en,p.x,p.y)<Llong*0.4&&p.z<zg(p)-0.15); if(g.length<8)return;
+        let fe=null; let use=g; for(let pass=0;pass<2;pass++){let S1=0,Sm=0,Smm=0,Sz=0,Smz=0;use.forEach(p=>{const m=d(en,p.x,p.y);S1++;Sm+=m;Smm+=m*m;Sz+=p.z;Smz+=m*p.z;});const D=S1*Smm-Sm*Sm;if(S1<6||Math.abs(D)<1e-6)return;const k=(S1*Smz-Sm*Sz)/D;fe={k,z0:(Sz-k*Sm)/S1};use=g.filter(p=>Math.abs(p.z-(fe.z0+fe.k*d(en,p.x,p.y)))<0.3);}
+        if(!fe||fe.k<Math.tan(12*RAD)||fe.k>Math.tan(70*RAD))return;
+        const E2=E.concat([en]),K2=KS.concat([fe.k]),Z2=ZS.concat([fe.z0]),ev=evalM(E2,K2,Z2);
+        if(ev.sc<cur.sc-0.01){E=E2;KS=K2;ZS=Z2;cur=ev;nh++;}});
+      if(nh)out={c:{k:c.k,E},z0:out.z0,k:out.k,ks:KS,zs:ZS,score:cur.sc+pen+0.01*nh,rms:cur.rms,inl:cur.fi,hipEnds:nh};
+      return out;};
     const fit=c=>{if((c.k==='gable'||c.k==='gable2')&&c.E.length===2)return fitGable(c); const m=p=>c.E.length?Math.min(...c.E.map(e=>d(e,p.x,p.y))):0;
       let use=pts.map(p=>({p,m:m(p)})), z0=0,k=0;
       for(let pass=0;pass<3;pass++){ if(use.length<4)return null;
