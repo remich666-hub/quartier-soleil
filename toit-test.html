@@ -2999,7 +2999,7 @@ function registerFamily(fam,MH){
   const score=(dx,dy)=>frac(pin,dx,dy)-0.8*frac(pout,dx,dy)+0.12*edge(dx,dy);
   const s0=score(0,0); let best={dx:0,dy:0,s:s0};
   for(let dx=-2;dx<=2.001;dx+=0.25)for(let dy=-2;dy<=2.001;dy+=0.25){const sc=score(dx,dy)-0.02*Math.hypot(dx,dy);if(sc>best.s)best={dx,dy,s:sc};}
-  if(best.s<s0+0.04)best={dx:0,dy:0,s:s0};
+  if(best.s<s0+0.04||Math.abs(best.dx)>=1.99||Math.abs(best.dy)>=1.99)best={dx:0,dy:0,s:s0}; /* a best shift at the edge of the search means the laser shows something else there: no shift */
   RF.reg={dx:best.dx,dy:best.dy,s0,s:best.s,nin:pin.length,nout:pout.length,e0:edge(0,0),e:edge(best.dx,best.dy)};
   return {dx:best.dx,dy:best.dy};}
 function roofCells(obj){
