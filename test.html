@@ -1327,12 +1327,12 @@ function classifyTrees(){ // sets s.ev (evergreen) on every tree spot; returns t
   return changed;
 }
 function setLeafTarget(now){const t=leafOffAt(S.doy);if(Math.abs(t-LEAF.to)>0.001){LEAF.from=LEAF.cur;LEAF.to=t;LEAF.t0=now||performance.now();}}
-const LEAFU={uCell:{value:7},uCut:{value:0},uTint:{value:new THREE.Color(1,1,1)},uTintK:{value:0}};
+const LEAFU={uCell:{value:13},uCut:{value:0},uTint:{value:new THREE.Color(1,1,1)},uTintK:{value:0}};
 const TINT={ochre:new THREE.Color(0.82,0.60,0.34),bare:new THREE.Color(0.50,0.44,0.38),spring:new THREE.Color(0.74,0.86,0.58)};
 function applyLeaf(){const L=LEAF.cur; if(!treeCrownD)return;
   // crowns thin out into a sieve of twigs (a hashed share of their surface is dropped) and change colour:
   // autumn green → ochre → grey-brown bare wood; spring bare wood → tender green
-  LEAFU.uCut.value=L*0.72; treeCrownD.userData.cut.value=L*BARE_T;
+  LEAFU.uCut.value=L*0.86; treeCrownD.userData.cut.value=L*BARE_T;
   if(S.doy>200){if(L<0.55){LEAFU.uTint.value.copy(TINT.ochre);LEAFU.uTintK.value=ss01(L/0.35)*0.85;}else{LEAFU.uTint.value.copy(TINT.ochre).lerp(TINT.bare,ss01((L-0.55)/0.4));LEAFU.uTintK.value=0.85+0.15*ss01((L-0.55)/0.4);}}
   else{LEAFU.uTint.value.copy(TINT.spring).lerp(TINT.bare,ss01(L));LEAFU.uTintK.value=Math.min(1,L*2.5);}
   if(treeBranch)treeBranch.visible=L>0.03;}
