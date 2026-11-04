@@ -1711,12 +1711,29 @@ async function addressOf(obj){
   // the building the searched address points at keeps that address: a corner block has several numbers, and the one nearest its
   // centre is often on the other street
   const own=(S.target&&family(S.target).includes(obj))||(obj.userData.rings||[]).some(r=>pointInPoly(0,0,r));
-  if(own&&S.addrLabel){S.label=S.addrLabel;$('addrDoneText').textContent=S.label;return;}
+  if(own&&S.addrLabel){S.label=S.addrLabel;renderAddr();return;}
   try{const r=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon.toFixed(6)}&lat=${lat.toFixed(6)}&type=housenumber&limit=1`);const j=await r.json();if(tok!==revTok)return;
     const f=j.features&&j.features[0]; const d=f?Math.hypot((f.geometry.coordinates[0]-lon)*kx,(f.geometry.coordinates[1]-lat)*ky):1e9;
     S.label=f&&d<Math.max(30,bs.radius+8)?f.properties.label:('Bâtiment voisin de '+S.addrLabel);}catch(_){if(tok!==revTok)return;}
-  $('addrDoneText').textContent=S.label||'';
+  renderAddr();
 }
+/* which street a façade looks onto: walk straight out of the façade and take the first IGN street met (names are already loaded);
+   nothing within 40 m → a courtyard (buildings around) or a garden (open, green) */
+const roadName=p=>String(p.nom_voie_ban_gauche||p.nom_voie_ban_droite||p.nom_1_gauche||p.nom_1_droite||p.nom_collaboratif_gauche||p.nom_collaboratif_droite||p.cpx_toponyme_route_nommee||'').trim();
+function roadSegs(){ if(S._rsegs&&S._rsegsK===S.roadFeats)return S._rsegs; const out=[];
+  (S.roadFeats||[]).forEach(f=>{const nm=roadName(f.properties);const w=roadWidth(f.properties);const g=f.geometry;const lines=g.type==='LineString'?[g.coordinates]:(g.type==='MultiLineString'?g.coordinates:[]);
+    lines.forEach(line=>{const pts=line.map(lineLocal);for(let i=0;i<pts.length-1;i++){const a=pts[i],b=pts[i+1];if(Math.hypot(a[0],a[1])>500&&Math.hypot(b[0],b[1])>500)continue;out.push({a,b,w,nm});}});});
+  S._rsegs=out;S._rsegsK=S.roadFeats;return out;}
+function sideOf(obj,f){ if(f._side!==undefined&&f._sideK===S.roadFeats)return f._side;
+  const segs=roadSegs(), p=f.mid, n=f.normal; let side=null;
+  const dSeg=(x,y,s)=>{const dx=s.b[0]-s.a[0],dy=s.b[1]-s.a[1],L2=dx*dx+dy*dy||1;let t=((x-s.a[0])*dx+(y-s.a[1])*dy)/L2;t=Math.max(0,Math.min(1,t));return Math.hypot(s.a[0]+t*dx-x,s.a[1]+t*dy-y);};
+  const others=S.meshes.filter(m=>m!==obj&&!family(obj).includes(m)); let wall=1e9;
+  try{const h=new THREE.Raycaster(new THREE.Vector3(p.x+n.x*0.3,p.y+n.y*0.3,obj.userData.zBase+2.5),new THREE.Vector3(n.x,n.y,0),0,60).intersectObjects(others,false);if(h.length)wall=h[0].distance;}catch(e){}
+  for(let t=1;t<=40&&t<wall&&!side;t+=1){const x=p.x+n.x*t,y=p.y+n.y*t;let best=null,bd=1e9;for(const s of segs){const d=dSeg(x,y,s);if(d<s.w/2+1&&d<bd){bd=d;best=s;}}if(best)side=best.nm?best.nm:'la rue';}
+  if(!side){ if(wall<40)side='cour'; else{const g=orthoGreen();let gr=0;for(let t=4;t<=24;t+=4){if(g(p.x+n.x*t,p.y+n.y*t)>12)gr++;}side=gr>=2?'jardin':null;} }
+  f._side=side;f._sideK=S.roadFeats;return side;}
+function sideText(side){if(!side)return '';if(side==='cour')return 'côté cour';if(side==='jardin')return 'côté jardin';if(side==='la rue')return 'côté rue';return 'côté '+side.replace(/^(Rue|Avenue|Boulevard|Place|Quai|Impasse|Allée|Chemin|Route|Cours|Passage|Square|Villa|Cité)\b/,m=>m.toLowerCase());}
+function renderAddr(){const w=S.win;const t=w&&w.facade?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=(S.label||'')+(t?' · façade '+t:'');}
 function selectBuilding(obj){
   S.building=obj; const u=obj.userData;
   $('bInfo').textContent=`${u.h.toFixed(0)} m à l'égout${u.ridge?`, ${u.ridge.toFixed(0)} m au faîtage`:''}${u.floors?`, ${u.floors} étages`:''}${u.usage?`, ${u.usage.toLowerCase()}`:''}`;
@@ -1928,7 +1945,7 @@ async function reportData(){
   const climate=await fetchClimate();
   const real=climate?months.map((r,i)=>climate.frac[i]!=null?+(r.h*climate.frac[i]).toFixed(2):null):null;
   return {v:1,generated:new Date().toISOString(),address:S.label,lat:+(S.bLat||S.lat).toFixed(6),lon:+(S.bLon||S.lon).toFixed(6),alt:Math.round(S.alt0),
-    window:{az:+f.az.toFixed(0),dir:DIRS[Math.round(f.az/45)%8],floor:w.floor-streetLevel(w.obj,u.facades.indexOf(f)),heightAboveGround:+(w.pos.z-Math.max(u.zBase,facGround(f))).toFixed(1),facadeLen:+f.len.toFixed(0),building:{h:+u.h.toFixed(1),ridge:u.ridge?+u.ridge.toFixed(1):null,floors:u.floors||null,usage:u.usage||null}},
+    window:{side:sideText(sideOf(w.obj,f))||null,az:+f.az.toFixed(0),dir:DIRS[Math.round(f.az/45)%8],floor:w.floor-streetLevel(w.obj,u.facades.indexOf(f)),heightAboveGround:+(w.pos.z-Math.max(u.zBase,facGround(f))).toFixed(1),facadeLen:+f.len.toFixed(0),building:{h:+u.h.toFixed(1),ridge:u.ridge?+u.ridge.toFixed(1):null,floors:u.floors||null,usage:u.usage||null}},
     lidar:L, blind, year:Y, annual:{h:+(tot/nd).toFixed(2),free:+(ftot/nd).toFixed(2),hYear:Math.round(tot/nd*365),bare:+(btot/nd).toFixed(2),bareWinter:nwin?+(bwin/nwin).toFixed(2):0,bareT:BARE_T}, months, matrix, keyDates:kd, paths, sky, obstacles,
     climate:climate?{frac:climate.frac.map(v=>v!=null?+v.toFixed(2):null),src:climate.src,realMonths:real,realAnnual:+(real.reduce((a,b)=>a+(b||0),0)/12).toFixed(2)}:null};
 }
@@ -2508,6 +2525,7 @@ function rebuildEdges(){
 function fmtH(h){const m=Math.round(h*60);const H=Math.floor(m/60),M=m%60;return H?`${H} h ${String(M).padStart(2,'0')}`:`${M} min`;}
 function floorName(f){return f===0?'Rez-de-chaussée':f===1?'1er étage':`${f}e étage`;}
 function refreshWinUI(){
+  try{renderAddr();}catch(e){}
   const sel=$('facade'), o=sel.options[sel.selectedIndex]; const n=sel.options.length;
   if(o){const parts=o.textContent.split(' · ');$('facLabel').innerHTML=`${parts[0]}<small>${(+sel.value+1)}/${n} · ${parts.slice(1).join(' · ')}</small>`;}
   const f=+$('floor').value||0; const u=S.building&&S.building.userData; const maxF=u?Math.max(0,(u.floors||Math.round(u.h/3))-1):40;
