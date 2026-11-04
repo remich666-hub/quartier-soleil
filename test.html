@@ -912,14 +912,29 @@ function detectLattices(feats){
     out.push({cx:top.cx,cy:top.cy,ang:best.a,base:base.ring,baseHalf:halfOf(base),levels:lv,top:Math.max(...grp.map(t=>t.h))});});
   return out;
 }
+function minRect(ring){let best={a:0,s:1e18};for(let d=0;d<90;d++){const an=d*RAD,c=Math.cos(an),sn=Math.sin(an);let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;ring.forEach(q=>{const u=q.x*c+q.y*sn,v=-q.x*sn+q.y*c;u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});const s2=(u1-u0)*(v1-v0);if(s2<best.s)best={a:an,s:s2,u0,u1,v0,v1};}
+  const c=Math.cos(best.a),sn=Math.sin(best.a),uc=(best.u0+best.u1)/2,vc=(best.v0+best.v1)/2; let ang=best.a,hu=(best.u1-best.u0)/2,hv=(best.v1-best.v0)/2; if(hv>hu){ang+=Math.PI/2;[hu,hv]=[hv,hu];}
+  return {cx:uc*c-vc*sn,cy:uc*sn+vc*c,ang,hu,hv};}
+/* triumphal arches: the IGN gives a solid block; drawn as the monument — four piers, the great arch through the front,
+   the smaller transverse arch, the attic on top — in plain stone, light passing under the vaults */
+function detectArches(feats){const out=[];feats.forEach(f=>{const p=f.properties||{};if(!/arc de triomphe/i.test(p.nature||''))return;const g=f.geometry;const poly=g.type==='Polygon'?g.coordinates:g.type==='MultiPolygon'?g.coordinates[0]:null;if(!poly)return;
+  const ring=ringToLocal(poly[0]);if(ring.length<3)return;const r=minRect(ring);if(r.hu<3)return;out.push(Object.assign(r,{ring,h:+p.hauteur||r.hu*2}));});return out;}
+function buildArch(A){const grp=[],mat=new THREE.MeshLambertMaterial({color:0xd9d2c4});fadeMat(mat);const z0=terrainZ(A.cx,A.cy)-0.3,c=Math.cos(A.ang),sn=Math.sin(A.ang);
+  const box=(u0,u1,v0,v1,za,zb)=>{if(u1-u0<0.2||v1-v0<0.2||zb-za<0.2)return;const m=new THREE.Mesh(new THREE.BoxGeometry(u1-u0,v1-v0,zb-za),mat);const uc=(u0+u1)/2,vc=(v0+v1)/2;m.position.set(A.cx+uc*c-vc*sn,A.cy+uc*sn+vc*c,z0+(za+zb)/2);m.rotation.z=A.ang;m.castShadow=m.receiveShadow=true;scene.add(m);grp.push(m);};
+  const H=A.h+0.3, hu=A.hu, hv=A.hv, mu=hu*0.32, mz=H*0.62, tv=hv*0.38, tz=H*0.40, attic=H*0.78; // great arch (front, through the short side), transverse arch, attic
+  for(const su of [-1,1])for(const sv of [-1,1]){const ua=su>0?mu:-hu,ub=su>0?hu:-mu,va=sv>0?tv:-hv,vb=sv>0?hv:-tv;box(ua,ub,va,vb,0,attic);} // four piers
+  for(const su of [-1,1]){const ua=su>0?mu:-hu,ub=su>0?hu:-mu;box(ua,ub,-tv,tv,tz,attic);} // over the transverse arches
+  box(-mu,mu,-hv,hv,mz,attic); box(-hu,hu,-hv,hv,attic,H); box(-hu-0.6,hu+0.6,-hv-0.6,hv+0.6,attic-1.2,attic); // vault, attic, cornice
+  return grp;}
 let latticeMeshes=[];
 function applyLattices(){
-  const Ls=S.lattices||[]; if(!Ls.length)return;
+  const Ls=S.lattices||[], As=S.arches||[]; if(!Ls.length&&!As.length)return;
   // drop every solid volume standing in a lattice's base (IGN prisms and their laser rebuilds), keep low kiosks
-  const gone=new Set(); S.meshes.forEach(m=>{const u=m.userData;if(!u.rings||(u.h||0)<15)return;let cx=0,cy=0;u.rings[0].forEach(q=>{cx+=q.x;cy+=q.y;});cx/=u.rings[0].length;cy/=u.rings[0].length;
-    if(Ls.some(L=>pointInPoly(cx,cy,L.base))){gone.add(m);if(m.parent)m.parent.remove(m);}});
+  const gone=new Set(); S.meshes.forEach(m=>{const u=m.userData;if(!u.rings)return;const inArch=As.length&&As.some(A=>u.rings[0].every(q=>Math.hypot(q.x-A.cx,q.y-A.cy)<A.hu+6));if(!inArch&&(u.h||0)<15)return;let cx=0,cy=0;u.rings[0].forEach(q=>{cx+=q.x;cy+=q.y;});cx/=u.rings[0].length;cy/=u.rings[0].length;
+    if(Ls.some(L=>pointInPoly(cx,cy,L.base))||As.some(A=>pointInPoly(cx,cy,A.ring))){gone.add(m);if(m.parent)m.parent.remove(m);}});
   if(gone.size){S.meshes=S.meshes.filter(m=>!gone.has(m));S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o));rebuildEdges();}
-  if(latticeMeshes.length)return; // frame already built
+  if(latticeMeshes.length)return; // frames already built
+  As.forEach(A=>{buildArch(A).forEach(m=>{latticeMeshes.push(m);monuments.push(m);(S.obstacles=S.obstacles||[]).push(m);});});
   const mat=new THREE.MeshLambertMaterial({color:0xbdb2a2}); fadeMat(mat);
   Ls.forEach(L=>{const P=[],c=Math.cos(L.ang),sn=Math.sin(L.ang),z0=terrainZ(L.cx,L.cy);
     const W=(u,v,z)=>new THREE.Vector3(L.cx+u*c-v*sn,L.cy+u*sn+v*c,z0+z);
@@ -994,7 +1009,10 @@ function ribbons(feats,width,lift,P,N,minR){ // flat strip on the ground
   feats.forEach(f=>{const g=f.geometry;const lines=g.type==='LineString'?[g.coordinates]:(g.type==='MultiLineString'?g.coordinates:[]);const w=typeof width==='function'?width(f.properties):width;
     lines.forEach(line=>{const pts=densify(line.map(lineLocal)).map(p=>[p[0],p[1],terrainZ(p[0],p[1])+lift]);
       for(let i=0;i<pts.length-1;i++){const a=pts[i],b=pts[i+1];const dx=b[0]-a[0],dy=b[1]-a[1];const L=Math.hypot(dx,dy);if(L<0.3)continue;const nx=-dy/L*w/2,ny=dx/L*w/2; if(minR&&Math.hypot((a[0]+b[0])/2,(a[1]+b[1])/2)<minR)continue;
-        pushQuad(P,N,[a[0]-nx,a[1]-ny,a[2]],[b[0]-nx,b[1]-ny,b[2]],[b[0]+nx,b[1]+ny,b[2]],[a[0]+nx,a[1]+ny,a[2]],[0,0,1]);}});});
+        pushQuad(P,N,[a[0]-nx,a[1]-ny,a[2]],[b[0]-nx,b[1]-ny,b[2]],[b[0]+nx,b[1]+ny,b[2]],[a[0]+nx,a[1]+ny,a[2]],[0,0,1]);}
+      // round joins and ends: a disc at every bend and every junction, so strips meet without notches or wedges
+      line.map(lineLocal).forEach(([x,y])=>{if(minR&&Math.hypot(x,y)<minR)return;const z=terrainZ(x,y)+lift,r=w/2,K=14;
+        for(let k=0;k<K;k++){const a0=k/K*2*Math.PI,a1=(k+1)/K*2*Math.PI;P.push(x,y,z,x+Math.cos(a0)*r,y+Math.sin(a0)*r,z,x+Math.cos(a1)*r,y+Math.sin(a1)*r,z);N.push(0,0,1,0,0,1,0,0,1);}});});});
 }
 function fences(feats,width,height,P,N){ // thin box along the line (hedge, wall)
   feats.forEach(f=>{const g=f.geometry;const lines=g.type==='LineString'?[g.coordinates]:(g.type==='MultiLineString'?g.coordinates:[]);const h=typeof height==='function'?height(f.properties):height;const w=typeof width==='function'?width(f.properties):width;if(!h)return;
@@ -2045,7 +2063,7 @@ async function load(q,at){
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
     try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms)S.mnt=buildMNT(ms,mh,feats);}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
-    S.lattices=detectLattices(feats); buildScene(feats); applyLattices(); loadOrtho(g.lat,g.lon);
+    S.lattices=detectLattices(feats); S.arches=detectArches(feats); buildScene(feats); applyLattices(); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
