@@ -1882,11 +1882,15 @@ function facAddr(obj,f){
   const kx=111320*Math.cos(S.lat*RAD),ky=110574, px=f.mid.x+f.normal.x*2, py=f.mid.y+f.normal.y*2;
   fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${(S.lon+px/kx).toFixed(6)}&lat=${(S.lat+py/ky).toFixed(6)}&type=housenumber&limit=20`).then(r=>r.json()).then(j=>{
     if(f._addrK!==key)return; let best=null,bd=Math.max(25,f.len/2+15);
+    const fam=family(obj), rings=fam.flatMap(m=>m.userData.rings||[]);
     (j.features||[]).forEach(ft=>{const p=ft.properties||{}; if(normSt(p.street)!==st)return;
       const c=ft.geometry.coordinates, X=(c[0]-S.lon)*kx, Y=(c[1]-S.lat)*ky;
       /* a number across the street is in front of the façade: keep only points behind it or on its pavement */
       if((X-f.mid.x)*f.normal.x+(Y-f.mid.y)*f.normal.y>2)return;
-      const d=Math.hypot(X-px,Y-py); if(d<bd){bd=d;best=p.label;}});
+      /* a number inside the building's own footprint wins at any distance */
+      const d=Math.hypot(X-px,Y-py)-(rings.some(r=>pointInPoly(X,Y,r))?1000:0); if(d<bd){bd=d;best=p.label;}});
+    /* nothing near this façade: another façade of the same building on the same street may have found its number */
+    if(!best){for(const m of fam)for(const g of (m.userData.facades||[]))if(g!==f&&g._addrK===key&&g._addr){best=g._addr;break;}}
     if(best){f._addr=best; renderAddr();}
   }).catch(()=>{if(f._addrK===key)f._addrK=null;});
   return null;}
