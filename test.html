@@ -355,10 +355,30 @@ function slopeWalls(m){const u=m.userData; if(!u||!u.lidar||!u.facades||nFloorsR
       if(ci)o.push(c); if(ci!==di){const t=(zc-c[1])/(d[1]-c[1]);o.push([c[0]+(d[0]-c[0])*t,zc]);}}return o;};
     [[clip(poly,true),false],[clip(poly,false),true]].forEach(([pl,plain])=>{if(pl.length<3)return;
       const vx=p=>{const x=A0[0]+(B0[0]-A0[0])*p[0],y=A0[1]+(B0[1]-A0[1])*p[0];return [x,y,p[1],uOf(x,y),plain?F*3+0.4:(p[1]-u.zBase-off)*3/sh];};
-      for(let i=1;i<pl.length-1;i++)[pl[0],pl[i],pl[i+1]].forEach(p=>{const w=vx(p);P.push(w[0],w[1],w[2]);N.push(nx,ny,0);U.push(w[3],w[4]);});});}
+      for(let i=1;i<pl.length-1;i++){let tri=[pl[0],pl[i],pl[i+1]].map(vx);
+        const cx=(tri[1][1]-tri[0][1])*(tri[2][2]-tri[0][2])-(tri[1][2]-tri[0][2])*(tri[2][1]-tri[0][1]), cy=(tri[1][2]-tri[0][2])*(tri[2][0]-tri[0][0])-(tri[1][0]-tri[0][0])*(tri[2][2]-tri[0][2]);
+        if(cx*nx+cy*ny<0)tri=[tri[0],tri[2],tri[1]]; // wound to face outwards: seen from behind (through a roof gap) it is not drawn
+        tri.forEach(w=>{P.push(w[0],w[1],w[2]);N.push(nx,ny,0);U.push(w[3],w[4]);});}});}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
-  gm.geometry.dispose(); gm.geometry=g; gm.material=patchWall(new THREE.MeshLambertMaterial({color:src.mat.color,map:wallTex,side:THREE.DoubleSide})); gm.userData.baseMat=gm.material; partsSync(m);}
+  gm.geometry.dispose(); gm.geometry=g; gm.material=patchWall(new THREE.MeshLambertMaterial({color:src.mat.color,map:wallTex})); gm.userData.baseMat=gm.material; partsSync(m);}
+/* small low buildings touching a house (garage, shed, veranda: separate IGN footprints) belong to it: one selection, one colour */
+function linkAnnexes(){const L=S.meshes.filter(m=>m.userData.rings&&m.userData.facades&&!m.userData.monu).map(m=>{const r=m.userData.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});return {m,r,x0,x1,y0,y1};});
+  const fam=new Map(); L.forEach(o=>{const g=o.m.userData.gid||o.m.uuid;(fam.get(g)||fam.set(g,[]).get(g)).push(o);}); // a laser-split building counts as one
+  const G=[...fam.values()].map(os=>({os,area:os.reduce((s,o)=>s+Math.abs(areaOf(o.r)),0),h:Math.max(...os.map(o=>o.m.userData.h||0)),u:os[0].m.userData.usage}));
+  const dist=(a,b)=>{let d=1e9;const seg=(p,q,r)=>{const dx=r.x-q.x,dy=r.y-q.y,l2=dx*dx+dy*dy;const t=l2?Math.max(0,Math.min(1,((p.x-q.x)*dx+(p.y-q.y)*dy)/l2)):0;return Math.hypot(p.x-q.x-t*dx,p.y-q.y-t*dy);};
+    for(const [A,B] of [[a,b],[b,a]])for(const p of A)for(let i=0;i<B.length;i++){d=Math.min(d,seg(p,B[i],B[(i+1)%B.length]));if(d<0.05)return d;}return d;};
+  G.forEach(a=>{if(a.area>=35||!(a.h<=3.5||!a.u||/indiff/i.test(a.u)))return; let best=null;
+    G.forEach(b=>{if(b===a||b.area<2.5*a.area||b.area<40||b.annex)return; const near=a.os.some(o=>b.os.some(q=>o.x0<q.x1+0.6&&q.x0<o.x1+0.6&&o.y0<q.y1+0.6&&q.y0<o.y1+0.6&&dist(o.r,q.r)<0.6)); if(near&&(!best||b.area>best.area))best=b;});
+    if(!best)return; a.annex=true; const main=best.os[0].m; if(!main.userData.gid){main.userData.gid=++GID;best.os.forEach(o=>o.m.userData.gid=main.userData.gid);}
+    a.os.forEach(o=>{o.m.userData.gid=main.userData.gid;o.m.userData.annexOf=main;});});}
 function applySlopeWalls(){S.slopeHouses=[]; S.meshes.forEach(m=>{try{slopeWalls(m);}catch(e){console.error('slopeWalls',e);}});}
+/* top of a façade as drawn: the block, raised by the upper wall pieces standing on it (lower of its two ends: a gable end counts at its eaves) */
+function drawnWallTop(obj,f){const U=obj.userData,base=U.zBase+U.h,gm=obj.children.find(c=>c.userData.gable); if(!gm)return base;
+  const p=gm.geometry.attributes.position.array, prof=[base,base], ends=[pointAlong(f,0.1),pointAlong(f,0.9)];
+  for(let i=0;i<p.length;i+=3){const x=p[i],y=p[i+1];let on=false;for(const sg of f.segs){const dx=sg.b.x-sg.a.x,dy=sg.b.y-sg.a.y,L=Math.hypot(dx,dy);if(L<0.01)continue;
+      const t=((x-sg.a.x)*dx+(y-sg.a.y)*dy)/(L*L);if(t>=-0.01&&t<=1.01&&Math.abs((x-sg.a.x)*dy-(y-sg.a.y)*dx)/L<0.08){on=true;break;}} if(!on)continue;
+    ends.forEach((e,k)=>{if(Math.hypot(x-e.x,y-e.y)<0.6+f.len*0.1)prof[k]=Math.max(prof[k],p[i+2]);});}
+  return Math.max(base,Math.min(prof[0],prof[1]));}
 function slopeHouseAt(x,y){for(const h of S.slopeHouses||[]){if(x<h.x0||x>h.x1||y<h.y0||y>h.y1)continue;if(pointInPoly(x,y,h.r))return h;}return null;}
 function fitWallUVs(geo,h,floors,off,sh){ // off: a house on a slope, rows of sh-metre storeys starting at its lowest floor (off metres above its base)
   const bands=floors||Math.max(1,Math.round(h/3)); const k=off!=null?3/(sh||3):(bands*3)/h; const o=off||0; const uv=geo.attributes.uv, pos=geo.attributes.position; const grp=geo.groups&&geo.groups[1];
@@ -1646,11 +1666,12 @@ function pick(e){
   const r=el.getBoundingClientRect(); const m=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
   ray.setFromCamera(m,camera); ray.far=Infinity; const hits=ray.intersectObjects(S.meshes,true); // children too: laser roof pans, upper wall pieces
   if(!hits.length){toast('Touchez un bâtiment');return;}
-  const hit=hits[0]; let obj=hit.object; const MS=new Set(S.meshes); while(obj&&!MS.has(obj))obj=obj.parent; if(!obj){toast('Touchez un bâtiment');return;} const prevB=S.building, prevWin=S.win;
+  const hit=hits[0]; let obj=hit.object; const MS=new Set(S.meshes); while(obj&&!MS.has(obj))obj=obj.parent; if(!obj){toast('Touchez un bâtiment');return;}
+  let annexHit=false; if(obj.userData.annexOf&&MS.has(obj.userData.annexOf)){obj=obj.userData.annexOf;annexHit=true;} // an annex selects its house const prevB=S.building, prevWin=S.win;
   if(obj.userData.monu){toast(`${obj.userData.monu} : monument, pas un logement`);return;}
   if(obj!==prevB)selectBuilding(obj);
   const u=obj.userData, fac=u.facades, bl=blindMap(obj);
-  let idx=-1, wall=Math.abs(hit.face.normal.z)<0.3;
+  let idx=-1, wall=!annexHit&&Math.abs(hit.face.normal.z)<0.3;
   if(wall){ // wall hit: pick the matching façade, then aim the window where the finger landed
     const n=hit.face.normal.clone().transformDirection(hit.object.matrixWorld); if(n.dot(ray.ray.direction)>0)n.negate(); // double-sided pieces: face the viewer
     let bestS=-2; fac.forEach((f,i)=>{const s=f.normal.dot(n)-f.mid.distanceTo(new THREE.Vector2(hit.point.x,hit.point.y))/400;if(s>bestS){bestS=s;idx=i;}});
@@ -1882,7 +1903,7 @@ function placeMarker(){
   w.pos=p; marker.position.copy(p); markerArrow.position.copy(p); markerArrow.setDirection(w.normal); skyLine.position.copy(p); if(S.skyline&&(w.floor!==S.skyline.floor)){S.skyline=null;skyLine.visible=false;skyLine.userData.ready=false;}
   // outline the selected façade: its base, its top and the chosen floor line
   // a house on a slope: the wall rises to the roof edge the laser measures above it, and starts at its floor when that is above the ground
-  const U=w.obj.userData, ev=U._swK?facEave(U,f):null, zt=U.zBase+(ev!=null&&ev>U.h&&ev<U.h+6?ev:U.h);
+  const U=w.obj.userData, zt=drawnWallTop(w.obj,f);
   let zb=Math.max(U.zBase,Math.min(facGround(f),zt-1)); if(U._swK)zb=Math.max(zb,Math.min(floorBase(U),zt-1)); const zf=z, pts=[];
   f.segs.forEach(s=>{[zb,zf,zt].forEach(zz=>{pts.push(new THREE.Vector3(s.a.x+w.normal.x*0.3,s.a.y+w.normal.y*0.3,zz),new THREE.Vector3(s.b.x+w.normal.x*0.3,s.b.y+w.normal.y*0.3,zz));});});
   const s0=f.segs[0],sN=f.segs[f.segs.length-1]; [s0.a,sN.b].forEach(q=>pts.push(new THREE.Vector3(q.x+w.normal.x*0.3,q.y+w.normal.y*0.3,zb),new THREE.Vector3(q.x+w.normal.x*0.3,q.y+w.normal.y*0.3,zt)));
@@ -2319,7 +2340,7 @@ const PART_HI={};
 function partsSync(o){const hi=o.material===matsFor(o.userData.usage,true);o.children.forEach(c=>{if(!c.isMesh||!c.material||Array.isArray(c.material))return;
   const b=c.userData.baseMat||(c.userData.baseMat=c.material); if(!hi){c.material=b;return;}
   const k=c.userData.gable?(b.map?'wallT':'wall'):'roof';
-  c.material=PART_HI[k]||(PART_HI[k]=k==='roof'?new THREE.MeshLambertMaterial({color:0xd48a5c}):k==='wallT'?patchWall(new THREE.MeshLambertMaterial({color:0xe8a070,map:wallTex,side:THREE.DoubleSide})):new THREE.MeshLambertMaterial({color:0xe8a070,side:THREE.DoubleSide}));});}
+  c.material=PART_HI[k]||(PART_HI[k]=k==='roof'?new THREE.MeshLambertMaterial({color:0xd48a5c}):k==='wallT'?patchWall(new THREE.MeshLambertMaterial({color:0xe8a070,map:wallTex})):new THREE.MeshLambertMaterial({color:0xe8a070,side:THREE.DoubleSide}));});}
 const areaOf=r=>{let s=0;for(let i=0,j=r.length-1;i<r.length;j=i++)s+=(r[j].x-r[i].x)*(r[j].y+r[i].y);return s/2;};
 function clipHalf(poly,a,b,c){ // part of a ring where a·x+b·y+c ≥ 0
   const out=[];for(let i=0;i<poly.length;i++){const p=poly[i],q=poly[(i+1)%poly.length],sp=a*p.x+b*p.y+c,sq=a*q.x+b*q.y+c;
@@ -2620,7 +2641,7 @@ async function lidarBuildings(){
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
     (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
     roofMeshes=roofMeshes.filter(m=>!gone.has(m));S.roofEdgeParts=buildRoofSets(S.roofSkip);
-    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); applySlopeWalls(); if(S.gfWalls)buildGroundFloors(S.gfWalls); S.T.lidarBuilt=performance.now();
+    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); applySlopeWalls(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} if(S.gfWalls)buildGroundFloors(S.gfWalls); S.T.lidarBuilt=performance.now();
     S.counts=Object.assign(S.counts||{},{lidarBuildings:n});
     return true;
   }
@@ -2697,7 +2718,9 @@ function frame(now){
     cam.target.lerpVectors(a.t,b.t,e);cam.theta=a.th+(b.th-a.th)*e;cam.phi=a.ph+(b.ph-a.ph)*e;
     cam.dist=camTw.ease==='quint'?Math.exp(Math.log(a.d)+(Math.log(b.d)-Math.log(a.d))*e):a.d+(b.d-a.d)*e; applyCam(); if(camTw.tl&&!camTw.hold)setTL(camTw.tl,e);
     if(k>=1){const cb=camTw.onEnd;camTw=null;if(cb)cb();}}
-  stepFades(now); setLeafTarget(now); if(LEAF.cur!==LEAF.to){const k=Math.min(1,(now-LEAF.t0)/900),e=k*k*k*(k*(k*6-15)+10);LEAF.cur=k>=1?LEAF.to:LEAF.from+(LEAF.to-LEAF.from)*e;applyLeaf();}
+  stepFades(now); setLeafTarget(now);
+  if(facadeLine.visible&&S.win&&S.win.facade){const f=S.win.facade,n=S.win.normal,front=n.x*(camera.position.x-f.mid.x)+n.y*(camera.position.y-f.mid.y)>0,mt=facadeLine.material,tg=front?0.95:0.12;
+    if(Math.abs(mt.opacity-tg)>0.005)mt.opacity+=(tg-mt.opacity)*0.12;} // façade turned away: its outline fades (eased), it is not drawn through the house if(LEAF.cur!==LEAF.to){const k=Math.min(1,(now-LEAF.t0)/900),e=k*k*k*(k*(k*6-15)+10);LEAF.cur=k>=1?LEAF.to:LEAF.from+(LEAF.to-LEAF.from)*e;applyLeaf();}
   poolUni.uT.value=now/1000; if(S.sunDir){poolUni.uSun.value.copy(S.sunDir);poolUni.uLight.value=Math.max(0.18,Math.min(1,S.sunDir.z*2.5+0.3));}
   if(introRing){const k=Math.min(1,(now-introRing.userData.t0)/1400),e=1-Math.pow(1-k,3);introRing.scale.setScalar(1+e*1.8);introRing.material.opacity=0.9*(1-k);
     if(k>=1){scene.remove(introRing);introRing.geometry.dispose();introRing.material.dispose();introRing=null;}}
