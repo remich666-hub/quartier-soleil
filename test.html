@@ -2094,7 +2094,7 @@ async function lidarVegGrid(){
   // a tall "tree" cell must be rough, otherwise it is the edge of a roof and would grow a giant trunk against the façade
   const FF=S.lidarP&&await S.lidarP.mnsFine; if(tok!==refineToken)return;
   const rough=(x,y)=>{if(!FF)return 1;const d=[];for(let dy=-1;dy<=1;dy+=0.5)for(let dx=-1;dx<=1;dx+=0.5){const a=FF.at(x+dx,y+dy),b=FF.at(x+dx+0.5,y+dy),c=FF.at(x+dx,y+dy+0.5);if(a==null||b==null||c==null)continue;d.push(Math.abs(a-b),Math.abs(a-c));}if(d.length<8)return 1;d.sort((p,q)=>p-q);return d[d.length>>1];};
-  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const z=hs[j*n+i];if(z==null||z<0.7||isB(i,j)||roofLike(i,j,z))continue;const x=-R+i*step,y=R-j*step;const ex=greenAt(x,y);if(ex<(z<4.5?14:6))continue;if(poolAt(x,y)>0.15)continue;if(z>=4.5&&rough(x,y)<0.22)continue;veg[j*n+i]=z;nv++;}
+  const ylg=slicer(); for(let j=0;j<n;j++){await ylg();if(tok!==refineToken)return;for(let i=0;i<n;i++){const z=hs[j*n+i];if(z==null||z<0.7||isB(i,j)||roofLike(i,j,z))continue;const x=-R+i*step,y=R-j*step;const ex=greenAt(x,y);if(ex<(z<4.5?14:6))continue;if(poolAt(x,y)>0.15)continue;if(z>=4.5&&rough(x,y)<0.22)continue;veg[j*n+i]=z;nv++;}}
   if(!nv)return;
   // low vegetation (<4.5 m) as soft masses: the cells are drawn at 50 cm, blurred and re-thresholded, each blob is outlined and
   // smoothed, and extruded at one height (its measured typical height) with a rounded top edge — a hedge becomes a long clean
@@ -2495,7 +2495,7 @@ async function lidarBuildings(){
     const gone=new Set(),added=[],hiLater=[]; let tc=performance.now();
     const list=S.meshes.filter(m=>!m.userData.lidar).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
     for(const m of list){
-      if(performance.now()-tc>25){await new Promise(r=>setTimeout(r,0));tc=performance.now();if(tok!==refineToken)return false;}
+      if(performance.now()-tc>12){await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});tc=performance.now();if(tok!==refineToken)return false;}
       const u=m.userData;const ext=extOf(m);if(ext>LB_R)continue;
       const F=(Ff&&ext<Ff.R-2)?Ff:Fc;if(!F)continue;
       if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
