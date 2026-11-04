@@ -874,14 +874,15 @@ function buildMNT(MS,MH,feats){ // bare ground from the laser (surface − heigh
   // the surface and height grids do not always agree on a building's edge or a crown's rim: thin spikes of several metres.
   // Ground is smooth: 3×3 median everywhere, then any cell still > 1 m off its 5×5 median takes that median.
   const z=new Float32Array(N*N), w=new Float32Array(25);
-  for(let j=0;j<N;j++)for(let i=0;i<N;i++){let c=0;for(let dj=-1;dj<=1;dj++){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-1;di<=1;di++){const ii=i+di;if(ii<0||ii>=N)continue;w[c++]=raw[jj*N+ii];}}
-    const a=Array.prototype.slice.call(w,0,c).sort((p,q)=>p-q);z[j*N+i]=a[c>>1];}
+  const isort=(c)=>{for(let a=1;a<c;a++){const v=w[a];let b=a-1;while(b>=0&&w[b]>v){w[b+1]=w[b];b--;}w[b+1]=v;}}; // small in-place sort, no allocation (≈10× faster than Array.sort here)
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){let c=0;for(let dj=-1;dj<=1;dj++){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-1;di<=1;di++){const ii=i+di;if(ii<0||ii>=N)continue;const v=raw[jj*N+ii];if(v===v)w[c++]=v;}}
+    if(!c){z[j*N+i]=NaN;continue;} isort(c);z[j*N+i]=w[c>>1];}
   // what is left above the ground (awnings, pergolas, a hedge the height grid missed) only ever pushes it up: a cell more than
   // 50 cm above the low part of its 5×5 neighbourhood (30th percentile) takes that value
-  {const z2=new Float32Array(z);for(let j=2;j<N-2;j++)for(let i=2;i<N-2;i++){const k=j*N+i;let c=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++)w[c++]=z[k+dj*N+di];
-    const a=Array.prototype.slice.call(w).sort((p,q)=>p-q);if(z[k]-a[7]>0.5)z2[k]=a[7];} z.set(z2);}
+  {const z2=new Float32Array(z);for(let j=2;j<N-2;j++)for(let i=2;i<N-2;i++){const k=j*N+i,lim=z[k]-0.5;let c=0,low=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++){const v=z[k+dj*N+di];w[c++]=v;if(v<lim)low++;}
+    if(low<8)continue; isort(25);z2[k]=w[7];} z.set(z2);} // the 30th percentile is under the limit only when 8 neighbours are: sort only then
   for(let j=2;j<N-2;j++)for(let i=2;i<N-2;i++){const k=j*N+i;const m4=(z[k-1]+z[k+1]+z[k-N]+z[k+N])/4;if(Math.abs(z[k]-m4)<0.6)continue;
-    let c=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++)w[c++]=z[k+dj*N+di];const a=Array.prototype.slice.call(w).sort((p,q)=>p-q);if(Math.abs(z[k]-a[12])>1)z[k]=a[12];}
+    let c=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++)w[c++]=z[k+dj*N+di];const zk=z[k];isort(25);if(Math.abs(zk-w[12])>1)z[k]=w[12];}
   return {N,z};
 }
 function terrainZ(x,y){ // metres above alt0: the laser ground grid (its edge beyond), the coarse IGN relief only when the laser is missing
