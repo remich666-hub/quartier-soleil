@@ -3255,10 +3255,10 @@ function roofVector(R){
     m.forEach((list,c0)=>list.forEach(e0=>{if(e0.used)return;
       /* trace one loop */
       const C=[c0],Bs=[]; let c=c0,e=e0,guard=0;
-      while(e&&!e.used&&guard++<200000){e.used=true;C.push(e.to);Bs.push(e.B);c=e.to;const nx=m.get(c);if(!nx)break;const free=nx.filter(x=>!x.used);if(!free.length)break;
+      while(e&&!e.used&&guard++<200000){e.used=true;C.push(e.to);Bs.push(e.B);c=e.to;if(c===c0)break;const nx=m.get(c);if(!nx)break;const free=nx.filter(x=>!x.used);if(!free.length)break;
         if(free.length>1){/* saddle: turn left */const [px,py]=cxy(C[C.length-2]),[qx,qy]=cxy(c);const dx=qx-px,dy=qy-py;free.sort((u,v)=>{const [ux,uy]=cxy(u.to),[vx,vy]=cxy(v.to);const cu=dx*(uy-qy)-dy*(ux-qx),cv=dx*(vy-qy)-dy*(vx-qx);return cv-cu;});}
         e=free[0]; if(c===c0&&e.used)break;}
-      if(C.length<4)return; C.pop(); /* closed: last = first */
+      if(C.length<4||C[C.length-1]!==c0)return; C.pop(); /* closed: last = first */
       const n=C.length; let starts=[]; for(let k=0;k<n;k++){if(isJ(C[k])||Bs[k]!==Bs[(k-1+n)%n])starts.push(k);}
       const ring=[]; const push=p=>{const l=ring[ring.length-1];if(!l||Math.hypot(l[0]-p[0],l[1]-p[1])>0.02)ring.push([p[0],p[1]]);};
       if(!starts.length){let mk=0;for(let k=1;k<n;k++)if(C[k]<C[mk])mk=k;const seq=[];for(let t=0;t<=n;t++)seq.push(C[(mk+t)%n]);const B=Bs[0],lo=Math.min(A,B),hi=Math.max(A,B);
