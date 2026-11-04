@@ -145,7 +145,7 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   const vec=(s,r)=>new THREE.Vector3(Math.cos(s.alt)*Math.sin(s.az)*r,Math.cos(s.alt)*Math.cos(s.az)*r,Math.sin(s.alt)*r);
   const dni=alt=>{if(alt<=0)return 0;const e=alt*180/Math.PI,am=1/(Math.sin(alt)+0.50572*Math.pow(e+6.07995,-1.6364));return 1361*Math.pow(0.7,Math.pow(am,0.678));};
   const pw=(n,s)=>{const v=[Math.cos(s.alt)*Math.sin(s.az),Math.cos(s.alt)*Math.cos(s.az),Math.sin(s.alt)],c=v[0]*n[0]+v[1]*n[1]+v[2]*n[2],b=dni(s.alt);return Math.max(0,c)*b+0.1*b*(1+n[2])/2;};
-  function size(){const r=cv.getBoundingClientRect();R.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.updateProjectionMatrix();}
+  function size(){const r=cv.getBoundingClientRect();if(r.width<10||r.height<10)return;R.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.updateProjectionMatrix();}
   size(); addEventListener('resize',size);
   const theme=()=>{const c=css(),bg=c.getPropertyValue('--bg').trim(),dark=document.documentElement.dataset.theme==='dark'||(!document.documentElement.dataset.theme&&matchMedia('(prefers-color-scheme: dark)').matches);
     ground.material.opacity=dark?0.45:0.2; walls.material.color.set(dark?0x3a3631:0xf6f1e9); gm.material.color.copy(walls.material.color);};
@@ -155,9 +155,10 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   function setDay(i){cur=i;const dec=DAYS[i][1]*Math.PI/180;H0=Math.acos(Math.max(-1,Math.min(1,-Math.tan(lat)*Math.tan(dec))));
     const pts=[];for(let k=0;k<=64;k++){const h=-H0+2*H0*k/64;pts.push(vec(sunAt(DAYS[i][1],h),13));}pathG.setFromPoints(pts);path.computeLineDistances();}
   const ease=t=>(1-Math.cos(Math.PI*t))/2; /* gentle in and out: the sun does not linger at dawn and dusk */
-  const t0=performance.now();
+  const t0=performance.now(); let lastW=0,lastH=0;
   function frame(now){
-    const T_=(now-t0)/1000, cyc=DUR+PAUSE, k=Math.floor(T_/cyc)%3, u=still?0.5:Math.min(1,(T_%cyc)/DUR);
+    const r=cv.getBoundingClientRect(); if(Math.abs(r.width-lastW)>1||Math.abs(r.height-lastH)>1){lastW=r.width;lastH=r.height;size();} /* the canvas may have no size yet on the first frames */
+    const T_=(now-t0)/1000, cyc=DUR+PAUSE, k=still?0:Math.floor(T_/cyc)%3, u=still?0.5:Math.min(1,(T_%cyc)/DUR);
     if(k!==cur)setDay(k);
     const h=-0.9*H0+1.8*H0*ease(u), s=sunAt(DAYS[k][1],h), p=vec(s,13);
     sun.position.copy(p); sunL.position.copy(vec({alt:Math.max(s.alt,0.17),az:s.az},40)); /* shadows kept on the ground at dawn and dusk */ sunL.target.position.set(0,0,0);
@@ -166,7 +167,7 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
     rays.forEach((l,i)=>{const [x,y]=roofPts[i],z=H+rise*(1-Math.abs(y)/(D/2)),a=l.geometry.attributes.position;const d=new THREE.Vector3(x,y,z).add(vec(s,9));a.setXYZ(0,d.x,d.y,d.z);a.setXYZ(1,x,y,z);a.needsUpdate=true;l.visible=s.alt>0.02&&pS>40;});
     const m5=Math.round((720+h/(Math.PI/12)*60)/5)*5, hh=Math.floor(m5/60), mm=m5%60;
     read.innerHTML=`${DAYS[k][0]} · ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} solaire — pan sud <b>${Math.round(pS)} W/m²</b> · pan nord <b>${Math.round(pN)} W/m²</b>`;
-    R.render(sc,cam); if(!still)requestAnimationFrame(frame);}
+    R.render(sc,cam); requestAnimationFrame(frame);} /* reduced motion: the scene holds at noon on 21 June, but keeps drawing */
   requestAnimationFrame(frame);
 })();
 </script>
