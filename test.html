@@ -727,6 +727,8 @@ function gardenCompute(job){ // → {rgba, pools, terr, lawns} for one texture (
 }
 /* long passes on the main thread give the screen back every ~12 ms (a message, not setTimeout: no 4 ms clamp, no 1 s throttle in a background tab) */
 const yieldMC=new MessageChannel(), yieldQ=[]; yieldMC.port1.onmessage=()=>{const r=yieldQ.shift();if(r)r();};
+/* pixels of a finished canvas, read back once (a full read of the 1792 px ortho costs ~25 ms each time) */
+const pixOf=c=>c.__px||(c.__px=c.getContext('2d').getImageData(0,0,c.width,c.height).data);
 const slicer=()=>{let t=performance.now();return async()=>{if(performance.now()-t>12){await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});t=performance.now();}};};
 const GARDEN_FNS=[rasterPolys,blurF,vectorTerraces,gardenCompute,traceOuter,smoothRing,distToRing,pointInPoly];
 let gardenWorker=null, gardenSeq=0;
@@ -741,7 +743,7 @@ function gardenWorkerGet(){
 /* the two garden textures (fine 0.2 m near the address, coarse 0.64 m over the zone): inputs gathered here, computed in the worker */
 async function gardensRun(TP,MH){
   const RO=S.rawOrtho; if(!RO)return null;
-  const W=RO.raw.width,H=RO.raw.height, ro={d:RO.raw.getContext('2d').getImageData(0,0,W,H).data,W,H,w:RO.w,n:RO.n,mpp:(RO.e-RO.w)/W};
+  const W=RO.raw.width,H=RO.raw.height, ro={d:pixOf(RO.raw),W,H,w:RO.w,n:RO.n,mpp:(RO.e-RO.w)/W};
   const kx=111320*Math.cos(S.lat*RAD),ky=110574; const F=S.rgbFar, fr=F?{d:F.d,W:F.W,geo:F.geo,lat0:S.lat,lon0:S.lon,kx,ky}:null;
   const mh=MH&&MH.f?{f:MH.f,R:MH.R,res:MH.res,W:MH.W}:null;
   const tp=TP.map(t=>({outer:t.outer.map(p=>({x:p.x,y:p.y})),holes:t.holes.map(h=>h.map(p=>({x:p.x,y:p.y}))),col:[Math.round(t.col.r*255),Math.round(t.col.g*255),Math.round(t.col.b*255)],garden:t.garden}));
@@ -1358,8 +1360,8 @@ function vegZoneSpots(features){
   return spots;
 }
 function detectCanopy(raw,west,east,north,south){ // raw: unfiltered ortho canvas of the inner layer → {trees, hedges}
-  const W=raw.width, mpp=(east-west)/W; const g=raw.getContext('2d'); const data=g.getImageData(0,0,W,W).data;
-  const mask=document.createElement('canvas'); mask.width=mask.height=W; const mg=mask.getContext('2d'); mg.fillStyle='#000'; mg.fillRect(0,0,W,W); mg.fillStyle='#fff';
+  const W=raw.width, mpp=(east-west)/W; const data=pixOf(raw);
+  const mask=document.createElement('canvas'); mask.width=mask.height=W; const mg=mask.getContext('2d',{willReadFrequently:true}); mg.fillStyle='#000'; mg.fillRect(0,0,W,W); mg.fillStyle='#fff';
   S.meshes.forEach(mm=>{mm.userData.rings.forEach(ring=>{mg.beginPath();ring.forEach((p,i)=>{const px=(p.x-west)/mpp,py=(north-p.y)/mpp;i?mg.lineTo(px,py):mg.moveTo(px,py);});mg.closePath();mg.fill('evenodd');});});
   const md=mg.getImageData(0,0,W,W).data;
   const cell=2; const step=Math.max(3,Math.round(cell/mpp)); const nx=Math.floor(W/step), ny=Math.floor(W/step); const green=new Uint8Array(nx*ny);
@@ -2076,19 +2078,21 @@ async function lidarVegGrid(){
   if(!MH&&!S.loading)status('Végétation LiDAR HD autour de l\'adresse (10–15 s)…');
   const hs=MH?pts.map(p=>MH.max(p.x,p.y,0.5)):await lidarHeights(pts); if(tok!==refineToken)return; if(hs.filter(v=>v!=null).length<n*n*0.5)return; // no LiDAR HD here
   // building mask (+1 cell dilation)
-  const mc=document.createElement('canvas');mc.width=mc.height=n;const mg=mc.getContext('2d');mg.fillStyle='#000';mg.fillRect(0,0,n,n);mg.fillStyle='#fff';mg.strokeStyle='#fff';mg.lineWidth=2.2;
+  const mc=document.createElement('canvas');mc.width=mc.height=n;const mg=mc.getContext('2d',{willReadFrequently:true});mg.fillStyle='#000';mg.fillRect(0,0,n,n);mg.fillStyle='#fff';mg.strokeStyle='#fff';mg.lineWidth=2.2;
   S.meshes.forEach(mm=>{mm.userData.rings.forEach(ring=>{mg.beginPath();ring.forEach((p,i)=>{const px=(p.x+R)/step,py=(R-p.y)/step;i?mg.lineTo(px,py):mg.moveTo(px,py);});mg.closePath();mg.fill('evenodd');mg.stroke();});});
+  await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);}); if(tok!==refineToken)return;
   const md=mg.getImageData(0,0,n,n).data; const isB=(i,j)=>md[(j*n+i)*4]>127;
   // halo 3 m around each building carrying its roof height: LiDAR roof parts that stick out of the IGN footprint are not vegetation
-  const hc=document.createElement('canvas');hc.width=hc.height=n;const hg2=hc.getContext('2d');hg2.lineWidth=2*3/step;hg2.lineJoin='round';
+  const hc=document.createElement('canvas');hc.width=hc.height=n;const hg2=hc.getContext('2d',{willReadFrequently:true});hg2.lineWidth=2*3/step;hg2.lineJoin='round';
   S.meshes.forEach(mm=>{const u=mm.userData;if(!u.rings)return;const top=u.ridge||u.h||0;const c=`rgb(${Math.min(255,Math.round(top*8))},${Math.min(255,Math.round((u.h||0)*8))},0)`;hg2.fillStyle=c;hg2.strokeStyle=c;u.rings.forEach(ring=>{hg2.beginPath();ring.forEach((p,i)=>{const px=(p.x+R)/step,py=(R-p.y)/step;i?hg2.lineTo(px,py):hg2.moveTo(px,py);});hg2.closePath();hg2.fill();hg2.stroke();});});
   const hd=hg2.getImageData(0,0,n,n).data; const roofLike=(i,j,z)=>{const k=(j*n+i)*4;if(!hd[k+3])return false;const top=hd[k]/8,eave=hd[k+1]/8;return z>Math.min(eave,top)-1.8&&z<top+1.5;};
   // ortho greenness at the cell (relaxed threshold)
   let greenAt=()=>99, poolAt=()=>0; const RO=S.rawOrtho;
-  if(RO){const W=RO.raw.width,mpp=(RO.e-RO.w)/W;const d=RO.raw.getContext('2d').getImageData(0,0,W,W).data;
+  if(RO){const W=RO.raw.width,mpp=(RO.e-RO.w)/W;const d=pixOf(RO.raw);
     greenAt=(x,y)=>{const px=Math.round((x-RO.w)/mpp),py=Math.round((RO.n-y)/mpp);if(px<1||py<1||px>=W-1||py>=W-1)return 99;let e=0,c=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const k=((py+dy)*W+px+dx)*4;e+=2*d[k+1]-d[k]-d[k+2];c++;}return e/c;};
     // water: the laser has no echo on a pool, so the height grid interpolates the hedges around it across the water
     poolAt=(x,y)=>{const px=Math.round((x-RO.w)/mpp),py=Math.round((RO.n-y)/mpp),r=Math.round(1.2/mpp);let c=0,n=0;for(let dy=-r;dy<=r;dy+=2)for(let dx=-r;dx<=r;dx+=2){const X=px+dx,Y=py+dy;if(X<0||Y<0||X>=W||Y>=W)continue;const k=(Y*W+X)*4,R0=d[k],G=d[k+1],B=d[k+2];n++;if(B>110&&B-R0>35&&G-R0>15&&(R0+G+B)/3>90)c++;}return n?c/n:0;};}
+  await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);}); if(tok!==refineToken)return;
   const veg=new Float32Array(n*n); let nv=0;
   // foliage is rough at 50 cm, a roof (even one the IGN outline misses, or one taller than its IGN height) is smooth:
   // a tall "tree" cell must be rough, otherwise it is the edge of a roof and would grow a giant trunk against the façade
@@ -2250,7 +2254,7 @@ function clipHalf(poly,a,b,c){ // part of a ring where a·x+b·y+c ≥ 0
 const qtl=(s,f)=>s[Math.min(s.length-1,Math.max(0,Math.floor(f*(s.length-1))))];
 function orthoGreen(){ // vegetation index (2G−R−B) from the orthophoto; trees over roofs must not raise them
   const RO=S.rawOrtho; if(!RO)return ()=>-99; if(S._green&&S._green.raw===RO.raw)return S._green.f;
-  const W=RO.raw.width,mpp=(RO.e-RO.w)/W,d=RO.raw.getContext('2d').getImageData(0,0,W,RO.raw.height).data;
+  const W=RO.raw.width,mpp=(RO.e-RO.w)/W,d=pixOf(RO.raw);
   const f=(x,y)=>{const px=Math.round((x-RO.w)/mpp),py=Math.round((RO.n-y)/mpp);if(px<0||py<0||px>=W||py>=RO.raw.height)return -99;const k=(py*W+px)*4;return 2*d[k+1]-d[k]-d[k+2];};
   S._green={raw:RO.raw,f};return f;
 }
