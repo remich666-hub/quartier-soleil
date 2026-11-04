@@ -1686,7 +1686,7 @@ function blindMap(obj){
     const tops=[0.2,0.5,0.8].map(t=>{const p=pointAlong(f,t);
       downRay.set(new THREE.Vector3(p.x+f.normal.x*0.8,p.y+f.normal.y*0.8,u.zBase+u.h+300),down);downRay.far=1000;
       const h=downRay.intersectObjects(others,true); return h.length?h[0].point.z:-1e9;});
-    const gz=facGround(f), fb=floorBase(u); // typical ground of the façade: one high end of a wall along the slope does not bury the whole storey const out=[]; for(let k=0;k<nF;k++){const z=fb+k*sh+1.5; out.push(z<gz+WIN_SILL?2:(tops.every(t=>t>z+0.3)?1:0));} return out;
+    const gz=facGround(f), fb=floorBase(u); /* typical ground of the façade: one high end of a wall along the slope does not bury the whole storey */ const out=[]; for(let k=0;k<nF;k++){const z=fb+k*sh+1.5; out.push(z<gz+WIN_SILL?2:(tops.every(t=>t>z+0.3)?1:0));} return out;
   });
   u._blindN=S.meshes.length; return u._blind;
 }
