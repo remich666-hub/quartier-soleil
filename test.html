@@ -666,6 +666,9 @@ function vectorTerraces(m,md,N,px,R,out,pools){
 function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
   const RO=S.rawOrtho; if(!RO)return null; const W=RO.raw.width,Hh=RO.raw.height,mpp=(RO.e-RO.w)/W,od=RO.raw.getContext('2d').getImageData(0,0,W,Hh).data;
   const N=GT_N,px=2*GT_R/N,cv=document.createElement('canvas');cv.width=cv.height=N;const g=cv.getContext('2d');
+  // colour of the photo at a point: the 20 cm photo around the address, the 60 cm one (±350 m) beyond its edge — no seam where the fine one stops
+  const FR=S.rgbFar; const rgbAt=(x,y)=>{const oi=Math.floor((x-RO.w)/mpp),oj=Math.floor((RO.n-y)/mpp);if(oi>=0&&oj>=0&&oi<W&&oj<Hh){const o=(oj*W+oi)*4;return [od[o],od[o+1],od[o+2]];}
+    if(FR){const [fx,fy]=FR.px(x,y);const X=Math.floor(fx),Y=Math.floor(fy);if(X>=0&&Y>=0&&X<FR.W&&Y<FR.W){const o=(Y*FR.W+X)*4;return [FR.d[o],FR.d[o+1],FR.d[o+2]];}}return null;};
   const X=x=>(x+GT_R)/px, Y=y=>(GT_R-y)/px;
   const path=(rings)=>{g.beginPath();rings.forEach(r=>{r.forEach((q,i)=>i?g.lineTo(X(q.x),Y(q.y)):g.moveTo(X(q.x),Y(q.y)));g.closePath();});};
   TP.forEach(t=>{g.fillStyle='#'+t.col.getHexString();path([t.outer].concat(t.holes));g.fill('evenodd');});
@@ -685,7 +688,7 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
   const j0=Math.max(1,Math.floor(c0-lim)), j1=Math.min(N-1,Math.ceil(c0+lim));
   for(let j=j0;j<j1;j++)for(let i=j0;i<j1;i++){
     const k=j*N+i; if(md[k*4+3]<128)continue; const x=-GT_R+(i+0.5)*px, y=GT_R-(j+0.5)*px;
-    const oi=Math.floor((x-RO.w)/mpp),oj=Math.floor((RO.n-y)/mpp); if(oi<0||oj<0||oi>=W||oj>=Hh)continue; const o=(oj*W+oi)*4,r=od[o],gg=od[o+1],b=od[o+2];
+    const cc=rgbAt(x,y); if(!cc)continue; const r=cc[0],gg=cc[1],b=cc[2];
     const lum=(r+gg+b)/3,sat=Math.max(r,gg,b)-Math.min(r,gg,b),exg=2*gg-r-b;
     cls[k]= (b>110&&b-r>35&&gg-r>15&&lum>90)?4 : lum<75?0 : exg>14?1 : (lum>155&&sat<40)?2 : 0;}
   // public lawns: parks and squares often have no cadastral parcel (public domain) and stayed bare street colour.
@@ -696,7 +699,7 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
     S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;bg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>i?bg.lineTo(X(q.x),Y(q.y)):bg.moveTo(X(q.x),Y(q.y)));bg.closePath();});bg.fill('evenodd');});
     const bd=bg.getImageData(0,0,N,N).data;
     for(let j=j0;j<j1;j++)for(let i=j0;i<j1;i++){const k=j*N+i;if(bd[k*4+3]>=128)continue;const x=-GT_R+(i+0.5)*px,y=GT_R-(j+0.5)*px;
-      const oi=Math.floor((x-RO.w)/mpp),oj=Math.floor((RO.n-y)/mpp);if(oi<0||oj<0||oi>=W||oj>=Hh)continue;const o=(oj*W+oi)*4,r=od[o],gg=od[o+1],b=od[o+2];
+      const cc=rgbAt(x,y);if(!cc)continue;const r=cc[0],gg=cc[1],b=cc[2];
       if((r+gg+b)/3<75||2*gg-r-b<=14)continue; const hv=MH.at(x,y); if(hv!=null&&hv>1.2)continue; lm[k*4+3]=255;nl++;}
     if(nl){const c1=document.createElement('canvas');c1.width=c1.height=N;c1.getContext('2d').putImageData(new ImageData(lm,N,N),0,0);
       const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.filter=`blur(${Math.max(2,Math.round(1.2/px))}px)`;g2.drawImage(c1,0,0);
@@ -732,6 +735,7 @@ async function buildParcels(lat,lon){
   let feats=[]; try{feats=await wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',lat,lon,DETAIL_R+20,2500);}catch(e){return;}
   for(let i=0;i<80&&!S.rawOrtho&&tok===parcelTok;i++)await new Promise(r=>setTimeout(r,250));
   if(tok!==parcelTok||!feats.length)return;
+  try{S.rgbFar=S.rgbFarP?await Promise.race([S.rgbFarP,new Promise(r=>setTimeout(()=>r(null),8000))]):null;}catch(e){S.rgbFar=null;} if(tok!==parcelTok)return;
   const green=orthoGreen(); let MH=null; try{MH=S.lidarP&&await Promise.race([S.lidarP.mnh,new Promise(r=>setTimeout(()=>r(null),6000))]);}catch(e){}
   if(tok!==parcelTok)return;
   // building occupancy at 1 m
@@ -1412,12 +1416,13 @@ function leafOffAt(doy){ // 1 = bare branches, 0 = full foliage; leaves fall mid
   return doy<=91?1:doy<121?1-ss01((doy-91)/30):doy<288?0:doy<334?ss01((doy-288)/46):1;}
 const BARE_T=0.55; // share of direct sun that gets through bare branches
 const LEAF={cur:0,from:0,to:0,t0:0};
-function fetchIRC(lat,lon){ // 5×5 tiles at 60 cm/px (±270 m)
-  const z=18,n=2**z,R=2; const tx=Math.floor((lon+180)/360*n), ty=Math.floor((1-Math.log(Math.tan(lat*RAD)+1/Math.cos(lat*RAD))/Math.PI)/2*n);
+function fetchIRC(lat,lon){return fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS.IRC',lat,lon,18,2);} // 5×5 tiles at 60 cm/px (±270 m)
+function fetchTileGrid(layer,lat,lon,z,R){
+  const n=2**z; const tx=Math.floor((lon+180)/360*n), ty=Math.floor((1-Math.log(Math.tan(lat*RAD)+1/Math.cos(lat*RAD))/Math.PI)/2*n);
   const W=(2*R+1)*256; const c=document.createElement('canvas');c.width=c.height=W;const g=c.getContext('2d'); let ok=0; const jobs=[];
-  for(let x=tx-R;x<=tx+R;x++)for(let y=ty-R;y<=ty+R;y++)jobs.push(gpf(`https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS.IRC&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/jpeg`)
+  for(let x=tx-R;x<=tx+R;x++)for(let y=ty-R;y<=ty+R;y++)jobs.push(gpf(`https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/jpeg`)
     .then(r=>{if(!r.ok)throw 0;return r.blob();}).then(b=>createImageBitmap(b)).then(im=>{g.drawImage(im,(x-tx+R)*256,(y-ty+R)*256);ok++;}).catch(()=>{}));
-  return Promise.all(jobs).then(()=>{if(ok<12)return null;const d=g.getImageData(0,0,W,W).data;
+  return Promise.all(jobs).then(()=>{if(ok<Math.min(12,jobs.length*0.5))return null;const d=g.getImageData(0,0,W,W).data;
     const px=(x,y)=>{const ll=unproj(x,y);return [((ll[0]+180)/360*n-(tx-R))*256,((1-Math.log(Math.tan(ll[1]*RAD)+1/Math.cos(ll[1]*RAD))/Math.PI)/2*n-(ty-R))*256];};
     return {d,W,px};});
 }
@@ -2093,7 +2098,7 @@ async function load(q,at){
   try{
     status('Recherche de l\'adresse…');
     const g=at||await geocode(q); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
-    S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; {const myLat=g.lat; fetchIRC(g.lat,g.lon).then(I=>{if(!I||S.lat!==myLat)return;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();}).catch(()=>{});}
+    S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; S.rgbFarP=fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS',g.lat,g.lon,18,3).catch(()=>null); {const myLat=g.lat; fetchIRC(g.lat,g.lon).then(I=>{if(!I||S.lat!==myLat)return;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();}).catch(()=>{});}
     status('Bâtiments et relief IGN…');
     const [alt,feats,terrain]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000),Promise.resolve(null)]);
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
