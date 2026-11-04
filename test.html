@@ -409,7 +409,8 @@ function buildGroundFloors(walls){ // walls: [{a,b,len,nx,ny,zBase,com,door}]
     v.forEach(q=>{P.push(q[0],q[1],q[2]);N.push(nx,ny,0);U.push(q[3],q[4]);});};
   walls.forEach(w=>{
     const bays=w.len>=2.2?Math.max(1,Math.round(w.len/3.5)):0, sl=slopeHouseAt((w.a.x+w.b.x)/2-w.nx*0.6,(w.a.y+w.b.y)/2-w.ny*0.6);
-    const g0=wallGround(w), zb=sl?sl.base+Math.max(0,Math.min(sl.n-1,Math.ceil((g0-0.3-sl.base)/sl.sh)))*sl.sh:g0; // street level in front of this wall (slopes); a house on a slope: its floor, like its window rows
+    if(sl)return; /* a house on a slope: its window rows are drawn on the wall at the real levels; a 3 m band would stand above the low eaves of its side walls */
+    const zb=wallGround(w); // street level in front of this wall (slopes); a house on a slope: its floor, like its window rows
     quad(w.com?sets.com:sets.res,w.a.x,w.a.y,w.b.x,w.b.y,zb-0.3,zb+H,w.nx,w.ny,0,bays||0.02);
     if(w.door){const mx=(w.a.x+w.b.x)/2,my=(w.a.y+w.b.y)/2,dx=(w.b.x-w.a.x)/w.len,dy=(w.b.y-w.a.y)/w.len,hw=0.65;
       quad(sets.door,mx-dx*hw,my-dy*hw,mx+dx*hw,my+dy*hw,zb,zb+2.3,w.nx*1.6,w.ny*1.6,0,1);}
@@ -940,8 +941,7 @@ function facGround(f){ // typical street level along a façade (median), and the
   f._gz=o[2]; f._gzMax=o[4]; f._gzK=S.groundKey; return f._gz;}
 function facGroundMax(f){facGround(f);return f._gzMax;}
 function wallGround(w){const m={x:(w.a.x+w.b.x)/2,y:(w.a.y+w.b.y)/2};const g=groundAt(m,{x:w.nx,y:w.ny});
-  let top=w.h||6; const e=laserEave(m.x,m.y,w.nx,w.ny,w.zBase,{dx:0,dy:0}); if(e!=null&&e>top&&e<top+6)top=e; // uphill walls rise to the roof edge the laser measures
-  return Math.max(w.zBase,Math.min(w.zBase+Math.max(0,top-3),g));}
+  return Math.max(w.zBase,Math.min(w.zBase+Math.max(0,(w.h||6)-3),g));}
 const WIN_CLEAR=1.2; // a window centre always stands at least this high above the street in front of it
 const WIN_SILL=0.9; // window centre to sill: a level is only buried when the ground in front reaches the sill (a 30–50 cm step or terrace in front is normal)
 function streetLevel(obj,fi){ // index of the first level above the street of façade fi (0 unless the street is higher than the base)
