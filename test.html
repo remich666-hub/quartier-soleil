@@ -670,7 +670,8 @@ async function vectorTerraces(m,md,N,px,R,out,pools){
     out.push({ring,holes:holes.filter(h=>h.every(p=>pointInPoly(p.x,p.y,ring)))});}
 }
 /* long passes give the screen back every ~12 ms: the arrival animation keeps flowing while the gardens are computed */
-const slicer=()=>{let t=performance.now();return async()=>{if(performance.now()-t>12){await new Promise(r=>setTimeout(r,0));t=performance.now();}};};
+const yieldMC=new MessageChannel(), yieldQ=[]; yieldMC.port1.onmessage=()=>{const r=yieldQ.shift();if(r)r();}; // a message, not setTimeout: no 4 ms clamp, no 1 s throttle in a background tab
+const slicer=()=>{let t=performance.now();return async()=>{if(performance.now()-t>12){await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});t=performance.now();}};};
 async function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
   const yl=slicer();
   const RO=S.rawOrtho; if(!RO)return null; const W=RO.raw.width,Hh=RO.raw.height,mpp=(RO.e-RO.w)/W,od=RO.raw.getContext('2d').getImageData(0,0,W,Hh).data;
