@@ -1866,7 +1866,37 @@ function sideOf(obj,f){ if(f._side!==undefined&&f._sideK===S.roadFeats)return f.
   if(!side){ if(wall<40)side='cour'; else{const g=orthoGreen();let gr=0;for(let t=4;t<=24;t+=4){if(g(p.x+n.x*t,p.y+n.y*t)>12)gr++;}side=gr>=2?'jardin':null;} }
   f._side=side;f._sideK=S.roadFeats;return side;}
 function sideText(side){if(!side)return '';if(side==='cour')return 'côté cour';if(side==='jardin')return 'côté jardin';if(side==='la rue')return 'côté rue';return 'côté '+side.replace(/^(Rue|Avenue|Boulevard|Place|Quai|Impasse|Allée|Chemin|Route|Cours|Passage|Square|Villa|Cité)\b/,m=>m.toLowerCase());}
-function renderAddr(){const w=S.win;const t=w&&w.facade?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=(S.label||'')+(t?' · façade '+t:'');}
+/* the address follows the chosen façade: a building running through the block has one number on each street.
+   Ask the national address base around the façade and keep the nearest number on the street the façade looks onto
+   (cached on the façade; the building's address is shown meanwhile, and for a courtyard or garden façade) */
+/* street names differ between IGN and the address base ("Rue de la Vieille Forge" / "Rue Vieille Forge", "Grand'Rue" / "Grand Rue"):
+   compare without accents, punctuation and articles */
+const normSt=s=>' '+String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').replace(/\b(de|du|des|la|le|les|d|l)\b/g,' ').replace(/\s+/g,' ').trim()+' ';
+function facAddr(obj,f){
+  const side=sideOf(obj,f); if(!side||side==='cour'||side==='jardin'||side==='la rue')return null;
+  const st=normSt(side), key=S.lat+','+S.lon+'|'+st;
+  if(f._addrK===key)return f._addr;
+  f._addrK=key; f._addr=null;
+  const own=!S.recentered&&S.addrTarget&&family(S.addrTarget).includes(obj);
+  if(own&&S.addrLabel&&normSt(S.addrLabel).includes(st)){f._addr=S.addrLabel;return f._addr;}
+  const kx=111320*Math.cos(S.lat*RAD),ky=110574, px=f.mid.x+f.normal.x*2, py=f.mid.y+f.normal.y*2;
+  fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${(S.lon+px/kx).toFixed(6)}&lat=${(S.lat+py/ky).toFixed(6)}&type=housenumber&limit=20`).then(r=>r.json()).then(j=>{
+    if(f._addrK!==key)return; let best=null,bd=Math.max(25,f.len/2+15);
+    const fam=family(obj), rings=fam.flatMap(m=>m.userData.rings||[]);
+    (j.features||[]).forEach(ft=>{const p=ft.properties||{}; if(normSt(p.street)!==st)return;
+      const c=ft.geometry.coordinates, X=(c[0]-S.lon)*kx, Y=(c[1]-S.lat)*ky;
+      /* a number across the street is in front of the façade: keep only points behind it or on its pavement */
+      if((X-f.mid.x)*f.normal.x+(Y-f.mid.y)*f.normal.y>2)return;
+      /* a number inside the building's own footprint wins at any distance */
+      const d=Math.hypot(X-px,Y-py)-(rings.some(r=>pointInPoly(X,Y,r))?1000:0); if(d<bd){bd=d;best=p.label;}});
+    /* nothing near this façade: another façade of the same building on the same street may have found its number */
+    if(!best){for(const m of fam)for(const g of (m.userData.facades||[]))if(g!==f&&g._addrK===key&&g._addr){best=g._addr;break;}}
+    if(best){f._addr=best; for(const m of fam)for(const g of (m.userData.facades||[]))if(g._miss&&g._addrK===key){g._addr=best;g._miss=false;} renderAddr();}
+    else f._miss=true;
+  }).catch(()=>{if(f._addrK===key)f._addrK=null;});
+  return null;}
+function curAddr(){const w=S.win;return (w&&w.facade&&w.obj===S.building&&facAddr(w.obj,w.facade))||S.label||'';}
+function renderAddr(){const w=S.win;const t=w&&w.facade&&w.obj===S.building?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=curAddr()+(t?' · façade '+t:'');}
 function selectBuilding(obj){
   S.building=obj; const u=obj.userData;
   $('bInfo').textContent=`${u.h.toFixed(0)} m à l'égout${u.ridge?`, ${u.ridge.toFixed(0)} m au faîtage`:''}${u.floors?`, ${u.floors} étages`:''}${u.usage?`, ${u.usage.toLowerCase()}`:''}`;
@@ -2075,7 +2105,7 @@ async function reportData(){
   let blind=false; if(S.skyline){const sk=S.skyline,mid=(sk.az.length-1)/2;let c=0,n=0;for(let i=0;i<sk.az.length;i++){if(Math.abs(i-mid)>12)continue;n++;const hh=sk.hits[i];if(hh&&hh.d<=3.5&&sk.hor[i]>60*RAD)c++;}blind=n>0&&c/n>0.7;}
   const climate=await fetchClimate();
   const real=climate?months.map((r,i)=>climate.frac[i]!=null?+(r.h*climate.frac[i]).toFixed(2):null):null;
-  return {v:1,generated:new Date().toISOString(),address:S.label,lat:+(S.bLat||S.lat).toFixed(6),lon:+(S.bLon||S.lon).toFixed(6),alt:Math.round(S.alt0),
+  return {v:1,generated:new Date().toISOString(),address:curAddr(),lat:+(S.bLat||S.lat).toFixed(6),lon:+(S.bLon||S.lon).toFixed(6),alt:Math.round(S.alt0),
     window:{side:sideText(sideOf(w.obj,f))||null,az:+f.az.toFixed(0),dir:DIRS[Math.round(f.az/45)%8],floor:u._gl?w.floor-1:w.floor-streetLevel(w.obj,u.facades.indexOf(f)),heightAboveGround:+(w.pos.z-Math.max(u.zBase,facGround(f))).toFixed(1),facadeLen:+f.len.toFixed(0),building:{h:+u.h.toFixed(1),ridge:u.ridge?+u.ridge.toFixed(1):null,floors:u.floors||null,usage:u.usage||null}},
     lidar:L, blind, year:Y, annual:{h:+(tot/nd).toFixed(2),free:+(ftot/nd).toFixed(2),hYear:Math.round(tot/nd*365),bare:+(btot/nd).toFixed(2),bareWinter:nwin?+(bwin/nwin).toFixed(2):0,bareT:BARE_T}, months, matrix, keyDates:kd, paths, sky, obstacles,
     climate:climate?{frac:climate.frac.map(v=>v!=null?+v.toFixed(2):null),src:climate.src,realMonths:real,realAnnual:+(real.reduce((a,b)=>a+(b||0),0)/12).toFixed(2)}:null};
