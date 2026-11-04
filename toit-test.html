@@ -3197,6 +3197,11 @@ function roofVector(R){
   const OR=R.rings.map(rg=>rg.map(p=>({x:p.x+R.sh.dx,y:p.y+R.sh.dy})));
   const OS=[]; OR.forEach(rg=>{for(let k=0;k<rg.length;k++){const p=rg[k],q=rg[(k+1)%rg.length];if(Math.hypot(q.x-p.x,q.y-p.y)>0.01)OS.push([p.x,p.y,q.x,q.y]);}});
   const OV=OR.flatMap(rg=>rg.map(p=>[p.x,p.y]));
+  /* every block edge, inner ones included: where a taller part of the building starts, the step follows its IGN wall */
+  const BR=(R.blocks||[]).map(b=>b.r.map(p=>({x:p.x+R.sh.dx,y:p.y+R.sh.dy}))), BS=[], BV=BR.flatMap(rg=>rg.map(p=>[p.x,p.y]));
+  BR.forEach(rg=>{for(let k=0;k<rg.length;k++){const p=rg[k],q=rg[(k+1)%rg.length];if(Math.hypot(q.x-p.x,q.y-p.y)>0.01)BS.push([p.x,p.y,q.x,q.y]);}});
+  const projB=(x,y)=>{let best=null,bd=1e9;for(const [ax,ay,bx,by] of BS){const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;const t=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/l2));const px=ax+t*dx,py=ay+t*dy,d=Math.hypot(px-x,py-y);if(d<bd){bd=d;best=[px,py,d];}}return best;};
+  const snapB=(x,y,tol)=>{let bv=null,bd=Math.min(0.5,tol);for(const v of BV){const d=Math.hypot(v[0]-x,v[1]-y);if(d<bd){bd=d;bv=v;}}if(bv)return [bv[0],bv[1]];const p=projB(x,y);return (p&&p[2]<tol)?[p[0],p[1]]:null;};
   /* 1. labels inside the exact outline */
   const L=new Int32Array(hx*hy).fill(-1);
   for(let j=0;j<hy;j++)for(let i=0;i<hx;i++){const k=j*hx+i;if(F.hl[k]<0)continue;const px=X0+(i+0.5)*r,py=Y0+(j+0.5)*r;if(OR.some(rg=>pointInPoly(px,py,rg)))L[k]=F.hl[k];}
@@ -3207,10 +3212,10 @@ function roofVector(R){
     let best=a,bn=cnt.get(a)||0;cnt.forEach((n,v)=>{if(n>bn&&n>=5){best=v;bn=n;}});L2[k]=best;}L.set(L2);}
   const minPx=3/(r*r);
   for(let it=0;it<12;it++){const cnt=new Map();for(let k=0;k<L.length;k++)if(L[k]>=0)cnt.set(L[k],(cnt.get(L[k])||0)+1);
-    const small=[...cnt].filter(([v,n])=>n<minPx).sort((a,b)=>a[1]-b[1]); if(!small.length)break;
+    const small=[...cnt].filter(([v,n])=>n<minPx||(n<4/(r*r)&&regs[v].tilt>45*RAD)).sort((a,b)=>a[1]-b[1]); if(!small.length)break;
     const target=new Map(); small.forEach(([v])=>{const sh=new Map();for(let j=0;j<hy;j++)for(let i=0;i<hx;i++){if(L[j*hx+i]!==v)continue;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const w=lab(i+di,j+dj);if(w>=0&&w!==v)sh.set(w,(sh.get(w)||0)+1);}}
       let b=-1,bn=0;sh.forEach((n,w)=>{if(n>bn){bn=n;b=w;}});target.set(v,b);});
-    let ch=0; for(let k=0;k<L.length;k++){const t=target.get(L[k]);if(t!==undefined){L[k]=t;ch++;}} if(!ch)break;}
+    let ch=0; for(let k=0;k<L.length;k++){const t=target.get(L[k]);if(t!==undefined&&t>=0){L[k]=t;ch++;}} if(!ch)break;}
   /* 3. corners where three labels meet (or a diagonal saddle) are junctions; geometry of junctions */
   const CW=hx+1, cid=(i,j)=>j*CW+i, cxy=c=>[X0+(c%CW)*r,Y0+Math.floor(c/CW)*r];
   const around=c=>{const i=c%CW,j=Math.floor(c/CW);return [lab(i-1,j-1),lab(i,j-1),lab(i-1,j),lab(i,j)];};
@@ -3225,7 +3230,8 @@ function roofVector(R){
       if(roof.length===2&&meet(roof[0],roof[1],x,y)){const [la,lb,lc]=lineOf(roof[0],roof[1]),p=proj(x,y);if(p){const [,,ax,ay,bx,by]=p,dx=bx-ax,dy=by-ay,den=la*dx+lb*dy;
         if(Math.abs(den)>1e-6){const t=(lc-la*ax-lb*ay)/den;if(t>-0.05&&t<1.05){const q=[ax+t*dx,ay+t*dy];if(Math.hypot(q[0]-x,q[1]-y)<0.7)out=q;}}}}}
     else if(roof.length>=3){let best=null,bd=0.8;for(let u=0;u<roof.length;u++)for(let v=u+1;v<roof.length;v++)for(let w=v+1;w<roof.length;w++){const [a1,b1,c1]=lineOf(roof[u],roof[v]),[a2,b2,c2]=lineOf(roof[u],roof[w]),D=a1*b2-a2*b1;if(Math.abs(D)<1e-6)continue;
-        const q=[(c1*b2-c2*b1)/D,(a1*c2-a2*c1)/D],d=Math.hypot(q[0]-x,q[1]-y);if(d<bd&&meet(roof[u],roof[v],q[0],q[1])&&meet(roof[u],roof[w],q[0],q[1])){bd=d;best=q;}}if(best)out=best;}
+        const q=[(c1*b2-c2*b1)/D,(a1*c2-a2*c1)/D],d=Math.hypot(q[0]-x,q[1]-y);if(d<bd&&meet(roof[u],roof[v],q[0],q[1])&&meet(roof[u],roof[w],q[0],q[1])){bd=d;best=q;}}if(best)out=best;else{const b=snapB(x,y,0.6);if(b)out=b;}}
+    else if(roof.length===2&&!meet(roof[0],roof[1],x,y)){const b=snapB(x,y,0.6);if(b)out=b;}
     JC.set(c,out);return out;};
   /* 4. directed border edges, region on the left */
   const out=new Map(); const addE=(A,c0,c1,B)=>{let m=out.get(A);if(!m){m=new Map();out.set(A,m);}let l=m.get(c0);if(!l){l=[];m.set(c0,l);}l.push({to:c1,B,used:false});};
@@ -3239,7 +3245,9 @@ function roofVector(R){
     if(lo===-1){kind='out';const S=dpSimplify(P,0.12);G=dpSimplify(S.map((p,i)=>(!closed&&i===0)?p0:(!closed&&i===S.length-1)?p1:snapO(p[0],p[1])),0.04);}
     else{let dz=0;P.forEach(([x,y])=>dz+=Math.abs(zOf(regs[lo],x,y)-zOf(regs[hi],x,y)));dz/=P.length;
       if(dz<0.35&&!closed){kind='ridge';G=[p0,p1];}
-      else{kind='step';const S=dpSimplify(P,0.2);G=S.map((p,i)=>(!closed&&i===0)?p0:(!closed&&i===S.length-1)?p1:p);}}
+      else{kind='step';const S=dpSimplify(P,0.2);G=S.map((p,i)=>(!closed&&i===0)?p0:(!closed&&i===S.length-1)?p1:p);
+        const near=P.filter(([x,y])=>{const q=projB(x,y);return q&&q[2]<0.8;}).length/P.length;
+        if(near>0.7)G=dpSimplify(G.map((p,i)=>((!closed&&(i===0||i===G.length-1))?p:(snapB(p[0],p[1],0.8)||p))),0.04);}}
     const G2=[];G.forEach(p=>{const l=G2[G2.length-1];if(!l||Math.hypot(l[0]-p[0],l[1]-p[1])>0.02)G2.push(p);}); if(closed&&G2.length>1&&Math.hypot(G2[0][0]-G2[G2.length-1][0],G2[0][1]-G2[G2.length-1][1])<0.02)G2.pop();
     const sg={lo,hi,kind,pts:G2,closed}; segs.push(sg); return sg;};
   const polys=[];
