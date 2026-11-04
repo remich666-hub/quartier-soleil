@@ -3537,29 +3537,49 @@ function roofModel(R){
     let e2=0,n=0,inl=0; pts.forEach(c=>{let z=zFit(F,c.x,c.y);subs.forEach(sb=>{if(pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y}))))z=Math.max(z,zFit(sb.F,c.x,c.y));});const r=c.z-z;if(Math.abs(r)<0.3){e2+=r*r;inl++;}n++;});
     const rms=Math.sqrt(e2/Math.max(1,inl)),fi=inl/Math.max(1,n),pen={flat:0,shed:0.05,gable:0.015,gable2:0.025,hip:0.03}[F.best.c.k]||0;
     return {subs,dbg:dbg.join(' '),score:rms*(1+2*(1-fi))+pen+0.04*subs.length};};
-  /* cutting a volume where the laser says it is two: a block of points clearly above or below the fitted roof that runs along
-     one side of the volume (a lower lean-to, the next house of a terrace) becomes its own volume, cut by a line parallel to that side */
-  for(let pass=0,cuts=0;pass<8&&cuts<8;pass++){let changed=false;
-    for(let qi=0;qi<pieces.length&&!changed;qi++){const pc=pieces[qi];if(pc.F.best.score>=9)continue;const Pp=pc.P.map(([x,y])=>({x,y}));
-      const pts=C.filter(c=>pointInPoly(c.x,c.y,Pp)); if(pts.length<20)continue;
+  /* cutting a volume where the laser says it is not one roof. The test grid is the laser itself (ground included): a block of
+     points clearly above or below the fitted roof that runs along one side (a lower lean-to, the next house of a terrace) or fills a
+     corner (an L-shaped house inside a rectangular IGN outline) is cut off by lines parallel to the sides; a cut-off corner whose laser
+     is ground is no building at all and is dropped. A cut is kept only if the laser is explained better. */
+  const MHr=S.lidarR&&S.lidarR.mnh;
+  const grid=P=>{const Pp=P.map(([x,y])=>({x,y}));let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;P.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);});const o=[];
+    for(let x=Math.floor(x0/s)*s+s/2;x<x1;x+=s)for(let y=Math.floor(y0/s)*s+s/2;y<y1;y+=s){if(!pointInPoly(x,y,Pp))continue;const z=R.Z(x,y),h=MHr?MHr.at(x,y):null;if(z==null)continue;o.push({x,y,z,g:h!=null&&h<1.5,zg:h!=null?z-h:z-3});}return o;};
+  const err=(pts,zf)=>{let e=0;pts.forEach(p=>{e+=Math.min(1,Math.abs(p.z-zf(p)));});return e;};
+  for(let pass=0,cuts=0;pass<10&&cuts<8;pass++){let changed=false;
+    for(let qi=0;qi<pieces.length&&!changed;qi++){const pc=pieces[qi];if(pc.F.best.score>=9||pc.noCut)continue;
+      const pts=grid(pc.P); if(pts.length<24)continue; const e0=err(pts,p=>zFit(pc.F,p.x,p.y));
       const ax=pc.F.E[0].t,U=(x,y)=>x*ax[0]+y*ax[1],V=(x,y)=>-x*ax[1]+y*ax[0];let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;pc.P.forEach(([x,y])=>{u0=Math.min(u0,U(x,y));u1=Math.max(u1,U(x,y));v0=Math.min(v0,V(x,y));v1=Math.max(v1,V(x,y));});
-      for(const sg of [1,-1]){if(changed)break;
-        const off=pts.filter(c=>sg*(c.z-zFit(pc.F,c.x,c.y))>0.6); if(off.length*s*s<4)continue;
-        const key=c=>Math.round(c.x/s)+','+Math.round(c.y/s),map=new Map();off.forEach(c=>map.set(key(c),c));const seen=new Set(),groups=[];
-        off.forEach(c0=>{const k0=key(c0);if(seen.has(k0))return;const g=[],q=[c0];seen.add(k0);while(q.length){const c=q.pop();g.push(c);const i=Math.round(c.x/s),j=Math.round(c.y/s);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const k=(i+di)+','+(j+dj);if(!seen.has(k)&&map.has(k)){seen.add(k);q.push(map.get(k));}}}groups.push(g);});
-        for(const g of groups.filter(g=>g.length*s*s>=4).sort((a,b)=>b.length-a.length)){
-          let cu0=1e9,cu1=-1e9,cv0=1e9,cv1=-1e9;g.forEach(c=>{const u=U(c.x,c.y),v=V(c.x,c.y);cu0=Math.min(cu0,u);cu1=Math.max(cu1,u);cv0=Math.min(cv0,v);cv1=Math.max(cv1,v);});
-          const opts=[];const su=(cu1-cu0)/(u1-u0),sv=(cv1-cv0)/(v1-v0);
-          if(cv0-v0<1.2&&su>0.5)opts.push(['v',cv1+s/2]); if(v1-cv1<1.2&&su>0.5)opts.push(['v',cv0-s/2]);
-          if(cu0-u0<1.2&&sv>0.5)opts.push(['u',cu1+s/2]); if(u1-cu1<1.2&&sv>0.5)opts.push(['u',cu0-s/2]);
-          let done=false;
-          for(const [ax_,t] of opts){const f=ax_==='v'?(p=>V(p[0],p[1])-t):(p=>U(p[0],p[1])-t);
-            let A=MK.clipHalf(pc.P,f),B=MK.clipHalf(pc.P,p=>-f(p)); if(A.length<3||B.length<3)continue; A=MK.clean(A,0.05);B=MK.clean(B,0.05); if(!A||!B)continue;
-            if(Math.abs(MK.area(A))<6||Math.abs(MK.area(B))<6)continue; if((ax_==='v'?Math.min(t-v0,v1-t):Math.min(t-u0,u1-t))<1.5)continue;
-            const FA=fitPiece(A,pc.bk.top),FB=fitPiece(B,pc.bk.top); if(FA.best.score>=9||FB.best.score>=9)continue;
-            const old=pc.F.best.score, nw=(FA.best.score*FA.np+FB.best.score*FB.np)/Math.max(1,FA.np+FB.np);
-            if(nw<old-0.03){pieces.splice(qi,1,{P:A,bk:pc.bk,F:FA,cut:true},{P:B,bk:pc.bk,F:FB,cut:true});changed=true;cuts++;done=true;break;}}
-          if(done)break;}}}
+      const off=pts.filter(p=>Math.abs(p.z-zFit(pc.F,p.x,p.y))>0.6);
+      const key=c=>Math.round(c.x/s)+','+Math.round(c.y/s),map=new Map();off.forEach(c=>map.set(key(c),c));const seen=new Set(),groups=[];
+      off.forEach(c0=>{const k0=key(c0);if(seen.has(k0))return;const sg=Math.sign(c0.z-zFit(pc.F,c0.x,c0.y));const g=[],q=[c0];seen.add(k0);while(q.length){const c=q.pop();g.push(c);const i=Math.round(c.x/s),j=Math.round(c.y/s);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const k=(i+di)+','+(j+dj);const o=map.get(k);if(o&&!seen.has(k)&&Math.sign(o.z-zFit(pc.F,o.x,o.y))===sg){seen.add(k);q.push(o);}}}groups.push(g);});
+      let bestCut=null;
+      for(const g of groups.filter(g=>g.length*s*s>=3).sort((a,b)=>b.length-a.length).slice(0,4)){
+        let cu0=1e9,cu1=-1e9,cv0=1e9,cv1=-1e9;g.forEach(c=>{const u=U(c.x,c.y),v=V(c.x,c.y);cu0=Math.min(cu0,u);cu1=Math.max(cu1,u);cv0=Math.min(cv0,v);cv1=Math.max(cv1,v);});
+        const tu0=cu0-u0<1.2,tu1=u1-cu1<1.2,tv0=cv0-v0<1.2,tv1=v1-cv1<1.2, su=(cu1-cu0)/(u1-u0), sv=(cv1-cv0)/(v1-v0);
+        const lines=[]; /* [axis, value, keep side of the cluster: -1 below the line, +1 above] */
+        if(tv0&&su>0.5)lines.push([['v',cv1+s/2]]); if(tv1&&su>0.5)lines.push([['v',cv0-s/2]]);
+        if(tu0&&sv>0.5)lines.push([['u',cu1+s/2]]); if(tu1&&sv>0.5)lines.push([['u',cu0-s/2]]);
+        /* corners: two cuts */
+        if(tu0&&tv0)lines.push([['u',cu1+s/2],['v',cv1+s/2]]); if(tu1&&tv0)lines.push([['u',cu0-s/2],['v',cv1+s/2]]);
+        if(tu0&&tv1)lines.push([['u',cu1+s/2],['v',cv0-s/2]]); if(tu1&&tv1)lines.push([['u',cu0-s/2],['v',cv0-s/2]]);
+        for(const L of lines){
+          const F_=([a,t])=>a==='v'?(p=>V(p[0],p[1])-t):(p=>U(p[0],p[1])-t);
+          /* the cluster side of each line */
+          const cs=L.map(([a,t])=>{const m=a==='v'?(cv0+cv1)/2:(cu0+cu1)/2;return m<t?-1:1;});
+          let parts=[]; const near=(Q,f,c)=>MK.clipHalf(Q,p=>-c*f(p)), far=(Q,f,c)=>MK.clipHalf(Q,p=>c*f(p));
+          if(L.length===1){const f=F_(L[0]);parts=[near(pc.P,f,cs[0]),far(pc.P,f,cs[0])];}
+          else{const f1=F_(L[0]),f2=F_(L[1]);parts=[near(near(pc.P,f1,cs[0]),f2,cs[1]),far(pc.P,f1,cs[0]),far(near(pc.P,f1,cs[0]),f2,cs[1])];}
+          parts=parts.map(Q=>Q.length>=3?MK.clean(Q,0.05):null);
+          if(parts.some(Q=>!Q))continue; if(parts.some(Q=>Math.abs(MK.area(Q))<2))continue;
+          /* fit each part on its laser; a part that is ground is dropped */
+          let e=0,ok=true; const keep=[];
+          for(const Q of parts){const gp=grid(Q); if(!gp.length){continue;} const gf=gp.filter(p=>p.g).length/gp.length;
+            if(gf>0.7){e+=err(gp,p=>p.zg);continue;}
+            if(Math.abs(MK.area(Q))<5){ok=false;break;}
+            const FQ=fitPiece(Q,pc.bk.top); if(FQ.best.score>=9){ok=false;break;} e+=err(gp,p=>zFit(FQ,p.x,p.y)); keep.push({P:Q,bk:pc.bk,F:FQ,cut:true});}
+          if(!ok||!keep.length)continue;
+          if(e<e0*0.8&&(!bestCut||e<bestCut.e))bestCut={e,keep};}}
+      if(bestCut){pieces.splice(qi,1,...bestCut.keep);changed=true;cuts++;}else pc.noCut=true;}
     if(!changed)break;}
   const subs=[];
   pieces.forEach(pc=>{if(pc.F.best.score>=9)return;
