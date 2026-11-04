@@ -540,7 +540,7 @@ setTimeout(()=>{QC.trim();},8000);
 const prioOf=u=>/\/wmts\?/.test(u)?(/TILEMATRIX=19&/.test(u)?1:2):0;
 function pump(){while(GPF.active<GPF.max&&GPF.q.length){let bi=0;for(let i=0;i<GPF.q.length;i++){if(GPF.q[i].p<GPF.q[bi].p)bi=i;if(GPF.q[bi].p===0)break;}const t=GPF.q.splice(bi,1)[0];GPF.active++;(async()=>{let r=null,err=null;
   // a retry asks for a fresh copy: the IGN front caches an error (a 504 served again in a few ms for the exact same URL)
-  for(let a=0;a<4;a++){try{const u=a&&/^https:\/\/data\.geopf\.fr\//.test(t.url)?t.url+(t.url.includes('?')?'&':'?')+'_qsr='+Date.now():t.url;r=await fetch(u,t.opt);if(r.status===429||r.status>=500){await sleep(700*(a+1)+Math.random()*500);continue;}err=null;break;}catch(e){err=e;await sleep(400);}}
+  for(let a=0;a<4;a++){try{const u=a&&/^https:\/\/data\.geopf\.fr\//.test(t.url)?t.url+(t.url.includes('?')?'&':'?')+'_qsr='+Date.now():t.url;const t0=performance.now();r=await fetch(u,t.opt);if(r.status===429||r.status>=500){await sleep(r.status!==429&&a===0&&performance.now()-t0<100?50:700*(a+1)+Math.random()*500);continue;} /* an error back in a few ms is a cached one: ask again at once */err=null;break;}catch(e){err=e;await sleep(400);}}
   GPF.active--;pump();if(r&&!(r.status===429||r.status>=500))t.res(r);else t.rej(err||new Error('IGN '+(r&&r.status)));})();}}
 /* ---------- data ---------- */
 async function geocode(q){
