@@ -532,6 +532,38 @@ function applyFade(){
 /* cadastral parcels of the detailed zone, tinted by what covers their unbuilt part:
    green where the orthophoto or the laser sees vegetation, mineral grey otherwise */
 let parcelGroup=null, parcelTok=0;
+/* gardens, minimalist: every lot painted in its base tint, then what the aerial photo and the laser see on its open part —
+   lawn, gravel/terraces, asphalt, pools — as flat plan colours on one texture (computed once, then free to draw) */
+const GT_R=330, GT_N=1536;
+function gardenTexture(TP,MH){
+  const RO=S.rawOrtho; if(!RO)return null; const W=RO.raw.width,Hh=RO.raw.height,mpp=(RO.e-RO.w)/W,od=RO.raw.getContext('2d').getImageData(0,0,W,Hh).data;
+  const N=GT_N,px=2*GT_R/N,cv=document.createElement('canvas');cv.width=cv.height=N;const g=cv.getContext('2d');
+  const X=x=>(x+GT_R)/px, Y=y=>(GT_R-y)/px;
+  const path=(rings)=>{g.beginPath();rings.forEach(r=>{r.forEach((q,i)=>i?g.lineTo(X(q.x),Y(q.y)):g.moveTo(X(q.x),Y(q.y)));g.closePath();});};
+  TP.forEach(t=>{g.fillStyle='#'+t.col.getHexString();path([t.outer].concat(t.holes));g.fill('evenodd');});
+  // open ground only: buildings punched out of a mask
+  const mk=document.createElement('canvas');mk.width=mk.height=N;const mg=mk.getContext('2d');mg.fillStyle='#fff';
+  TP.forEach(t=>{mg.beginPath();[t.outer].concat(t.holes).forEach(r=>{r.forEach((q,i)=>i?mg.lineTo(X(q.x),Y(q.y)):mg.moveTo(X(q.x),Y(q.y)));mg.closePath();});mg.fill('evenodd');});
+  mg.globalCompositeOperation='destination-out';mg.fillStyle='#000';
+  S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;mg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>i?mg.lineTo(X(q.x),Y(q.y)):mg.moveTo(X(q.x),Y(q.y)));mg.closePath();});mg.fill('evenodd');});
+  const md=mg.getImageData(0,0,N,N).data, img=g.getImageData(0,0,N,N), id=img.data;
+  // classify 1 lawn, 2 gravel / terraces, 3 asphalt, 4 pool (0 = keep the lot tint: unsure, or in a photo shadow)
+  const lim=(DETAIL_R+20)/px, c0=N/2, cls=new Uint8Array(N*N);
+  for(let j=Math.max(0,Math.floor(c0-lim));j<Math.min(N,c0+lim);j++)for(let i=Math.max(0,Math.floor(c0-lim));i<Math.min(N,c0+lim);i++){
+    const k=j*N+i; if(md[k*4+3]<128)continue; const x=-GT_R+(i+0.5)*px, y=GT_R-(j+0.5)*px;
+    const oi=Math.floor((x-RO.w)/mpp),oj=Math.floor((RO.n-y)/mpp); if(oi<0||oj<0||oi>=W||oj>=Hh)continue; const o=(oj*W+oi)*4,r=od[o],gg=od[o+1],b=od[o+2];
+    const lum=(r+gg+b)/3,mx=Math.max(r,gg,b),mn=Math.min(r,gg,b),sat=mx-mn,exg=2*gg-r-b;
+    let c=0; if(b>110&&b-r>35&&gg-r>15&&lum>90)c=4; else if(lum<62)c=0; else if(exg>12)c=1; else if(lum>150&&sat<45)c=2; else if(lum<118&&sat<30)c=3;
+    if(c===1&&MH){const h=MH.at(x,y);if(h!=null&&h>2.5)c=1;} cls[k]=c;}
+  // 3×3 majority, twice, to turn pixels into clean plan shapes
+  for(let pass=0;pass<2;pass++){const out=new Uint8Array(cls);const cnt=new Uint8Array(5);
+    for(let j=1;j<N-1;j++)for(let i=1;i<N-1;i++){const k=j*N+i;if(md[k*4+3]<128)continue;cnt.fill(0);for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++)cnt[cls[k+dj*N+di]]++;let best=cls[k],bc=0;for(let q=0;q<5;q++)if(cnt[q]>bc){bc=cnt[q];best=q;}if(bc>=5)out[k]=best;}
+    cls.set(out);}
+  const PAL=[null,[198,215,174],[233,228,216],[194,189,180],[159,208,222]];
+  for(let k=0;k<N*N;k++){const c=cls[k];if(!c)continue;const p=PAL[c];id[k*4]=p[0];id[k*4+1]=p[1];id[k*4+2]=p[2];id[k*4+3]=255;}
+  g.putImageData(img,0,0);
+  const tx=new THREE.CanvasTexture(cv); tx.encoding=THREE.sRGBEncoding; tx.anisotropy=8; tx.wrapS=tx.wrapT=THREE.ClampToEdgeWrapping; return tx;
+}
 async function buildParcels(lat,lon){
   const tok=++parcelTok;
   if(parcelGroup){parcelGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();});scene.remove(parcelGroup);parcelGroup=null;}
@@ -544,7 +576,7 @@ async function buildParcels(lat,lon){
   const M=2*(DETAIL_R+40), cv=document.createElement('canvas'); cv.width=cv.height=M; const cg=cv.getContext('2d'); cg.fillStyle='#000';
   S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;cg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>{const X=q.x+M/2,Y=M/2-q.y;i?cg.lineTo(X,Y):cg.moveTo(X,Y);});cg.closePath();});cg.fill('evenodd');});
   const occ=cg.getImageData(0,0,M,M).data; const built=(x,y)=>{const X=Math.floor(x+M/2),Y=Math.floor(M/2-y);if(X<0||Y<0||X>=M||Y>=M)return false;return occ[(Y*M+X)*4+3]>100;};
-  const cG=new THREE.Color(0xb3cc9a), cM=new THREE.Color(0xc8c3ba), cLot=new THREE.Color(PLAN_GROUND), cF=new THREE.Color(0xd9d5c3), P=[],N=[],C=[],L=[],BP=[],BN=[]; let nParc=0;
+  const cG=new THREE.Color(0xb3cc9a), cM=new THREE.Color(0xc8c3ba), cLot=new THREE.Color(PLAN_GROUND), cF=new THREE.Color(0xd9d5c3), P=[],N=[],C=[],L=[],BP=[],BN=[],TP=[]; let nParc=0;
   feats.forEach(f=>{const g=f.geometry;const polys=g.type==='Polygon'?[g.coordinates]:(g.type==='MultiPolygon'?g.coordinates:[]);
     polys.forEach(poly=>{if(!poly[0]||poly[0].length<4)return;const outer=ringToLocal(poly[0]);const holes=[];for(let i=1;i<poly.length;i++)holes.push(ringToLocal(poly[i]));
       let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;outer.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});
@@ -562,11 +594,14 @@ async function buildParcels(lat,lon){
       else{const gr=ng/open, t=Math.min(1,Math.max(0,(gr-0.2)/0.5)); col=(open*st*st>3000?cF:cM).clone().lerp(cG,t*t*(3-2*t));} // big open lots are fields or meadows, not paving
       const shape=new THREE.Shape(outer);holes.forEach(h=>shape.holes.push(new THREE.Path(h)));const sg=new THREE.ShapeGeometry(shape);const pos=sg.attributes.position,idx=sg.index;
       const T=[];for(let i=0;i<idx.count;i+=3)T.push([0,1,2].map(d=>{const k=idx.getX(i+d);return [pos.getX(k),pos.getY(k)];}));
-      nParc++; const n0=P.length; drapeTris(T,0.08,P,N); for(let k=n0;k<P.length;k+=3)C.push(col.r,col.g,col.b); sg.dispose();});});
+      nParc++; TP.push({outer,holes,col}); const n0=P.length; drapeTris(T,0.08,P,N); for(let k=n0;k<P.length;k+=3)C.push(col.r,col.g,col.b); sg.dispose();});});
   if(tok!==parcelTok)return;
   parcelGroup=new THREE.Group();
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
-    const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({vertexColors:true,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8}));m.receiveShadow=true;m.renderOrder=0;m.userData.fill=true;fadeMat(m.material);parcelGroup.add(m);}
+    let mat=null; try{const tx=gardenTexture(TP,MH);if(tx){const uv=new Float32Array(P.length/3*2);for(let k=0,q=0;k<P.length;k+=3,q+=2){uv[q]=(P[k]+GT_R)/(2*GT_R);uv[q+1]=(P[k+1]+GT_R)/(2*GT_R);}
+      g.setAttribute('uv',new THREE.BufferAttribute(uv,2));mat=new THREE.MeshLambertMaterial({map:tx,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});}}catch(err){console.error('gardens',err);}
+    if(!mat)mat=new THREE.MeshLambertMaterial({vertexColors:true,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
+    const m=new THREE.Mesh(g,mat);m.receiveShadow=true;m.renderOrder=0;m.userData.fill=true;fadeMat(m.material);parcelGroup.add(m);}
   if(BP.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(BP,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(BN,3));
     const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa39a8a,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}));m.receiveShadow=true;m.renderOrder=1;fadeMat(m.material);parcelGroup.add(m);}
   if(L.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(L,3));
@@ -1620,7 +1655,11 @@ async function lidarVegGrid(){
   if(RO){const W=RO.raw.width,mpp=(RO.e-RO.w)/W;const d=RO.raw.getContext('2d').getImageData(0,0,W,W).data;
     greenAt=(x,y)=>{const px=Math.round((x-RO.w)/mpp),py=Math.round((RO.n-y)/mpp);if(px<1||py<1||px>=W-1||py>=W-1)return 99;let e=0,c=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const k=((py+dy)*W+px+dx)*4;e+=2*d[k+1]-d[k]-d[k+2];c++;}return e/c;};}
   const veg=new Float32Array(n*n); let nv=0;
-  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const z=hs[j*n+i];if(z==null||z<0.7||isB(i,j)||roofLike(i,j,z))continue;const x=-R+i*step,y=R-j*step;const ex=greenAt(x,y);if(ex<(z<4.5?14:6))continue;veg[j*n+i]=z;nv++;}
+  // foliage is rough at 50 cm, a roof (even one the IGN outline misses, or one taller than its IGN height) is smooth:
+  // a tall "tree" cell must be rough, otherwise it is the edge of a roof and would grow a giant trunk against the façade
+  const FF=S.lidarP&&await S.lidarP.mnsFine; if(tok!==refineToken)return;
+  const rough=(x,y)=>{if(!FF)return 1;const d=[];for(let dy=-1;dy<=1;dy+=0.5)for(let dx=-1;dx<=1;dx+=0.5){const a=FF.at(x+dx,y+dy),b=FF.at(x+dx+0.5,y+dy),c=FF.at(x+dx,y+dy+0.5);if(a==null||b==null||c==null)continue;d.push(Math.abs(a-b),Math.abs(a-c));}if(d.length<8)return 1;d.sort((p,q)=>p-q);return d[d.length>>1];};
+  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const z=hs[j*n+i];if(z==null||z<0.7||isB(i,j)||roofLike(i,j,z))continue;const x=-R+i*step,y=R-j*step;const ex=greenAt(x,y);if(ex<(z<4.5?14:6))continue;if(z>=4.5&&rough(x,y)<0.22)continue;veg[j*n+i]=z;nv++;}
   if(!nv)return;
   // low vegetation (<4.5 m): chains of cells → smooth ribbons (hedges); compact blobs → bushes. Tall → trees on local maxima
   const P=[],N=[]; const tall=[]; const low=(i,j)=>i>=0&&j>=0&&i<n&&j<n&&veg[j*n+i]>0&&veg[j*n+i]<4.5; const bushes=[];
@@ -1641,7 +1680,11 @@ async function lidarVegGrid(){
   tall.sort((a,b)=>b.z-a.z); const covered=new Uint8Array(n*n); const trees=[];
   tall.forEach(t=>{if(covered[t.j*n+t.i])return;let cnt=0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const u=t.i+dx,v=t.j+dy;if(u>=0&&v>=0&&u<n&&v<n&&veg[v*n+u]>=4.5)cnt++;}
     const r=Math.min(6,1.6+cnt*0.2); const rc=Math.max(1,Math.round(r/step)); for(let dy=-rc;dy<=rc;dy++)for(let dx=-rc;dx<=rc;dx++){const u=t.i+dx,v=t.j+dy;if(u>=0&&v>=0&&u<n&&v<n&&dx*dx+dy*dy<=rc*rc)covered[v*n+u]=1;}
-    trees.push({x:-R+t.i*step,y:R-t.j*step,r,h:t.z,vs:0.9+Math.random()*0.3});});
+    // a real tree is about as wide as a third of its height: a tall but thin patch (a roof edge against a façade, a lamp post)
+    // cannot carry a 20 m tree, so its height follows the width of the crown actually measured
+    let nearB=false;for(let dy=-2;dy<=2&&!nearB;dy++)for(let dx=-2;dx<=2;dx++){const u=t.i+dx,v=t.j+dy;if(u>=0&&v>=0&&u<n&&v<n&&isB(u,v)){nearB=true;break;}}
+    if(nearB&&cnt<4)return;
+    trees.push({x:-R+t.i*step,y:R-t.j*step,r,h:Math.min(t.z,r*3.5),vs:0.9+Math.random()*0.3});});
   if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();const k=blockers.indexOf(lidarVegMesh);if(k>=0)blockers.splice(k,1);lidarVegMesh=null;}
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
     lidarVegMesh=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa3bb98}));lidarVegMesh.castShadow=lidarVegMesh.receiveShadow=true;scene.add(lidarVegMesh);blockers.push(lidarVegMesh);}
