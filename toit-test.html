@@ -3082,6 +3082,7 @@ function roofRender(){
   $('rNote').textContent=mode==='real'
     ? `Sur l'année ${W?W.Y:''}, une surface horizontale dégagée a reçu ${fmt(R.flat)} kWh/m², et un pan idéal (plein sud, 35°, sans ombre) en aurait reçu ${fmt(R.ref)}. Ce toit reçoit en moyenne ${fmt(E/A/R.ref*100)} % de cet optimum ; les ombres (voisins, arbres, cheminées, relief) lui retirent ${fmt(loss*100)} %.`
     : `Par ciel toujours clair, ce toit recevrait ${fmt(EC/A)} kWh/m² par an, soit ${fmt(EC/Math.max(1,E))} fois la météo réelle : l'écart, c'est l'effet des nuages.`;
+  if(R.M&&R.M.gap>0.3)$('rNote').textContent+=' Attention : ici le contour du bâtiment (IGN) et le relevé laser ne concordent pas bien ; la forme du toit est approximative.';
   $('bottom').hidden=true;}
 async function roofSelect(obj){
   if(isPhone())$('sheet').classList.add('collapsed'); /* on a phone the roof gets the screen; the details slide up */
@@ -3093,7 +3094,7 @@ async function roofSelect(obj){
   /* the schematic roof first; the laser-traced one only if it cannot be built */
   try{const M=roofModel(R); let wr=0,wn=0; if(M)M.pieces.forEach(p=>{if(p.F.best.score<9){wr+=p.F.best.rms*p.F.np;wn+=p.F.np;}}); if(M)M.rms=wn?wr/wn:9;
     /* a roof no simple model explains (Paris mansards, courtyards…) keeps the laser-traced pans */
-    if(M&&M.cells.length&&M.rms<=0.35){R.M=M; R.lcells=R.cells; R.cells=M.cells; R.F={regs:M.pans,lab:Int32Array.from(M.cells,c=>c.pan),verts:M.verts};}}catch(e){console.error('model',e);R.M=null;}
+    if(M&&M.cells.length&&M.rms<=0.35){R.M=M; R.lcells=R.cells; R.cells=M.cells; R.F={regs:M.pans,lab:Int32Array.from(M.cells,c=>c.pan),verts:M.verts}; {const ds=[];R.lcells.forEach(c=>{let z=null;M.pieces.forEach(p=>{if(pointInPoly(c.x,c.y,p.P.map(([x,y])=>({x,y})))){const v=p.roofZ(c.x,c.y);z=z==null?v:Math.max(z,v);}});if(z!=null)ds.push(Math.abs(c.z-z));});ds.sort((a,b)=>a-b);M.gap=ds.length?ds[ds.length>>1]:0;}}}catch(e){console.error('model',e);R.M=null;}
   if(!R.M){
   try{R.F=roofFacets(R);}catch(e){console.error('facets',e);veil(false);$('rBigC').textContent='Reconstruction du toit impossible ici.';return;}
   try{const VEC=roofVector(R); if(VEC.cells.length){R.VEC=VEC; R.lcells=R.cells; R.cells=VEC.cells; R.F.lab=Int32Array.from(VEC.cells,c=>c.reg); R.F.verts=VEC.verts;
@@ -3587,6 +3588,16 @@ function roofModel(R){
     const tops=pc.F.fits.slice().sort((a,b)=>a.score-b.score).slice(0,4); let bestJ=null;
     tops.forEach(fb=>{const F={...pc.F,best:fb};const r=findSubs(pc,F);DBG.push(['J',fb.c.k,fb.rms.toFixed(2),r.score.toFixed(3),r.subs.length,r.dbg]);if(!bestJ||r.score<bestJ.r.score)bestJ={F,r};});
     if(bestJ){pc.F=bestJ.F; bestJ.r.subs.forEach(sb=>subs.push(sb));}});
+  /* the roof can overhang the IGN wall line (eaves, a lower roof running past it): an outer edge is pushed out as far as the laser,
+     just beyond it, still lies on the roof plane next to it (up to 2 m), never into another building */
+  const othersR=S.meshes.filter(m=>m.userData.rings&&family(RF.sel||S.building).indexOf(m)<0).map(m=>m.userData.rings[0].map(p=>({x:p.x+R.sh.dx,y:p.y+R.sh.dy})));
+  pieces.forEach(pc=>{if(pc.sub||pc.F.best.score>=9||!MHr)return; const P=pc.P,n=P.length; let moved=false; const Q=P.map(p=>p.slice());
+    for(let i=0;i<n;i++){const a=P[i],b=P[(i+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<1.5)continue;const ox=(b[1]-a[1])/L,oy=-(b[0]-a[0])/L;
+      const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2; if(pieces.some(o=>o!==pc&&pointInPoly(mx+ox*0.3,my+oy*0.3,o.P.map(([x,y])=>({x,y})))))continue; /* inner edge */
+      let reach=0; for(let o=0.25;o<=2.001;o+=0.25){let ok=0,nn=0;for(let t=0.1;t<=0.9;t+=0.1){const x=a[0]+(b[0]-a[0])*t+ox*o,y=a[1]+(b[1]-a[1])*t+oy*o;if(othersR.some(r=>pointInPoly(x,y,r))){nn=-1;break;}const z=R.Z(x,y),h=MHr.at(x,y);nn++;if(z!=null&&h!=null&&h>1.5&&Math.abs(z-zFit(pc.F,x,y))<0.3)ok++;}
+        if(nn<=0||ok/nn<0.6)break; reach=o;}
+      if(reach>=0.5){Q[i]=[Q[i][0]+ox*reach,Q[i][1]+oy*reach];Q[(i+1)%n]=[Q[(i+1)%n][0]+ox*reach,Q[(i+1)%n][1]+oy*reach];moved=true;}}
+    if(moved&&Math.abs(MK.area(Q))>Math.abs(MK.area(P))){pc.P=Q;pc.grown=true;}});
   subs.forEach(sb=>pieces.push(sb));
   pieces.forEach((pc,pi)=>{const P=pc.P,n=P.length,E=pc.F.E,d=pc.F.d,best=pc.F.best;
     pc.fit=best; const Eb=best.c.E, z0=best.z0, kk=best.k;
