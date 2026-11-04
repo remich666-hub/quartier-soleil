@@ -1045,7 +1045,7 @@ function displace(mesh,segs){ // rebuild a plane's geometry with terrain heights
   const P=[],U=[],Nn=[],I=[];
   /* beyond the laser grid the relief is its edge carried outwards: along that edge the outer ring keeps the 4 m step, coarse only going away */
   const RL=LV.length>1?LV[LV.length-2][0]:0, sAt=(v,st,L)=>L===LV.length-1&&RL&&Math.abs(v)<RL-1e-6?LV[LV.length-2][1]:st;
-  const ax=(a,b,st,L)=>{const o=[a];let v=a;while(true){const s1=sAt(v+1e-4,st,L);let nv=(Math.floor(v/s1+1e-9)+1)*s1;if(nv<=v+1e-6)nv=v+s1;if(nv>=b-1e-6)break;o.push(nv);v=nv;}o.push(b);return o;};
+  const ax=(a,b,st,L)=>{const o=[a];let v=a;while(true){const s1=sAt(v+1e-4,st,L);let nv=(Math.floor(v/s1+1e-9)+1)*s1;if(nv<=v+1e-6)nv=v+s1;if(L===LV.length-1&&RL)for(const bp of [-RL,RL])if(bp>v+1e-6&&bp<nv)nv=bp;if(nv>=b-1e-6)break;o.push(nv);v=nv;}o.push(b);return o;};
   const zEdge=(t,lo,hi,sc,zf)=>{let a=Math.floor(t/sc)*sc,b=a+sc;a=Math.max(lo,a);b=Math.min(hi,b);if(t<=a+1e-6||b-a<1e-6)return zf(a);const w=(t-a)/(b-a);return zf(a)*(1-w)+zf(b)*w;};
   LV.forEach(([R,st],L)=>{const r=L?LV[L-1][0]:0, nxt=LV[L+1];
     const rects=L?[[-R,R,r,R],[-R,R,-R,-r],[-R,-r,-r,r],[r,R,-r,r]]:[[-R,R,-R,R]];
