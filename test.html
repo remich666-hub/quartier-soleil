@@ -346,7 +346,9 @@ function slopeWalls(m){const u=m.userData; if(!u||!u.lidar||!u.facades||nFloorsR
   const ring=u.rings[0], zc=u.zBase+off+F*sh, P=[],N=[],U=[];
   const edgeOf=(ax,ay,bx,by)=>{for(let i=0;i<ring.length;i++){const a=ring[i],b=ring[(i+1)%ring.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.05)continue;
     const cr=p=>Math.abs((p[0]-a.x)*(b.y-a.y)-(p[1]-a.y)*(b.x-a.x))/L; if(cr([ax,ay])<0.06&&cr([bx,by])<0.06)return {a,dx:(b.x-a.x)/L,dy:(b.y-a.y)/L,L};}return null;};
-  for(let q=0;q<src.p.length;q+=18){const v=k=>[src.p[q+k*3],src.p[q+k*3+1],src.p[q+k*3+2]]; const A0=v(0),B0=v(1),B1=v(2),A1=v(5), nx=src.n[q],ny=src.n[q+1];
+  for(let q=0;q<src.p.length;q+=18){const v=k=>[src.p[q+k*3],src.p[q+k*3+1],src.p[q+k*3+2]], vs=[0,1,2,3,4,5].map(v), nx=src.n[q],ny=src.n[q+1];
+    const A=vs[0], B=vs.find(w=>Math.hypot(w[0]-A[0],w[1]-A[1])>1e-4)||vs[1], zs=P=>vs.filter(w=>Math.hypot(w[0]-P[0],w[1]-P[1])<1e-4).map(w=>w[2]);
+    const A0=[A[0],A[1],Math.min(...zs(A))],A1=[A[0],A[1],Math.max(...zs(A))],B0=[B[0],B[1],Math.min(...zs(B))],B1=[B[0],B[1],Math.max(...zs(B))];
     const e=edgeOf(A0[0],A0[1],B0[0],B0[1]); const bays=e&&e.L>=2.2?Math.max(1,Math.round(e.L/3.5)):0;
     const uOf=(x,y)=>e&&bays?((x-e.a.x)*e.dx+(y-e.a.y)*e.dy)/e.L*bays*3.5:0.1;
     // the quad in (t along a→b, z), cut at the top of the last storey
@@ -2347,7 +2349,7 @@ function partsSync(o){const hi=o.material===matsFor(o.userData.usage,true);
   o.children.forEach(c=>{if(!c.isMesh||!c.material||Array.isArray(c.material)||c.userData.hiRoof)return;
   const b=c.userData.baseMat||(c.userData.baseMat=c.material); if(!hi){c.material=b;return;}
   const k=c.userData.gable?(b.map?'wallT':'wall'):'roof';
-  c.material=PART_HI[k]||(PART_HI[k]=k==='roof'?new THREE.MeshLambertMaterial({color:0xd48a5c}):k==='wallT'?patchWall(new THREE.MeshLambertMaterial({color:0xe8a070,map:wallTex})):new THREE.MeshLambertMaterial({color:0xe8a070,side:THREE.DoubleSide}));});}
+  c.material=PART_HI[k]||(PART_HI[k]=k==='roof'?new THREE.MeshLambertMaterial({color:0xd48a5c}):k==='wallT'?patchWall(new THREE.MeshLambertMaterial({color:0xe8a070,map:wallTex})):new THREE.MeshLambertMaterial({color:0xe8a070}));});}
 const areaOf=r=>{let s=0;for(let i=0,j=r.length-1;i<r.length;j=i++)s+=(r[j].x-r[i].x)*(r[j].y+r[i].y);return s/2;};
 function clipHalf(poly,a,b,c){ // part of a ring where a·x+b·y+c ≥ 0
   const out=[];for(let i=0;i<poly.length;i++){const p=poly[i],q=poly[(i+1)%poly.length],sp=a*p.x+b*p.y+c,sq=a*q.x+b*q.y+c;
@@ -2476,7 +2478,9 @@ function planeRoof(outer,pts,eave,top){
       const side=(x,y)=>{for(const s of [1,-1]){const qx=x+nx*0.05*s,qy=y+ny*0.05*s;if(!(pointInPoly(qx,qy,rg[0])&&!rg.slice(1).some(hh=>pointInPoly(qx,qy,hh)))){const ow=pointInPoly(qx,qy,outer)?regionAt(qx,qy):null;return ow?zAt(ow,x,y):hWall;}}return hWall;};
       for(let k=0;k<ts.length-1;k++){const t0=ts[k],t1=ts[k+1];if(t1-t0<1e-4)continue;const p0={x:a.x+(b.x-a.x)*t0,y:a.y+(b.y-a.y)*t0},p1={x:a.x+(b.x-a.x)*t1,y:a.y+(b.y-a.y)*t1};
         const z0=zAt(w,p0.x,p0.y),z1=zAt(w,p1.x,p1.y),o0=side(p0.x,p0.y),o1=side(p1.x,p1.y);
-        if(z0>o0+0.02||z1>o1+0.02)gables.push([p0,p1,z0,z1,Math.min(o0,z0),Math.min(o1,z1)]);}}})));
+        if(z0>o0+0.02||z1>o1+0.02){const mx=(p0.x+p1.x)/2,my=(p0.y+p1.y)/2,inR=(qx,qy)=>pointInPoly(qx,qy,rg[0])&&!rg.slice(1).some(hh=>pointInPoly(qx,qy,hh));
+          const sg=inR(mx+nx*0.05,my+ny*0.05)?-1:1; /* the visible side: away from this wing, towards what is lower */
+          gables.push([p0,p1,z0,z1,Math.min(o0,z0),Math.min(o1,z1),sg]);}}}})));
   let topZ=0;faces.forEach(f=>f.poly.forEach(p=>{topZ=Math.max(topZ,f.pl.c+f.pl.a*p.x+f.pl.b*p.y);}));
   return {faces,gables,hWall,top:topZ,rmse};
 }
@@ -2489,11 +2493,14 @@ function planeRoofMeshes(pr,zBase,roofMat,wallMat){
     const all=f.poly.concat(...f.holes);
     tris.forEach(t=>{let [A,B,C]=t.map(i=>all[i]);if(!A||!B||!C)return;if((B.x-A.x)*(C.y-A.y)-(B.y-A.y)*(C.x-A.x)<0){const T=B;B=C;C=T;}
       [A,B,C].forEach(q=>{P.push(q.x,q.y,zBase+pl.c+pl.a*q.x+pl.b*q.y);N.push(n.x,n.y,n.z);});});});
-  pr.gables.forEach(([a,b,za,zb,oa,ob])=>{const dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy)||1;const nx=dy/L,ny=-dx/L;
-    [[a.x,a.y,zBase+oa],[b.x,b.y,zBase+ob],[b.x,b.y,zBase+zb],[a.x,a.y,zBase+oa],[b.x,b.y,zBase+zb],[a.x,a.y,zBase+za]].forEach(v=>{GP.push(...v);GN.push(nx,ny,0);});});
+  pr.gables.forEach(([a,b,za,zb,oa,ob,sg])=>{const dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy)||1;const nx=dy/L*(sg||1),ny=-dx/L*(sg||1);
+    // wound to face their visible side only: seen from behind (inside the house, through a roof gap) they are not drawn
+    const A0=[a.x,a.y,zBase+oa],B0=[b.x,b.y,zBase+ob],B1=[b.x,b.y,zBase+zb],A1=[a.x,a.y,zBase+za];
+    [[A0,B0,B1],[A0,B1,A1]].forEach(t=>{const cx=(t[1][1]-t[0][1])*(t[2][2]-t[0][2])-(t[1][2]-t[0][2])*(t[2][1]-t[0][1]),cy=(t[1][2]-t[0][2])*(t[2][0]-t[0][0])-(t[1][0]-t[0][0])*(t[2][2]-t[0][2]);
+      if(cx*nx+cy*ny<0)t=[t[0],t[2],t[1]]; t.forEach(v=>{GP.push(...v);GN.push(nx,ny,0);});});});
   const out=[];
   const mk=(P,N,mat)=>{if(!P.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));const m=new THREE.Mesh(g,mat);m.castShadow=m.receiveShadow=true;out.push(m);};
-  mk(P,N,roofMat); mk(GP,GN,new THREE.MeshLambertMaterial({color:wallMat.color,side:THREE.DoubleSide})); if(GP.length)out[out.length-1].userData.gable=true; return out;
+  mk(P,N,roofMat); mk(GP,GN,new THREE.MeshLambertMaterial({color:wallMat.color})); if(GP.length)out[out.length-1].userData.gable=true; return out;
 }
 function makeBlock(src,rings,model,roofSets){
   const u=src.userData,outer=rings[0],holes=rings.slice(1);
