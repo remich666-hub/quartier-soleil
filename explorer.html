@@ -539,7 +539,8 @@ setTimeout(()=>{QC.trim();},8000);
 // what the model needs first goes first: data (buildings, laser, relief) before the 20 cm photo, the photo before the wide/infrared ones
 const prioOf=u=>/\/wmts\?/.test(u)?(/TILEMATRIX=19&/.test(u)?1:2):0;
 function pump(){while(GPF.active<GPF.max&&GPF.q.length){let bi=0;for(let i=0;i<GPF.q.length;i++){if(GPF.q[i].p<GPF.q[bi].p)bi=i;if(GPF.q[bi].p===0)break;}const t=GPF.q.splice(bi,1)[0];GPF.active++;(async()=>{let r=null,err=null;
-  for(let a=0;a<4;a++){try{r=await fetch(t.url,t.opt);if(r.status===429||r.status>=500){await sleep(700*(a+1)+Math.random()*500);continue;}err=null;break;}catch(e){err=e;await sleep(400);}}
+  // a retry asks for a fresh copy: the IGN front caches an error (a 504 served again in a few ms for the exact same URL)
+  for(let a=0;a<4;a++){try{const u=a&&/^https:\/\/data\.geopf\.fr\//.test(t.url)?t.url+(t.url.includes('?')?'&':'?')+'_qsr='+Date.now():t.url;const t0=performance.now();r=await fetch(u,t.opt);if(r.status===429||r.status>=500){await sleep(r.status!==429&&a===0&&performance.now()-t0<100?50:700*(a+1)+Math.random()*500);continue;} /* an error back in a few ms is a cached one: ask again at once */err=null;break;}catch(e){err=e;await sleep(400);}}
   GPF.active--;pump();if(r&&!(r.status===429||r.status>=500))t.res(r);else t.rej(err||new Error('IGN '+(r&&r.status)));})();}}
 /* ---------- data ---------- */
 async function geocode(q){
@@ -2263,9 +2264,16 @@ async function load(q,at){
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
-    const [veg,osm,wx,roads,pois,hedges,walls,rails,water]=await Promise.all([wfs('BDTOPO_V3:zone_de_vegetation',g.lat,g.lon,RW,1500).catch(()=>[]),Promise.resolve({trees:[],hedges:[]}),fetchWeather(g.lat,g.lon).catch(()=>null),
-      wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,RW,5000).catch(()=>[]),L('zone_d_activite_ou_d_interet',600),L('haie',2000),L('construction_lineaire',2000),wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,RW,800).catch(()=>[]),wfs('BDTOPO_V3:surface_hydrographique',g.lat,g.lon,RW,500).catch(()=>[])]);
+    // the roads are the heaviest IGN answer (2–3 MB) and the IGN is sometimes slow on it: the model does not wait more than
+    // 1.5 s for them; when they come later they are laid in then (roads, plan, the street-coloured lots), the rest is already there
+    const roadsP=wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,RW,5000).catch(()=>[]), T0=S.T;
+    const [veg,osm,wx,roads0,pois,hedges,walls,rails,water]=await Promise.all([wfs('BDTOPO_V3:zone_de_vegetation',g.lat,g.lon,RW,1500).catch(()=>[]),Promise.resolve({trees:[],hedges:[]}),fetchWeather(g.lat,g.lon).catch(()=>null),
+      Promise.race([roadsP,new Promise(r=>setTimeout(()=>r(null),1500))]),L('zone_d_activite_ou_d_interet',600),L('haie',2000),L('construction_lineaire',2000),wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,RW,800).catch(()=>[]),wfs('BDTOPO_V3:surface_hydrographique',g.lat,g.lon,RW,500).catch(()=>[])]);
     const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,DETAIL_R+80,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
+    const roads=roads0||[];
+    if(!roads0)roadsP.then(rs=>{if(S.T!==T0||!rs.length)return; try{buildRoads(rs,rails);buildLayers(rs,hedges,walls,rails,water);try{buildPlan(veg,rs);}catch(err){}applyFade();
+      if(roadMeshes.length&&S.obstacles&&!S.obstacles.includes(roadMeshes[0]))S.obstacles.push(roadMeshes[0]); if(S.T)S.T.roadsLate=performance.now();
+      buildParcels(g.lat,g.lon);}catch(err){console.error('late roads',err);}});
     const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); try{buildPlan(veg,roads);}catch(err){console.error('plan',err);} const nl=applyLandmarks(pois);
     S.vegZoneRings=vegKinds(veg); treeSets.ign=vegZoneSpots(veg).filter(t=>Math.hypot(t.x!=null?t.x:t[0],t.y!=null?t.y:t[1])<DETAIL_R+40); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!(S.mnt||S.terrain)}); S.wx=wx; if(!wx)toast('Météo indisponible');
     try{applyFade();}catch(err){console.error('fade',err);}
