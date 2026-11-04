@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>try{var qsT=localStorage.getItem("qs-theme");if(qsT)document.documentElement.dataset.theme=qsT;}catch(e){}</script>
+<title>Toit Soleil</title>
+<meta name="description" content="L'énergie solaire reçue par un toit, pan par pan, à partir des relevés laser de l'IGN et de la météo réelle.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f7f4ee; --card:#fdfbf7; --raised:#efe9df; --ink:#1f1b16; --ink2:#5e554a; --muted:#7b7266; --fg:#1f1b16;
+  --line:rgba(31,27,22,.12); --sun:#e8772e; --sun-ink:#ad4f16; --btn:#1f1b16; --btn-ink:#fdfbf7;
+  --sans:"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"Instrument Serif",ui-serif,Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161513;--card:#1c1a18;--raised:#262421;--ink:#efe9de;--ink2:#aaa398;--muted:#8a847a;--fg:#efe9de;--line:rgba(239,233,222,.12);--sun:#ef8a44;--sun-ink:#f2a066;--btn:#efe9de;--btn-ink:#161513;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#161513;--card:#1c1a18;--raised:#262421;--ink:#efe9de;--ink2:#aaa398;--muted:#8a847a;--fg:#efe9de;--line:rgba(239,233,222,.12);--sun:#ef8a44;--sun-ink:#f2a066;--btn:#efe9de;--btn-ink:#161513;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--sans);-webkit-text-size-adjust:100%}
+main{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+  padding:max(28px,env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) max(28px,env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px))}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;letter-spacing:-.01em;text-decoration:none;color:var(--ink)}
+.scene{width:min(420px,88vw);aspect-ratio:1/1;position:relative}
+.scene canvas{width:100%;height:100%;display:block}
+.read{font:400 12px/1.4 var(--mono);color:var(--muted);text-align:center;min-height:1.4em;font-variant-numeric:tabular-nums}
+.read b{color:var(--ink2);font-weight:500}
+h1{margin:0;font:400 clamp(30px,6vw,44px)/1.05 var(--serif);text-align:center;letter-spacing:-.01em;text-wrap:balance;max-width:16ch}
+h1 em{color:var(--sun-ink)}
+.box{width:min(520px,100%);display:flex;flex-direction:column;gap:0}
+form{display:flex;gap:8px}
+input{flex:1;min-width:0;font:400 16px var(--sans);color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 14px;outline:none;transition:border-color .2s var(--ease)}
+input:focus{border-color:var(--sun)}
+button{font:500 15px var(--sans);border:0;border-radius:12px;padding:0 18px;background:var(--btn);color:var(--btn-ink);cursor:pointer;transition:transform .15s var(--ease)}
+button:active{transform:scale(.97)}
+.hint{margin-top:12px;font-size:12.5px;color:var(--muted);text-align:center}
+@media (prefers-reduced-motion:reduce){input,button{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <a class="brand" href="./"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><path d="M5 17 12 10 19 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Toit Soleil</a>
+  <div class="scene" aria-label="Schéma : le soleil traverse la journée au-dessus d'une maison, chaque pan de toit se colore selon la puissance reçue"><canvas id="cv"></canvas></div>
+  <div class="read" id="read" aria-live="off"></div>
+  <h1>Quelle énergie solaire reçoit <em>ce toit</em>&nbsp;?</h1>
+  <div class="box">
+    <form id="f"><input id="addr" placeholder="Adresse du bâtiment" aria-label="Adresse du bâtiment" required><button type="submit">Calculer</button></form>
+    <p class="hint">Relevé laser LiDAR HD de l'IGN · météo réelle heure par heure · France métropolitaine</p>
+  </div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+function qsAddressAC(input,form,onResolved){
+  if(!document.getElementById('qsac-css')){const st=document.createElement('style');st.id='qsac-css';st.textContent=
+    '.qsac{list-style:none;margin:6px 0 0;padding:4px;border:1px solid var(--line);border-radius:12px;background:var(--raised,var(--card));box-shadow:0 10px 28px rgba(20,16,10,.12);max-width:100%;min-width:0}'+
+    '.qsac[hidden]{display:none}.qsac .hd{font:500 11px/1.3 var(--mono,monospace);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 10px 4px}'+
+    '.qsac li[role=option]{display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:8px;cursor:pointer;min-width:0}'+
+    '.qsac li[role=option] b{font-weight:500;color:var(--fg,var(--ink));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+    '.qsac li[role=option] small{color:var(--muted);font-size:12.5px}'+
+    '.qsac li[aria-selected=true],.qsac li[role=option]:hover{background:color-mix(in srgb,var(--sun,#d9731a) 14%,transparent)}';document.head.appendChild(st);}
+  const box=document.createElement('ul'); box.className='qsac'; box.setAttribute('role','listbox'); box.hidden=true; box.id='qsac-'+Math.random().toString(36).slice(2,7);
+  form.insertAdjacentElement('afterend',box);
+  input.setAttribute('autocomplete','off'); input.setAttribute('role','combobox'); input.setAttribute('aria-autocomplete','list'); input.setAttribute('aria-controls',box.id); input.setAttribute('aria-expanded','false');
+  let items=[], act=-1, picked=null, tok=0, t=null;
+  const isCoords=v=>/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(v);
+  const toGeo=f=>({lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],label:f.properties.label});
+  async function search(q,limit,auto){const r=await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit='+limit+(auto?'&autocomplete=1':''));if(!r.ok)throw new Error('BAN '+r.status);const j=await r.json();return j.features||[];}
+  function close(){box.hidden=true;input.setAttribute('aria-expanded','false');act=-1;}
+  function render(list,head){
+    items=list; act=-1; box.innerHTML=''; if(!list.length){close();return;}
+    if(head){const h=document.createElement('li');h.className='hd';h.textContent=head;box.appendChild(h);}
+    list.forEach((f,i)=>{const p=f.properties,li=document.createElement('li');li.setAttribute('role','option');li.id=box.id+'-'+i;
+      const b=document.createElement('b');b.textContent=p.name||p.label;const s=document.createElement('small');s.textContent=[p.postcode,p.city].filter(Boolean).join(' ')+(p.context?' · '+p.context.split(',').slice(-1)[0].trim():'');
+      li.append(b,s);li.addEventListener('mousedown',e=>{e.preventDefault();choose(i);});box.appendChild(li);});
+    box.hidden=false; input.setAttribute('aria-expanded','true');
+  }
+  function mark(){[...box.querySelectorAll('li[role=option]')].forEach((li,i)=>li.setAttribute('aria-selected',i===act?'true':'false'));input.setAttribute('aria-activedescendant',act>=0?box.id+'-'+act:'');}
+  function choose(i){const f=items[i];if(!f)return;picked=toGeo(f);input.value=picked.label;close();onResolved(picked);}
+  input.addEventListener('input',()=>{picked=null;clearTimeout(t);const v=input.value.trim();if(v.length<4||isCoords(v)){close();return;}
+    const my=++tok;t=setTimeout(async()=>{try{const fs=await search(v,5,true);if(my===tok&&document.activeElement===input)render(fs);}catch(_){}},180);});
+  input.addEventListener('keydown',e=>{if(box.hidden||!items.length)return;
+    if(e.key==='ArrowDown'){e.preventDefault();act=(act+1)%items.length;mark();}
+    else if(e.key==='ArrowUp'){e.preventDefault();act=(act-1+items.length)%items.length;mark();}
+    else if(e.key==='Enter'&&act>=0){e.preventDefault();choose(act);}
+    else if(e.key==='Escape'){close();}});
+  input.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==input)close();},150));
+  // validating without a suggestion: go straight on only when the answer is unambiguous
+  async function resolve(){
+    const v=input.value.trim(); if(!v)return null;
+    if(picked&&picked.label===v)return picked;
+    if(isCoords(v)){const m=v.split(',');return {lat:+m[0],lon:+m[1],label:v};}
+    ++tok; clearTimeout(t);
+    const fs=await search(v,6,false); if(!fs.length)throw new Error('Adresse introuvable — précisez la ville ou le code postal.');
+    const top=fs[0].properties.score||0, close_=fs.filter(f=>(f.properties.score||0)>=top-0.12);
+    const towns=new Set(close_.map(f=>f.properties.citycode||f.properties.city));
+    if(top<0.5||towns.size>1){render(fs.filter((f,i,a)=>a.findIndex(g=>g.properties.label===f.properties.label)===i),'Plusieurs adresses correspondent — laquelle ?');input.focus();return null;}
+    picked=toGeo(fs[0]); input.value=picked.label; return picked;
+  }
+  return {resolve,close};
+}
+
+function goTool(g){try{sessionStorage.setItem('qs-pending',g.label);sessionStorage.setItem('qs-pending-geo',JSON.stringify(g));}catch(_){}location.href='../toit.html';}
+const ac=qsAddressAC(document.getElementById('addr'),document.getElementById('f'),goTool);
+document.getElementById('f').addEventListener('submit',async e=>{e.preventDefault();const i=document.getElementById('addr');i.setCustomValidity('');try{const g=await ac.resolve();if(g)goTool(g);}catch(err){i.setCustomValidity(err.message);i.reportValidity();}});
+document.getElementById('addr').addEventListener('input',e=>e.target.setCustomValidity(''));
+
+/* the animated diagram: a house with two pans (south and north, 35°), the sun crossing one day at 46° N
+   (21 June, 20 March, 21 December in turn); each pan takes the colour of the power it receives at that moment */
+(function(){
+  if(!window.THREE)return;
+  const cv=document.getElementById('cv'), read=document.getElementById('read');
+  const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true}); R.setPixelRatio(Math.min(2,devicePixelRatio||1)); R.shadowMap.enabled=true; R.shadowMap.type=THREE.PCFSoftShadowMap;
+  const sc=new THREE.Scene(), cam=new THREE.PerspectiveCamera(30,1,1,200);
+  cam.up.set(0,0,1); cam.position.set(19,-24,15); cam.lookAt(0,0,2.4);
+  const css=()=>getComputedStyle(document.documentElement);
+  const ground=new THREE.Mesh(new THREE.CircleGeometry(13,64),new THREE.MeshLambertMaterial({color:0xffffff})); ground.receiveShadow=true; sc.add(ground);
+  const hemi=new THREE.HemisphereLight(0xffffff,0xffffff,0.55); sc.add(hemi);
+  const sunL=new THREE.DirectionalLight(0xffffff,0.75); sunL.castShadow=true; sunL.shadow.mapSize.set(1024,1024); const sh=sunL.shadow.camera; sh.left=-14;sh.right=14;sh.top=14;sh.bottom=-14;sh.near=1;sh.far=80; sc.add(sunL); sc.add(sunL.target);
+  /* house 8 m (east-west) x 6 m, walls 3 m, ridge east-west: one pan faces south, one north */
+  const W=8,D=6,H=3,T=35*Math.PI/180,rise=D/2*Math.tan(T);
+  const walls=new THREE.Mesh(new THREE.BoxGeometry(W,D,H),new THREE.MeshLambertMaterial({color:0xf3eee6})); walls.position.z=H/2; walls.castShadow=walls.receiveShadow=true; sc.add(walls);
+  const gab=new THREE.BufferGeometry(); gab.setAttribute('position',new THREE.Float32BufferAttribute([-W/2,-D/2,H,-W/2,D/2,H,-W/2,0,H+rise, W/2,D/2,H,W/2,-D/2,H,W/2,0,H+rise],3)); gab.computeVertexNormals();
+  const gm=new THREE.Mesh(gab,new THREE.MeshLambertMaterial({color:0xf3eee6,side:THREE.DoubleSide})); gm.castShadow=true; sc.add(gm);
+  const pan=(sgn)=>{const o=0.35,g=new THREE.BufferGeometry();const y0=sgn*(D/2+o*Math.cos(T)),z0=H-o*Math.sin(T);
+    g.setAttribute('position',new THREE.Float32BufferAttribute([-W/2-o,y0,z0, W/2+o,y0,z0, W/2+o,0,H+rise, -W/2-o,0,H+rise],3)); g.setIndex(sgn<0?[0,1,2,0,2,3]:[0,2,1,0,3,2]); g.computeVertexNormals();
+    const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:0xcccccc,side:THREE.DoubleSide})); m.castShadow=true; sc.add(m);
+    const e=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0x2a1f17,transparent:true,opacity:.55})); sc.add(e); return m;};
+  const south=pan(-1), north=pan(1);
+  const nS=[0,-Math.sin(T),Math.cos(T)], nN=[0,Math.sin(T),Math.cos(T)];
+  const sun=new THREE.Mesh(new THREE.SphereGeometry(0.75,24,16),new THREE.MeshBasicMaterial({color:0xe8772e})); sc.add(sun);
+  const pathG=new THREE.BufferGeometry(), path=new THREE.Line(pathG,new THREE.LineDashedMaterial({color:0xe8772e,dashSize:0.5,gapSize:0.4,transparent:true,opacity:.6})); sc.add(path);
+  const rays=[]; for(let k=0;k<5;k++){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xe8772e,transparent:true,opacity:.35}));sc.add(l);rays.push(l);}
+  const RAMP=[[0,[43,26,79]],[0.25,[106,44,112]],[0.5,[193,64,74]],[0.75,[240,138,36]],[1,[253,225,90]]];
+  const ramp=t=>{t=Math.max(0,Math.min(1,t));for(let i=1;i<RAMP.length;i++){if(t<=RAMP[i][0]){const [a,ca]=RAMP[i-1],[b,cb]=RAMP[i];const u=(t-a)/(b-a);return new THREE.Color(...ca.map((v,k)=>(v+(cb[k]-v)*u)/255));}}return new THREE.Color(1,.88,.35);};
+  const lat=46*Math.PI/180, DAYS=[['21 juin',23.44],['20 mars',0],['21 déc.',-23.44]];
+  const sunAt=(dec,h)=>{const d=dec*Math.PI/180,sa=Math.sin(lat)*Math.sin(d)+Math.cos(lat)*Math.cos(d)*Math.cos(h),alt=Math.asin(sa);
+    const az=Math.atan2(Math.sin(h),Math.cos(h)*Math.sin(lat)-Math.tan(d)*Math.cos(lat))+Math.PI; return {alt,az};};
+  const vec=(s,r)=>new THREE.Vector3(Math.cos(s.alt)*Math.sin(s.az)*r,Math.cos(s.alt)*Math.cos(s.az)*r,Math.sin(s.alt)*r);
+  const dni=alt=>{if(alt<=0)return 0;const e=alt*180/Math.PI,am=1/(Math.sin(alt)+0.50572*Math.pow(e+6.07995,-1.6364));return 1361*Math.pow(0.7,Math.pow(am,0.678));};
+  const pw=(n,s)=>{const v=[Math.cos(s.alt)*Math.sin(s.az),Math.cos(s.alt)*Math.cos(s.az),Math.sin(s.alt)],c=v[0]*n[0]+v[1]*n[1]+v[2]*n[2],b=dni(s.alt);return Math.max(0,c)*b+0.1*b*(1+n[2])/2;};
+  function size(){const r=cv.getBoundingClientRect();R.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.updateProjectionMatrix();}
+  size(); addEventListener('resize',size);
+  const theme=()=>{const c=css(),bg=c.getPropertyValue('--bg').trim(),dark=document.documentElement.dataset.theme==='dark'||(!document.documentElement.dataset.theme&&matchMedia('(prefers-color-scheme: dark)').matches);
+    ground.material.color.set(dark?0x24221f:0xece6dc); walls.material.color.set(dark?0x3a3631:0xf6f1e9); gm.material.color.copy(walls.material.color);};
+  theme(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
+  const DUR=6.2, PAUSE=0.9, still=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let cur=-1, H0=0;
+  function setDay(i){cur=i;const dec=DAYS[i][1]*Math.PI/180;H0=Math.acos(Math.max(-1,Math.min(1,-Math.tan(lat)*Math.tan(dec))));
+    const pts=[];for(let k=0;k<=64;k++){const h=-H0+2*H0*k/64;pts.push(vec(sunAt(DAYS[i][1],h),22));}pathG.setFromPoints(pts);path.computeLineDistances();}
+  const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; /* smooth in and out */
+  const t0=performance.now();
+  function frame(now){
+    const T_=(now-t0)/1000, cyc=DUR+PAUSE, k=Math.floor(T_/cyc)%3, u=still?0.5:Math.min(1,(T_%cyc)/DUR);
+    if(k!==cur)setDay(k);
+    const h=-H0+2*H0*ease(u), s=sunAt(DAYS[k][1],h), p=vec(s,22);
+    sun.position.copy(p); sunL.position.copy(vec(s,40)); sunL.target.position.set(0,0,0);
+    const pS=pw(nS,s),pN=pw(nN,s); south.material.color.copy(ramp(pS/1000)); north.material.color.copy(ramp(pN/1000));
+    const roofPts=[[-2.5,-1.6],[0,-1.6],[2.5,-1.6],[-1.2,-0.6],[1.2,-0.6]];
+    rays.forEach((l,i)=>{const [x,y]=roofPts[i],z=H+rise*(1-Math.abs(y)/(D/2)),a=l.geometry.attributes.position;const d=new THREE.Vector3(x,y,z).add(vec(s,9));a.setXYZ(0,d.x,d.y,d.z);a.setXYZ(1,x,y,z);a.needsUpdate=true;l.visible=s.alt>0.02&&pS>40;});
+    const m5=Math.round((720+h/(Math.PI/12)*60)/5)*5, hh=Math.floor(m5/60), mm=m5%60;
+    read.innerHTML=`${DAYS[k][0]} · ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} solaire — pan sud <b>${Math.round(pS)} W/m²</b> · pan nord <b>${Math.round(pN)} W/m²</b>`;
+    R.render(sc,cam); if(!still)requestAnimationFrame(frame);}
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
