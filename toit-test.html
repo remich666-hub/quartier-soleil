@@ -3537,6 +3537,30 @@ function roofModel(R){
     let e2=0,n=0,inl=0; pts.forEach(c=>{let z=zFit(F,c.x,c.y);subs.forEach(sb=>{if(pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y}))))z=Math.max(z,zFit(sb.F,c.x,c.y));});const r=c.z-z;if(Math.abs(r)<0.3){e2+=r*r;inl++;}n++;});
     const rms=Math.sqrt(e2/Math.max(1,inl)),fi=inl/Math.max(1,n),pen={flat:0,shed:0.05,gable:0.015,gable2:0.025,hip:0.03}[F.best.c.k]||0;
     return {subs,dbg:dbg.join(' '),score:rms*(1+2*(1-fi))+pen+0.04*subs.length};};
+  /* cutting a volume where the laser says it is two: a block of points clearly above or below the fitted roof that runs along
+     one side of the volume (a lower lean-to, the next house of a terrace) becomes its own volume, cut by a line parallel to that side */
+  for(let pass=0,cuts=0;pass<8&&cuts<8;pass++){let changed=false;
+    for(let qi=0;qi<pieces.length&&!changed;qi++){const pc=pieces[qi];if(pc.F.best.score>=9)continue;const Pp=pc.P.map(([x,y])=>({x,y}));
+      const pts=C.filter(c=>pointInPoly(c.x,c.y,Pp)); if(pts.length<20)continue;
+      const ax=pc.F.E[0].t,U=(x,y)=>x*ax[0]+y*ax[1],V=(x,y)=>-x*ax[1]+y*ax[0];let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;pc.P.forEach(([x,y])=>{u0=Math.min(u0,U(x,y));u1=Math.max(u1,U(x,y));v0=Math.min(v0,V(x,y));v1=Math.max(v1,V(x,y));});
+      for(const sg of [1,-1]){if(changed)break;
+        const off=pts.filter(c=>sg*(c.z-zFit(pc.F,c.x,c.y))>0.6); if(off.length*s*s<4)continue;
+        const key=c=>Math.round(c.x/s)+','+Math.round(c.y/s),map=new Map();off.forEach(c=>map.set(key(c),c));const seen=new Set(),groups=[];
+        off.forEach(c0=>{const k0=key(c0);if(seen.has(k0))return;const g=[],q=[c0];seen.add(k0);while(q.length){const c=q.pop();g.push(c);const i=Math.round(c.x/s),j=Math.round(c.y/s);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const k=(i+di)+','+(j+dj);if(!seen.has(k)&&map.has(k)){seen.add(k);q.push(map.get(k));}}}groups.push(g);});
+        for(const g of groups.filter(g=>g.length*s*s>=4).sort((a,b)=>b.length-a.length)){
+          let cu0=1e9,cu1=-1e9,cv0=1e9,cv1=-1e9;g.forEach(c=>{const u=U(c.x,c.y),v=V(c.x,c.y);cu0=Math.min(cu0,u);cu1=Math.max(cu1,u);cv0=Math.min(cv0,v);cv1=Math.max(cv1,v);});
+          const opts=[];const su=(cu1-cu0)/(u1-u0),sv=(cv1-cv0)/(v1-v0);
+          if(cv0-v0<1.2&&su>0.5)opts.push(['v',cv1+s/2]); if(v1-cv1<1.2&&su>0.5)opts.push(['v',cv0-s/2]);
+          if(cu0-u0<1.2&&sv>0.5)opts.push(['u',cu1+s/2]); if(u1-cu1<1.2&&sv>0.5)opts.push(['u',cu0-s/2]);
+          let done=false;
+          for(const [ax_,t] of opts){const f=ax_==='v'?(p=>V(p[0],p[1])-t):(p=>U(p[0],p[1])-t);
+            let A=MK.clipHalf(pc.P,f),B=MK.clipHalf(pc.P,p=>-f(p)); if(A.length<3||B.length<3)continue; A=MK.clean(A,0.05);B=MK.clean(B,0.05); if(!A||!B)continue;
+            if(Math.abs(MK.area(A))<6||Math.abs(MK.area(B))<6)continue; if((ax_==='v'?Math.min(t-v0,v1-t):Math.min(t-u0,u1-t))<1.5)continue;
+            const FA=fitPiece(A,pc.bk.top),FB=fitPiece(B,pc.bk.top); if(FA.best.score>=9||FB.best.score>=9)continue;
+            const old=pc.F.best.score, nw=(FA.best.score*FA.np+FB.best.score*FB.np)/Math.max(1,FA.np+FB.np);
+            if(nw<old-0.03){pieces.splice(qi,1,{P:A,bk:pc.bk,F:FA,cut:true},{P:B,bk:pc.bk,F:FB,cut:true});changed=true;cuts++;done=true;break;}}
+          if(done)break;}}}
+    if(!changed)break;}
   const subs=[];
   pieces.forEach(pc=>{if(pc.F.best.score>=9)return;
     /* the main roof is chosen together with its additions: a 2-pan roof plus a cross gable beats a hip roof that half-explains both */
