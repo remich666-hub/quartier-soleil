@@ -671,10 +671,14 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr){
   TP.forEach(t=>{g.fillStyle='#'+t.col.getHexString();path([t.outer].concat(t.holes));g.fill('evenodd');});
   // open ground only: buildings punched out of a mask
   const mk=document.createElement('canvas');mk.width=mk.height=N;const mg=mk.getContext('2d');mg.fillStyle='#fff';
-  TP.forEach(t=>{if(t.garden===false)return;mg.beginPath();[t.outer].concat(t.holes).forEach(r=>{r.forEach((q,i)=>i?mg.lineTo(X(q.x),Y(q.y)):mg.moveTo(X(q.x),Y(q.y)));mg.closePath();});mg.fill('evenodd');});
+  TP.forEach(t=>{mg.beginPath();[t.outer].concat(t.holes).forEach(r=>{r.forEach((q,i)=>i?mg.lineTo(X(q.x),Y(q.y)):mg.moveTo(X(q.x),Y(q.y)));mg.closePath();});mg.fill('evenodd');});
   mg.globalCompositeOperation='destination-out';mg.fillStyle='#000';
   S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;mg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>i?mg.lineTo(X(q.x),Y(q.y)):mg.moveTo(X(q.x),Y(q.y)));mg.closePath();});mg.fill('evenodd');});
   const md=mg.getImageData(0,0,N,N).data, img=g.getImageData(0,0,N,N), id=img.data;
+  // big unbuilt parcels (squares, public gardens, fields): their lawns are drawn, but not the 'light ground' read from the photo
+  // (cars, shadows, mixed paving there make ragged patches) — a mask of the parcels that are not that
+  const big=TP.filter(t=>t.garden===false); let gd=null; if(big.length){const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.fillStyle='#fff';
+    big.forEach(t=>{g2.beginPath();[t.outer].concat(t.holes).forEach(r=>{r.forEach((q,i)=>i?g2.lineTo(X(q.x),Y(q.y)):g2.moveTo(X(q.x),Y(q.y)));g2.closePath();});g2.fill('evenodd');}); gd=g2.getImageData(0,0,N,N).data;}
   // classify — only what is reliable: 1 lawn, 2 light mineral (terraces, paths, gravel), 4 pool. Anything else, shadows included,
   // keeps the soft lot tint (no more dark "waste ground" patches made of the buildings' shadows on the photo)
   const lim=(DETAIL_R+20)/px, c0=N/2, cls=new Uint8Array(N*N);
@@ -690,7 +694,7 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr){
     const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.filter=`blur(${blurPx}px)`;g2.drawImage(c1,0,0);
     const d=g2.getImageData(0,0,N,N).data,out=new Float32Array(N*N);for(let k=0;k<N*N;k++){const v=d[k*4+3]/255;out[k]=Math.max(0,Math.min(1,(v-0.5)*9+0.5));}return out;};
   const paint=(m,col)=>{for(let k=0;k<N*N;k++){const a=m[k]*(md[k*4+3]>127?1:0);if(a<=0)continue;id[k*4]+= (col[0]-id[k*4])*a;id[k*4+1]+=(col[1]-id[k*4+1])*a;id[k*4+2]+=(col[2]-id[k*4+2])*a;}};
-  const bp=Math.max(2,Math.round(0.6/px)); const m2=shape(2,bp); paint(shape(1,bp),[205,219,185]); paint(m2,[235,230,220]);
+  const bp=Math.max(2,Math.round(0.6/px)); const m2=shape(2,bp); paint(shape(1,bp),[205,219,185]); if(gd)for(let k=0;k<N*N;k++)if(gd[k*4+3]>127)m2[k]=0; paint(m2,[235,230,220]);
   g.putImageData(img,0,0);
   // pools: each connected blue patch ≥ 8 m² becomes a clean shape — an oriented rounded rectangle when it is one (most are),
   // a smoothed blob otherwise — with a thin light coping, like on an architect's plan
