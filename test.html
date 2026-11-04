@@ -1327,19 +1327,19 @@ function classifyTrees(){ // sets s.ev (evergreen) on every tree spot; returns t
   return changed;
 }
 function setLeafTarget(now){const t=leafOffAt(S.doy);if(Math.abs(t-LEAF.to)>0.001){LEAF.from=LEAF.cur;LEAF.to=t;LEAF.t0=now||performance.now();}}
-const LEAFU={uCut:{value:0},uTint:{value:new THREE.Color(1,1,1)},uTintK:{value:0}};
-const TINT={ochre:new THREE.Color(0.82,0.60,0.34),bare:new THREE.Color(0.68,0.62,0.55),spring:new THREE.Color(0.74,0.86,0.58)};
+const LEAFU={uCell:{value:16},uCut:{value:0},uTint:{value:new THREE.Color(1,1,1)},uTintK:{value:0}};
+const TINT={ochre:new THREE.Color(0.82,0.60,0.34),bare:new THREE.Color(0.56,0.50,0.44),spring:new THREE.Color(0.74,0.86,0.58)};
 function applyLeaf(){const L=LEAF.cur; if(!treeCrownD)return;
   // crowns thin out into a sieve of twigs (a hashed share of their surface is dropped) and change colour:
   // autumn green → ochre → grey-brown bare wood; spring bare wood → tender green
-  LEAFU.uCut.value=L*0.62; treeCrownD.userData.cut.value=L*BARE_T;
+  LEAFU.uCut.value=L*0.84; treeCrownD.userData.cut.value=L*BARE_T;
   if(S.doy>200){if(L<0.55){LEAFU.uTint.value.copy(TINT.ochre);LEAFU.uTintK.value=ss01(L/0.35)*0.85;}else{LEAFU.uTint.value.copy(TINT.ochre).lerp(TINT.bare,ss01((L-0.55)/0.4));LEAFU.uTintK.value=0.85+0.15*ss01((L-0.55)/0.4);}}
   else{LEAFU.uTint.value.copy(TINT.spring).lerp(TINT.bare,ss01(L));LEAFU.uTintK.value=Math.min(1,L*2.5);}
   if(treeBranch)treeBranch.visible=L>0.03;}
 function crownDMat(){ // deciduous crown: opaque, double-sided, sieved and tinted by the season (no transparency sorting)
   const m=new THREE.MeshLambertMaterial({color:0xffffff,side:THREE.DoubleSide});
   m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,LEAFU);
-    sh.vertexShader='varying vec3 vQsL;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n vQsL=position*9.0;\n#ifdef USE_INSTANCING\n vQsL+=instanceMatrix[3].xyz*0.37;\n#endif');
+    sh.vertexShader='uniform float uCell; varying vec3 vQsL;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\n vQsL=position*uCell;\n#ifdef USE_INSTANCING\n vQsL+=instanceMatrix[3].xyz*0.37;\n#endif');
     sh.fragmentShader='uniform float uCut,uTintK; uniform vec3 uTint; varying vec3 vQsL;\n'+sh.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n if(fract(sin(dot(floor(vQsL),vec3(12.9898,78.233,37.719)))*43758.5453)<uCut) discard;\n diffuseColor.rgb=mix(diffuseColor.rgb,uTint,uTintK);');};
   m.customProgramCacheKey=()=>'qscrownD'; return m;}
 let treeBranch=null, branchGeo=null;
@@ -1370,7 +1370,7 @@ function rebuildTrees(){
   const nE=spots.filter(s=>s.ev).length, nD=spots.length-nE;
   treeCrown=new THREE.InstancedMesh(crownGeo,new THREE.MeshLambertMaterial({color:0xffffff}),Math.max(1,nE)); treeCrown.count=nE;
   treeCrownD=new THREE.InstancedMesh(crownGeo,crownDMat(),Math.max(1,nD)); treeCrownD.count=nD;
-  if(!branchGeo)branchGeo=makeBranchGeo(); treeBranch=new THREE.InstancedMesh(branchGeo,new THREE.MeshLambertMaterial({color:0xa89b8b}),Math.max(1,nD)); treeBranch.count=nD; treeBranch.visible=false;
+  if(!branchGeo)branchGeo=makeBranchGeo(); treeBranch=new THREE.InstancedMesh(branchGeo,new THREE.MeshLambertMaterial({color:0x9a8c7c}),Math.max(1,nD)); treeBranch.count=nD; treeBranch.visible=false;
   // bare branches cast a lighter shadow: the shadow pass drops a hashed share of the crown's fragments
   const cut={value:0}; treeCrownD.userData.cut=cut;
   const dm=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking});
@@ -2465,7 +2465,7 @@ function frame(now){
   renderer.render(scene,camera); requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.QS={terrainZ,S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown},get treesD(){return treeCrownD},LEAF,classifyTrees};
+window.QS={terrainZ,S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown},get treesD(){return treeCrownD},LEAF,LEAFU,classifyTrees};
 update(); load($('addr').value);
 })();
 </script>
