@@ -3038,7 +3038,9 @@ let roofRaf=0; function roofRenderSoon(){if(roofRaf)return;roofRaf=requestAnimat
 function roofFrame(obj){const u=obj.userData,bb=obj.geometry.boundingBox||(obj.geometry.computeBoundingBox(),obj.geometry.boundingBox);
   const cx=(bb.min.x+bb.max.x)/2,cy=(bb.min.y+bb.max.y)/2,diag=Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y);
   camTw={t0:performance.now(),dur:1400,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(cx,cy,u.zBase+(u.ridge||u.h)),th:cam.theta,ph:0.95,d:Math.max(isPhone()?34:26,diag*(isPhone()?2:1.5))}};}
-function roofAuto(){const t=S.addrTarget; if(!t||S.building||t.userData.monu||S.meshes.indexOf(t)<0)return; selectBuilding(t); roofFrame(t);}
+async function roofAuto(){ /* waits for the laser rebuild of the buildings (it replaces them) before picking the address's one */
+  const T0=S.T; for(let i=0;i<100&&!S.lidarBuilt;i++){await new Promise(r=>setTimeout(r,200));if(S.T!==T0)return;}
+  const t=S.addrTarget; if(!t||S.building||t.userData.monu||S.meshes.indexOf(t)<0)return; selectBuilding(t); roofFrame(t);}
 
 /* ---------- facets: the roof as the laser sees it, pan by pan ----------
    1. region growing on the 50 cm cells: neighbours join a pan when their slope agrees (< 14°) and they lie on its plane (< 30 cm);
@@ -3112,7 +3114,7 @@ function roofFacets(R){
       const g={quads:[],a:0,nx,ny,mx:0,my:0,mz:0}; const st=Math.max(r*2,L/Math.ceil(L/0.25));
       let prev=null; for(let t=0;t<=L+1e-6;t+=st){const x=p.x+(q.x-p.x)*t/L,y=p.y+(q.y-p.y)*t/L,ix=Math.floor((x-nx*0.4-X0)/r),iy=Math.floor((y-ny*0.4-Y0)/r);
         const lb=(ix>=0&&iy>=0&&ix<hx&&iy<hy)?hl[iy*hx+ix]:-1; const zr=lb>=0?zOf(regs[lb],x,y):null; const cur={x,y,zr};
-        if(prev&&prev.zr!=null&&cur.zr!=null&&(prev.zr-bk.top>0.35||cur.zr-bk.top>0.35)){const z0=bk.top,za=Math.max(z0,prev.zr),zb=Math.max(z0,cur.zr);
+        if(prev&&prev.zr!=null&&cur.zr!=null&&(prev.zr-bk.top>0.9||cur.zr-bk.top>0.9)){const z0=bk.top,za=Math.max(z0,prev.zr),zb=Math.max(z0,cur.zr);
           g.quads.push([[prev.x,prev.y,z0],[x,y,z0],[x,y,zb],[prev.x,prev.y,za]]);const ar=st*((za+zb)/2-z0);g.a+=ar;g.mx+=(prev.x+x)/2*ar;g.my+=(prev.y+y)/2*ar;g.mz+=(z0+(za+zb)/2)/2*ar;}
         prev=cur;}
       if(g.a>0.8){g.nx*=g.a;g.ny*=g.a;gables.push(g);}}});
