@@ -64,8 +64,11 @@ button.link:hover{color:var(--fg);background:none}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .status{font-size:13px;color:var(--ink2);min-height:1.2em}
 .status.err{color:var(--bad)}
-.addrDone{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
-.addrDone .a{font-weight:500;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.addrDone{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.addrDone .aw{min-width:0;display:flex;flex-direction:column;gap:2px}
+.addrDone .a{font-weight:500;font-size:15px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}
+.addrDone .s{font-size:13px;color:var(--ink2)}
+.addrDone button.link{flex:none;white-space:nowrap}
 .hintBox{display:flex;gap:12px;align-items:flex-start;background:var(--raised);border-radius:12px;padding:14px;color:var(--ink2);font-size:14px}
 .hintBox svg{flex:none;width:22px;height:22px;color:var(--accent)}
 .stepper{display:grid;grid-template-columns:40px 1fr 40px;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
@@ -178,7 +181,7 @@ button.link:hover{color:var(--fg);background:none}
         <div>Vos adresses ne sont enregistrées que sur cet appareil. <button class="link" type="button" id="wipe">Effacer mes données</button></div>
       </div>
 
-      <div class="addrDone" id="addrDone" hidden><span class="a" id="addrDoneText"></span><button class="link" type="button" id="addrChange">Changer d'adresse</button></div>
+      <div class="addrDone" id="addrDone" hidden><span class="aw"><span class="a" id="addrDoneText"></span><span class="s" id="addrSide" hidden></span></span><button class="link" type="button" id="addrChange">Changer d'adresse</button></div>
       <div class="step collapsible" id="stepAddr">
         <span class="n">01 · Adresse</span>
         <form id="form" class="row">
@@ -1896,7 +1899,7 @@ function facAddr(obj,f){
   }).catch(()=>{if(f._addrK===key)f._addrK=null;});
   return null;}
 function curAddr(){const w=S.win;return (w&&w.facade&&w.obj===S.building&&facAddr(w.obj,w.facade))||S.label||'';}
-function renderAddr(){const w=S.win;const t=w&&w.facade&&w.obj===S.building?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=curAddr()+(t?' · façade '+t:'');}
+function renderAddr(){const w=S.win;const t=w&&w.facade&&w.obj===S.building?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=curAddr();const sd=$('addrSide');sd.textContent=t?'Façade '+t:'';sd.hidden=!t;}
 function selectBuilding(obj){
   S.building=obj; const u=obj.userData;
   $('bInfo').textContent=`${u.h.toFixed(0)} m à l'égout${u.ridge?`, ${u.ridge.toFixed(0)} m au faîtage`:''}${u.floors?`, ${u.floors} étages`:''}${u.usage?`, ${u.usage.toLowerCase()}`:''}`;
@@ -1918,7 +1921,7 @@ function selectBuilding(obj){
   // one highlighted building at a time: the one being studied
   const fam=family(obj); if(S.selMesh&&fam.indexOf(S.selMesh)<0)setHi(S.selMesh,false); if(S.target&&fam.indexOf(S.target)<0)setHi(S.target,false);
   setHi(obj,true); S.selMesh=obj; S.target=obj;
-  $('stepPick').hidden=true; $('stepAddr').hidden=true; $('addrDone').hidden=false; $('addrDoneText').textContent=S.label||''; refreshWinUI();
+  $('stepPick').hidden=true; $('stepAddr').hidden=true; $('addrDone').hidden=false; $('addrDoneText').textContent=S.label||''; $('addrSide').hidden=true; refreshWinUI();
   addressOf(obj);
 }
 function chooseFacade(idx){
