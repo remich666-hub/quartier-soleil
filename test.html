@@ -1869,7 +1869,9 @@ function sideText(side){if(!side)return '';if(side==='cour')return 'côté cour'
 /* the address follows the chosen façade: a building running through the block has one number on each street.
    Ask the national address base around the façade and keep the nearest number on the street the façade looks onto
    (cached on the façade; the building's address is shown meanwhile, and for a courtyard or garden façade) */
-const normSt=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+/* street names differ between IGN and the address base ("Rue de la Vieille Forge" / "Rue Vieille Forge", "Grand'Rue" / "Grand Rue"):
+   compare without accents, punctuation and articles */
+const normSt=s=>' '+String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').replace(/\b(de|du|des|la|le|les|d|l)\b/g,' ').replace(/\s+/g,' ').trim()+' ';
 function facAddr(obj,f){
   const side=sideOf(obj,f); if(!side||side==='cour'||side==='jardin'||side==='la rue')return null;
   const st=normSt(side), key=S.lat+','+S.lon+'|'+st;
