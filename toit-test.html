@@ -3302,7 +3302,7 @@ function roofVector(R){
     else if(sg.kind==='out'){const A=regs[sg.hi];sg.wall=[];const q=[];let nx=0,ny=0;
       for(let k=0;k<K;k++){const p=P[k],o=P[(k+1)%P.length],dx=o[0]-p[0],dy=o[1]-p[1],w=Math.hypot(dx,dy);if(w<0.02)continue;const ox=-dy/w,oy=dx/w; /* outside on the left */
         const mx=(p[0]+o[0])/2-ox*0.3,my=(p[1]+o[1])/2-oy*0.3,bk=(R.blocks||[]).find(b=>pointInPoly(mx-R.sh.dx,my-R.sh.dy,b.r)); if(!bk)continue; const top=bk.top;
-        const za=zOf(A,p[0],p[1]),zb=zOf(A,o[0],o[1]); if(Math.max(za,zb)-top<0.9)continue;
+        const za=zOf(A,p[0],p[1]),zb=zOf(A,o[0],o[1]); if(Math.max(za,zb)-top<0.9||Math.abs(za-zb)<0.4)continue; /* a gable: the roof edge climbs along the wall (an eave wall is only the IGN height being off) */
         let pa=p,pb=o,ya=za,yb=zb; if(za<top){const t=(top-za)/(zb-za);pa=[p[0]+dx*t,p[1]+dy*t];ya=top;} if(zb<top){const t=(top-za)/(zb-za);pb=[p[0]+dx*t,p[1]+dy*t];yb=top;}
         q.push([[pa[0],pa[1],top],[pb[0],pb[1],top],[pb[0],pb[1],yb],[pa[0],pa[1],ya]]);nx+=ox*w;ny+=oy*w;}
       if(q.length)mkV(q,nx,ny);}});
@@ -3318,6 +3318,8 @@ function rfMeshVec(R){
   VEC.shapes.forEach(sh=>{let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;sh.outer.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);});
     for(let j=Math.max(0,Math.floor((y0-cy0)/tr)-1);j<=Math.min(ny-1,Math.ceil((y1-cy0)/tr)+1);j++)for(let i=Math.max(0,Math.floor((x0-cx0)/tr)-1);i<=Math.min(nx-1,Math.ceil((x1-cx0)/tr)+1);i++){
       const x=cx0+i*tr,y=cy0+j*tr; if(pointInPoly(x,y,sh.P)&&!sh.H.some(h=>pointInPoly(x,y,h)))rp[j*nx+i]=sh.A;}});
+  /* pixels right on a border: the pan of a neighbouring pixel */
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i;if(rp[k]>=0)continue;const x=cx0+i*tr,y=cy0+j*tr;for(const sh of VEC.shapes){if([[tr*0.45,0],[-tr*0.45,0],[0,tr*0.45],[0,-tr*0.45]].some(([dx,dy])=>pointInPoly(x+dx,y+dy,sh.P))){rp[k]=sh.A;break;}}}
   const LL=(x,y)=>{const i=Math.floor((x-VEC.LX0)/VEC.lr),j=Math.floor((y-VEC.LY0)/VEC.lr);return (i<0||j<0||i>=VEC.lhx||j>=VEC.lhy)?-1:VEC.L[j*VEC.lhx+i];};
   if(VEC.rasterRegs.size)for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i;if(rp[k]>=0)continue;const v=LL(cx0+i*tr,cy0+j*tr);if(VEC.rasterRegs.has(v))rp[k]=v;}
   R.cells.forEach((c,ci)=>{const i=Math.round((c.x-cx0)/tr),j=Math.round((c.y-cy0)/tr);if(i>=0&&j>=0&&i<nx&&j<ny)near[j*nx+i]=ci;});
