@@ -914,7 +914,7 @@ let planLayer=null;
 function loadOrtho(lat,lon){
   orthoLayer(ground,groundMat,lat,lon,17,3,0xe9e6df,28);          // 7×7 tiles ≈ 1.4 km, 80 cm/px
   orthoLayer(inner,innerMat,lat,lon,19,3,0,40,(raw,w,e,n,s)=>{ // 7×7 tiles ≈ 350 m, 20 cm/px: enough to find the trees and hedges around the address
-    if(!raw)return; S.rawOrtho={raw,w,e,n,s};  detectCanopy(raw,w,e,n,s).then(det=>{if(!S.rawOrtho||S.rawOrtho.raw!==raw)return;treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}).catch(err=>{console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);});
+    if(!raw||lat!==S.lat||lon!==S.lon)return; /* a photo of the previous address arriving late */ S.rawOrtho={raw,w,e,n,s}; if(S.T)S.T.ortho=performance.now();  detectCanopy(raw,w,e,n,s).then(det=>{if(!S.rawOrtho||S.rawOrtho.raw!==raw)return;treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}).catch(err=>{console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);});
   });
   inner.position.z=ground.position.z+0.06;
 }
@@ -2255,7 +2255,7 @@ async function load(q,at){
     const [alt,feats]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]); const terrain=null;
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
-    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
+    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.rawOrtho=null; S.slopeHouses=[]; S.loading=true; /* nothing of the previous address may feed this one */ S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
     try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
@@ -2602,8 +2602,13 @@ function polyClip(){if(!_pcLib)_pcLib=import('https://cdn.jsdelivr.net/npm/polyg
 setTimeout(()=>polyClip().catch(()=>{}),800);
 let GID=0;
 async function lidarBuildings(){
-  const tok=refineToken; if(!S.lidarP||S.lidarRun===tok)return; S.lidarRun=tok;
-  const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(tok!==refineToken||(!Ff&&!Fc))return; S.mnsF=Ff||null;
+  // cancelled only by a new address (S.T is per load), not by the tree refinement that the photo starts meanwhile:
+  // that used to abort the rebuild half-way whenever the photo arrived during it (no laser buildings, or different ones per load)
+  const L=S.T, gone_=()=>S.T!==L; if(!S.lidarP||S.lidarRun===L)return; S.lidarRun=L;
+  const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(gone_()||(!Ff&&!Fc))return; S.mnsF=Ff||null;
+  // the 20 cm photo tells foliage from roof (a crown over a roof is not a storey): without it the result would depend on which
+  // arrived first, the laser or the photo, and the same address could give different buildings from one load to the next
+  for(let i=0;i<80&&!S.rawOrtho;i++){await new Promise(r=>setTimeout(r,150));if(gone_())return;}
   const green=orthoGreen(); const t0=performance.now(); let n=0;
   const extOf=m=>{let e=0;m.userData.rings[0].forEach(p=>{e=Math.max(e,Math.abs(p.x),Math.abs(p.y));});return e;};
   if(await runPass()===false)return;
@@ -2613,7 +2618,7 @@ async function lidarBuildings(){
     const gone=new Set(),added=[],hiLater=[]; let tc=performance.now();
     const list=S.meshes.filter(m=>!m.userData.lidar).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
     for(const m of list){
-      if(performance.now()-tc>12){await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});tc=performance.now();if(tok!==refineToken)return false;}
+      if(performance.now()-tc>12){await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});tc=performance.now();if(gone_())return false;}
       const u=m.userData;const ext=extOf(m);if(ext>LB_R)continue;
       const F=(Ff&&ext<Ff.R-2)?Ff:Fc;if(!F)continue;
       if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
@@ -2652,7 +2657,7 @@ async function lidarBuildings(){
       if(m===S.building||m===S.selMesh){const nb=nearB(S.win&&S.win.pos?S.win.pos:{x:0,y:0});if(m===S.building)S.building=nb;if(m===S.selMesh)S.selMesh=nb;hiLater.push(nb);}
       n++;
     }
-    if(tok!==refineToken)return false;
+    if(gone_())return false;
     S.meshes=S.meshes.filter(m=>!gone.has(m)).concat(added.filter(b=>b.userData&&b.userData.rings)); hiLater.forEach(m=>setHi(m,true));
     // pitched roofs: IGN ones of replaced buildings dropped, laser-confirmed ones added
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
