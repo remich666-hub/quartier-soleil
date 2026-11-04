@@ -3222,10 +3222,13 @@ $('rMore').addEventListener('click',()=>$('sheet').classList.remove('collapsed')
 
 /* "caméra thermique": the model is drawn dark so that only the studied roof glows; materials are darkened once, as they appear */
 function thermalSky(){try{skyUni.top.value.set(0x0b0a0c);skyUni.horizon.value.set(0x17141a);skyUni.ground.value.set(0x0b0a0c);}catch(e){}}
-function thermalize(){scene.traverse(o=>{if(!(o.isMesh||o.isLine||o.isInstancedMesh||o.isPoints))return;if(o===RF.mesh||o===RF.vmesh||o===RF.lines)return;
-  const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(!m||!m.color||m.userData.thermal||m===sunDisc.material)return;m.userData.thermal=true;
-    /* colours are linear here: ×0.05 is a dark grey on screen (×0.2 would still read as mid grey) */
-    if(o.isLine)m.color.setRGB(0.09,0.08,0.1);else m.color.multiplyScalar(o.material.vertexColors?0.045:0.055);});});}
+function thermalize(){ /* the surroundings in light greys (hue removed), so that only the studied roof is in colour */
+  const grey=(c,k)=>{const L=0.2126*c.r+0.7152*c.g+0.0722*c.b;c.setRGB(L*k,L*k,L*k);};
+  scene.traverse(o=>{if(!(o.isMesh||o.isLine||o.isInstancedMesh||o.isPoints))return;if(o===RF.mesh||o===RF.vmesh||o===RF.lines)return;
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    ms.forEach(m=>{if(!m||!m.color||m.userData.thermal||m===sunDisc.material)return;m.userData.thermal=true;if(o.isLine)m.color.setRGB(0.32,0.32,0.34);else grey(m.color,0.62);});
+    const ca=o.geometry&&o.geometry.attributes&&o.geometry.attributes.color; if(ca&&!ca.__thermal&&ms.some(m=>m&&m.vertexColors)){ca.__thermal=true;const a=ca.array;for(let i=0;i<a.length;i+=3){const L=0.2126*a[i]+0.7152*a[i+1]+0.0722*a[i+2];a[i]=a[i+1]=a[i+2]=L;}ca.needsUpdate=true;}
+    const ic=o.instanceColor; if(ic&&!ic.__thermal){ic.__thermal=true;const a=ic.array;for(let i=0;i<a.length;i+=3){const L=0.2126*a[i]+0.7152*a[i+1]+0.0722*a[i+2];a[i]=a[i+1]=a[i+2]=L;}ic.needsUpdate=true;}});}
 setInterval(thermalize,700);
 
 {const c=wallTex.image,g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);wallTex.needsUpdate=true;} /* plain walls: no windows on this page */
