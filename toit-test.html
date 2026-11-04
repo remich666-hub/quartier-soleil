@@ -2979,10 +2979,27 @@ async function roofWeather(lat,lon){
 /* clear sky: Meinel on the Kasten-Young air mass; diffuse = 10 % of the direct beam (ASHRAE order of magnitude) */
 function clearSky(alt){if(alt<=0)return {dni:0,dhi:0,ghi:0};const e=alt/RAD;const am=1/(Math.sin(alt)+0.50572*Math.pow(e+6.07995,-1.6364));const dni=1361*Math.pow(0.7,Math.pow(am,0.678));const dhi=0.1*dni;return {dni,dhi,ghi:dni*Math.sin(alt)+dhi};}
 const NAZ=72;
+/* laying the IGN outline on the laser: the shift (up to 3 m, 25 cm steps) that puts the measured roof inside the outline and
+   nothing just outside it. Outside samples that fall on a neighbouring building are left out (a party wall is high on both sides). */
+function registerFamily(fam,MH){
+  const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
+  const others=S.meshes.filter(m=>fam.indexOf(m)<0&&m.userData.rings).map(m=>m.userData.rings[0]);
+  const inAny=(x,y,rs)=>rs.some(r=>pointInPoly(x,y,r));
+  const pin=[],pout=[]; let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; rings.forEach(r=>r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
+  for(let x=x0;x<=x1;x+=0.5)for(let y=y0;y<=y1;y+=0.5)if(inAny(x,y,rings))pin.push([x,y]);
+  rings.forEach(r=>{for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[j],b=r[i],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.5)continue;let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;if(pointInPoly((a.x+b.x)/2+nx*0.4,(a.y+b.y)/2+ny*0.4,r)){nx=-nx;ny=-ny;}
+    for(let t=0.25;t<L;t+=0.5){const px=a.x+(b.x-a.x)*t/L,py=a.y+(b.y-a.y)*t/L;[0.75,1.5].forEach(o=>{const qx=px+nx*o,qy=py+ny*o;if(!inAny(qx,qy,rings)&&!inAny(qx,qy,others))pout.push([qx,qy]);});}}});
+  if(pin.length<8)return {dx:0,dy:0};
+  const frac=(pts,dx,dy)=>{let s=0,n=0;for(const [x,y] of pts){const v=MH.at(x+dx,y+dy);if(v!=null){n++;if(v>1.8)s++;}}return n?s/n:0;};
+  const score=(dx,dy)=>frac(pin,dx,dy)-0.8*frac(pout,dx,dy);
+  const s0=score(0,0); let best={dx:0,dy:0,s:s0};
+  for(let dx=-3;dx<=3.001;dx+=0.25)for(let dy=-3;dy<=3.001;dy+=0.25){const sc=score(dx,dy)-0.01*Math.hypot(dx,dy);if(sc>best.s)best={dx,dy,s:sc};}
+  RF.reg={dx:best.dx,dy:best.dy,s0,s:best.s,nin:pin.length,nout:pout.length};
+  return {dx:best.dx,dy:best.dy};}
 function roofCells(obj){
   const F=S.mnsF||(S.lidarR&&S.lidarR.mnsFine), MH=S.lidarR&&S.lidarR.mnh, C=S.lidarR&&S.lidarR.mns; if(!(F||C)||!MH)return null;
   const fam=family(obj), rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]), blocks=fam.filter(m=>m.userData.rings).map(m=>({r:m.userData.rings[0],top:S.alt0+m.userData.zBase+m.userData.h}));
-  const sh=registerFootprint(obj,MH);
+  const sh=registerFamily(fam,MH);
   let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; rings.forEach(r=>r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
   const area=rings.reduce((a,r)=>a+Math.abs(areaOf(r)),0), s=area>500?1:0.5;
   const inF=(x,y)=>F&&Math.abs(x)<F.R-2&&Math.abs(y)<F.R-2;
