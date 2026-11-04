@@ -2961,7 +2961,7 @@ update(); if(!S.startPending)load($('addr').value); // an address handed over by
      E = Σ_h [ DNI·max(0, cos θ)·V + DHI·F_ciel + ρ·GHI·(1 − cos β)/2 ] · 1 h
    DNI, DHI, GHI : rayonnement direct normal, diffus horizontal, global horizontal (Open-Meteo, année réelle),
    ou un ciel clair théorique (Meinel + masse d'air de Kasten-Young, diffus = 10 % du direct). */
-var RF={sel:null,mesh:null,cells:null,mode:'real',wx:new Map(),tok:0};
+var RF={sel:null,mesh:null,cells:null,mode:'real',wx:new Map(),tok:0}; window.__RF=RF;
 const RAMP=[[0,[43,26,79]],[0.25,[106,44,112]],[0.5,[193,64,74]],[0.75,[240,138,36]],[1,[253,225,90]]];
 function rampCol(t){t=Math.max(0,Math.min(1,t));for(let i=1;i<RAMP.length;i++){if(t<=RAMP[i][0]){const [a,ca]=RAMP[i-1],[b,cb]=RAMP[i];const u=(t-a)/(b-a);return ca.map((v,k)=>(v+(cb[k]-v)*u)/255);}}return RAMP[RAMP.length-1][1].map(v=>v/255);}
 const SCALE={real:[700,1700],clear:[1200,2800],instant:[0,1000]};
@@ -3077,7 +3077,7 @@ async function roofSelect(obj){
   $('rBigC').textContent='Calcul en cours : une année heure par heure…';
   const W=await wP; if(tok!==RF.tok)return;
   RF.W=W; if(!W){ $('rNote').textContent='Météo réelle indisponible : affichage par ciel clair.'; RF.mode=RF.mode==='real'?'clear':RF.mode; }
-  const WW=W||{Y:'',t:clearYearTimes(),dni:[],dhi:[],ghi:[]}; roofYear(R,WW); if(R.V.cells.length)roofYear(R.V,WW); RF.cells=R; roofRender(); requestAnimationFrame(()=>veil(false));
+  const WW=W||{Y:'',t:clearYearTimes(),dni:[],dhi:[],ghi:[]}; roofYear(R,WW); if(R.V.cells.length)roofYear(R.V,WW); RF.cells=R; roofRender(); setTimeout(()=>veil(false),60);
 }
 function clearYearTimes(){const Y=new Date().getFullYear()-1,t0=Date.UTC(Y,0,1,1),o=[];for(let h=0;h<8760;h++)o.push(t0+h*3600e3);return o;}
 $('rSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.m==='real'&&!RF.W){toast('Météo réelle indisponible');return;}RF.mode=b.dataset.m;roofRender();});
@@ -3292,17 +3292,22 @@ function rfMeshVec(R){
   const VEC=R.VEC, F=R.F, s=R.s, A0=S.alt0, regs=F.regs;
   /* energy texture: nearest cell everywhere (the polygons cut the shape) */
   let cx0=1e9,cx1=-1e9,cy0=1e9,cy1=-1e9; VEC.shapes.forEach(sh=>sh.outer.forEach(([x,y])=>{cx0=Math.min(cx0,x);cx1=Math.max(cx1,x);cy0=Math.min(cy0,y);cy1=Math.max(cy1,y);}));
-  cx0-=s;cy0-=s; const nx=Math.round((cx1-cx0)/s)+3, ny=Math.round((cy1-cy0)/s)+3, near=new Int32Array(nx*ny).fill(-1);
-  R.cells.forEach((c,ci)=>{const i=Math.round((c.x-cx0)/s),j=Math.round((c.y-cy0)/s);if(i>=0&&j>=0&&i<nx&&j<ny)near[j*nx+i]=ci;});
-  { const q=[]; for(let k=0;k<near.length;k++)if(near[k]>=0)q.push(k); for(let h=0;h<q.length;h++){const k=q[h],i=k%nx,j=(k-i)/nx;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=nx||b>=ny)continue;const kk=b*nx+a;if(near[kk]>=0)continue;near[kk]=near[k];q.push(kk);}} }
-  const U0=cx0-s/2, V0=cy0-s/2, UW=nx*s, VH=ny*s;
+  /* texture at a quarter of the cell: each pixel takes the nearest cell OF ITS OWN PAN, so the colour breaks exactly on the ridge */
+  const tr=s/4; cx0-=s;cy0-=s; const nx=Math.round((cx1-cx0+2*s)/tr)+1, ny=Math.round((cy1-cy0+2*s)/tr)+1, near=new Int32Array(nx*ny).fill(-1), rp=new Int32Array(nx*ny).fill(-1);
+  VEC.shapes.forEach(sh=>{let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;sh.outer.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);});
+    for(let j=Math.max(0,Math.floor((y0-cy0)/tr)-1);j<=Math.min(ny-1,Math.ceil((y1-cy0)/tr)+1);j++)for(let i=Math.max(0,Math.floor((x0-cx0)/tr)-1);i<=Math.min(nx-1,Math.ceil((x1-cx0)/tr)+1);i++){
+      const x=cx0+i*tr,y=cy0+j*tr; if(pointInPoly(x,y,sh.P)&&!sh.H.some(h=>pointInPoly(x,y,h)))rp[j*nx+i]=sh.A;}});
+  R.cells.forEach((c,ci)=>{const i=Math.round((c.x-cx0)/tr),j=Math.round((c.y-cy0)/tr);if(i>=0&&j>=0&&i<nx&&j<ny)near[j*nx+i]=ci;});
+  for(let pass=0;pass<2;pass++){ const q=[]; for(let k=0;k<near.length;k++)if(near[k]>=0)q.push(k);
+    for(let h=0;h<q.length;h++){const k=q[h],i=k%nx,j=(k-i)/nx,lk=R.cells[near[k]].reg;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=nx||b>=ny)continue;const kk=b*nx+a;if(near[kk]>=0)continue;if(pass===0&&rp[kk]>=0&&rp[kk]!==lk)continue;near[kk]=near[k];q.push(kk);}} }
+  const U0=cx0-tr/2, V0=cy0-tr/2, UW=nx*tr, VH=ny*tr;
   const LD=[-0.42,0.5,0.76], shade=n=>0.72+0.28*Math.max(0,n[0]*LD[0]+n[1]*LD[1]+n[2]*LD[2]);
   const P=[],UV=[],I=[],SH=[];
   VEC.shapes.forEach(sh=>{const g=regs[sh.A],k=shade(g.n);const pts=sh.outer.concat(...sh.holes);let tri;
     try{tri=THREE.ShapeUtils.triangulateShape(sh.outer.map(([x,y])=>new THREE.Vector2(x,y)),sh.holes.map(h=>h.map(([x,y])=>new THREE.Vector2(x,y))));}catch(e){return;}
     const b=P.length/3; pts.forEach(([x,y])=>{P.push(x,y,F.zOf(g,x,y)-A0+0.08);UV.push((x-U0)/UW,(y-V0)/VH);SH.push(k,k,k);}); tri.forEach(t=>I.push(b+t[0],b+t[1],b+t[2]));});
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(UV,2));g.setAttribute('color',new THREE.Float32BufferAttribute(SH,3));g.setIndex(I);
-  const K=Math.max(4,Math.min(16,Math.floor(2048/Math.max(nx,ny)))), small=document.createElement('canvas'), big=document.createElement('canvas'); small.width=nx;small.height=ny;big.width=nx*K;big.height=ny*K;
+  const K=Math.max(2,Math.min(8,Math.floor(2048/Math.max(nx,ny)))), small=document.createElement('canvas'), big=document.createElement('canvas'); small.width=nx;small.height=ny;big.width=nx*K;big.height=ny*K;
   const tex=new THREE.CanvasTexture(big);tex.encoding=THREE.sRGBEncoding;tex.anisotropy=4;
   const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({map:tex,vertexColors:true,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));m.renderOrder=5;scene.add(m);RF.mesh=m;
   RF.grid={nx,ny,near,small,big,K,rings:[]};
