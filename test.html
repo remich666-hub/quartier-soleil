@@ -384,8 +384,8 @@ async function loadLot(lat,lon){ const T0=S.T;
       const votes=new Map();for(let i=0;i<5;i++)for(let j=0;j<5;j++){const x=x0+(x1-x0)*(i+0.5)/5,y=y0+(y1-y0)*(j+0.5)/5;if(!pointInPoly(x,y,R))continue;
         for(const P of (GB.get(gk(Math.floor(x/20),Math.floor(y/20)))||[])){if(x<P.x0||x>P.x1||y<P.y0||y>P.y1||!pointInPoly(x,y,P.r))continue;votes.set(P.id,(votes.get(P.id)||0)+1);break;}}
       if(votes.size){const top=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0][0];par.set(u.bid,new Set([top]));}});
-    ab.forEach(f=>{const p=f.properties;if(p.id_bat&&p.id_adr)(adr.get(p.id_bat)||adr.set(p.id_bat,new Set()).get(p.id_bat)).add(p.id_adr);});
-    if(!par.size)return; const adrPar=new Set(); adr.forEach((_,b)=>{const P=par.get(b);if(P)P.forEach(x=>adrPar.add(x));}); S.lot={par,adr,adrPar}; S.T.lot=performance.now();
+    const adrPt=new Map(); ab.forEach(f=>{const p=f.properties;if(!p.id_bat||!p.id_adr)return;(adr.get(p.id_bat)||adr.set(p.id_bat,new Set()).get(p.id_bat)).add(p.id_adr);const c=f.geometry&&f.geometry.coordinates;if(c&&c[0]&&!adrPt.has(p.id_adr))adrPt.set(p.id_adr,c[0]);});
+    if(!par.size)return; const adrPar=new Set(); const parBats=new Map(); adr.forEach((_,b)=>{const P=par.get(b);if(P)P.forEach(x=>{adrPar.add(x);(parBats.get(x)||parBats.set(x,[]).get(x)).push(b);});}); S.lot={par,adr,adrPar,adrPt,parBats,lab:new Map()}; S.T.lot=performance.now();
     if(S.target)setHi(S.target,false); linkAnnexes(); if(S.target)setHi(S.target,true);
   }catch(e){}}
 /* buildings touching a house that belong to the same lot (garage, shed, veranda: separate IGN footprints) are one selection, one colour.
@@ -1715,7 +1715,8 @@ function pick(e){
   ray.setFromCamera(m,camera); ray.far=Infinity; const hits=ray.intersectObjects(S.meshes,true); // children too: laser roof pans, upper wall pieces
   if(!hits.length){toast('Touchez un bâtiment');return;}
   const hit=hits[0]; let obj=hit.object; const MS=new Set(S.meshes); while(obj&&!MS.has(obj))obj=obj.parent; if(!obj){toast('Touchez un bâtiment');return;}
-  let annexHit=false; if(obj.userData.annexOf&&MS.has(obj.userData.annexOf)){obj=obj.userData.annexOf;annexHit=true;} /* an annex selects its house */ const prevB=S.building, prevWin=S.win;
+  /* the whole lot lights up together; a wall of an annex is still a wall of its own (a roof or a sliver selects the house) */
+  let annexHit=false; if(obj.userData.annexOf&&MS.has(obj.userData.annexOf)&&Math.abs(hit.face.normal.z)>=0.3){obj=obj.userData.annexOf;annexHit=true;} const prevB=S.building, prevWin=S.win;
   if(obj.userData.monu){toast(`${obj.userData.monu} : monument, pas un logement`);return;}
   if(obj!==prevB)selectBuilding(obj);
   const u=obj.userData, fac=u.facades, bl=blindMap(obj);
@@ -1885,7 +1886,22 @@ async function addressOf(obj){
   // centre is often on the other street
   // (after a recentring on another building the centre is no longer the searched address: that building gets its own)
   const own=!S.recentered&&((S.addrTarget&&family(S.addrTarget).includes(obj))||(obj.userData.rings||[]).some(r=>pointInPoly(0,0,r)));
+  S.dep=!!obj.userData.annexOf;
   if(own&&S.addrLabel){S.label=S.addrLabel;renderAddr();return;}
+  /* the address base links each number to its building(s): use it whatever the distance to the address point (often on the road).
+     A building with no number of its own on a parcel whose house has one is that house's dependency */
+  const lot=S.lot, u=obj.userData;
+  if(lot&&u.bid){ const ad=new Set(), addOf=b=>{const A=lot.adr.get(b);if(A)A.forEach(x=>ad.add(x));}; family(obj).forEach(m=>addOf(m.userData.bid));
+    if(!ad.size){const P=lot.par.get(u.bid);let best=null,bd=1e9;
+      if(P)P.forEach(idu=>(lot.parBats.get(idu)||[]).forEach(b=>{const m=S.meshes.find(x=>x.userData.bid===b);if(!m)return;const d=m.geometry.boundingSphere.center.distanceTo(bs.center);if(d<bd){bd=d;best=b;}}));
+      if(best){addOf(best);S.dep=true;}}
+    if(ad.size){ const tg=new Set(); if(S.addrTarget&&!S.recentered)family(S.addrTarget).forEach(m=>{const A=lot.adr.get(m.userData.bid);if(A)A.forEach(x=>tg.add(x));});
+      let id=null,bd=1e9; ad.forEach(x=>{const c=lot.adrPt.get(x);const d=c?Math.hypot((c[0]-lon)*kx,(c[1]-lat)*ky):1e8;if(d<bd){bd=d;id=x;}});
+      if(S.addrLabel&&[...ad].some(x=>tg.has(x))){S.label=S.addrLabel;renderAddr();return;}
+      let lb=lot.lab.get(id); if(!lb){const c=lot.adrPt.get(id); if(c)try{const r=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${c[0].toFixed(6)}&lat=${c[1].toFixed(6)}&type=housenumber&limit=5`);const j=await r.json();
+          const fs=j.features||[]; const f=fs.find(f=>f.properties.id===id)||fs[0]; if(f){lb=f.properties.label;lot.lab.set(id,lb);}}catch(_){} }
+      if(tok!==revTok)return; if(lb){S.label=lb;renderAddr();return;} }
+  }
   try{const r=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon.toFixed(6)}&lat=${lat.toFixed(6)}&type=housenumber&limit=1`);const j=await r.json();if(tok!==revTok)return;
     const f=j.features&&j.features[0]; const d=f?Math.hypot((f.geometry.coordinates[0]-lon)*kx,(f.geometry.coordinates[1]-lat)*ky):1e9;
     S.label=f&&d<Math.max(30,bs.radius+8)?f.properties.label:('Bâtiment voisin de '+S.addrLabel);}catch(_){if(tok!==revTok)return;}
@@ -1936,8 +1952,8 @@ function facAddr(obj,f){
     else f._miss=true;
   }).catch(()=>{if(f._addrK===key)f._addrK=null;});
   return null;}
-function curAddr(){const w=S.win;return (w&&w.facade&&w.obj===S.building&&facAddr(w.obj,w.facade))||S.label||'';}
-function renderAddr(){const w=S.win;const t=w&&w.facade&&w.obj===S.building?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=curAddr();const sd=$('addrSide');sd.textContent=t?'Façade '+t:'';sd.hidden=!t;}
+function curAddr(){const w=S.win;if(S.dep)return S.label||'';return (w&&w.facade&&w.obj===S.building&&facAddr(w.obj,w.facade))||S.label||'';}
+function renderAddr(){const w=S.win;const t=w&&w.facade&&w.obj===S.building?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=curAddr();const sd=$('addrSide'),dp=S.dep&&w&&w.obj===S.building;sd.textContent=[dp?'Dépendance':'',t?(dp?'façade ':'Façade ')+t:''].filter(Boolean).join(' · ');sd.hidden=!(t||dp);}
 function selectBuilding(obj){
   S.building=obj; const u=obj.userData;
   $('bInfo').textContent=`${u.h.toFixed(0)} m à l'égout${u.ridge?`, ${u.ridge.toFixed(0)} m au faîtage`:''}${u.floors?`, ${u.floors} étages`:''}${u.usage?`, ${u.usage.toLowerCase()}`:''}`;
