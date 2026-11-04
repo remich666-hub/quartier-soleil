@@ -1883,12 +1883,15 @@ function facAddr(obj,f){
   fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${(S.lon+px/kx).toFixed(6)}&lat=${(S.lat+py/ky).toFixed(6)}&type=housenumber&limit=20`).then(r=>r.json()).then(j=>{
     if(f._addrK!==key)return; let best=null,bd=Math.max(25,f.len/2+15);
     (j.features||[]).forEach(ft=>{const p=ft.properties||{}; if(normSt(p.street)!==st)return;
-      const c=ft.geometry.coordinates, d=Math.hypot((c[0]-S.lon)*kx-px,(c[1]-S.lat)*ky-py); if(d<bd){bd=d;best=p.label;}});
+      const c=ft.geometry.coordinates, X=(c[0]-S.lon)*kx, Y=(c[1]-S.lat)*ky;
+      /* a number across the street is in front of the façade: keep only points behind it or on its pavement */
+      if((X-f.mid.x)*f.normal.x+(Y-f.mid.y)*f.normal.y>2)return;
+      const d=Math.hypot(X-px,Y-py); if(d<bd){bd=d;best=p.label;}});
     if(best){f._addr=best; renderAddr();}
   }).catch(()=>{if(f._addrK===key)f._addrK=null;});
   return null;}
 function curAddr(){const w=S.win;return (w&&w.facade&&w.obj===S.building&&facAddr(w.obj,w.facade))||S.label||'';}
-function renderAddr(){const w=S.win;const t=w&&w.facade?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=curAddr()+(t?' · façade '+t:'');}
+function renderAddr(){const w=S.win;const t=w&&w.facade&&w.obj===S.building?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=curAddr()+(t?' · façade '+t:'');}
 function selectBuilding(obj){
   S.building=obj; const u=obj.userData;
   $('bInfo').textContent=`${u.h.toFixed(0)} m à l'égout${u.ridge?`, ${u.ridge.toFixed(0)} m au faîtage`:''}${u.floors?`, ${u.floors} étages`:''}${u.usage?`, ${u.usage.toLowerCase()}`:''}`;
