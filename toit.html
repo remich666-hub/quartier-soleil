@@ -978,7 +978,7 @@ function applyGroundMode(){
 let planLayer=null;
 function loadOrtho(lat,lon){
   orthoLayer(ground,groundMat,lat,lon,17,3,0xe9e6df,28);          // 7×7 tiles ≈ 1.4 km, 80 cm/px
-  orthoLayer(inner,innerMat,lat,lon,19,3,0,40,(raw,w,e,n,s)=>{ // 7×7 tiles ≈ 350 m, 20 cm/px: enough to find the trees and hedges around the address
+  orthoLayer(inner,innerMat,lat,lon,19,2,0,40,(raw,w,e,n,s)=>{ // 7×7 tiles ≈ 350 m, 20 cm/px: enough to find the trees and hedges around the address
     if(!raw||lat!==S.lat||lon!==S.lon)return; /* a photo of the previous address arriving late */ S.rawOrtho={raw,w,e,n,s}; if(S.T)S.T.ortho=performance.now();  detectCanopy(raw,w,e,n,s).then(det=>{if(!S.rawOrtho||S.rawOrtho.raw!==raw)return;treeSets.ortho=det.trees;S.orthoHedges=det.hedges;applyVegetation();refineWithLidar();}).catch(err=>{console.error('canopy',err);status('Détection des arbres impossible : '+err.message,true);});
   });
   inner.position.z=ground.position.z+0.06;
@@ -1395,7 +1395,7 @@ function addRoof(sets,ring,zEave,zRidge){
   try{const sg=new THREE.ShapeGeometry(new THREE.Shape(inner));const pos=sg.attributes.position,idx=sg.index;for(let i=0;i<idx.count;i++){const q=idx.getX(i);P.push(pos.getX(q),pos.getY(q),zRidge);N.push(0,0,1);}sg.dispose();}catch(e){}
   return true;
 }
-const DETAIL_R=200, CONTEXT_R=450; let ctxMesh=null;
+const DETAIL_R=90, CONTEXT_R=450; let ctxMesh=null;
 const ctxMat=new THREE.MeshLambertMaterial({color:0xe9e7e1,transparent:true});
 ctxMat.onBeforeCompile=sh=>{ // aerial perspective from the real distance to the camera (z-depth), done in the material: no extra pass
   sh.uniforms.qsHor=skyUni.horizon;
@@ -1410,7 +1410,7 @@ ctxMat.onBeforeCompile=sh=>{ // aerial perspective from the real distance to the
     float foot=smoothstep(0.0,6.0,vQsP.z-vBase);                               // feet dissolve into the ground mist
     gl_FragColor.a=0.8*(1.0-qsT)*(0.3+0.7*foot)*(1.0-0.35*qsD);`);};
 ctxMat.customProgramCacheKey=()=>'qsctx3';
-async function buildContext(list){ const yl=slicer(); // the wider neighbourhood: plain blocks merged into one mesh (one draw call), fading into the sky
+async function buildContext(list){ return; const yl=slicer(); // the wider neighbourhood: plain blocks merged into one mesh (one draw call), fading into the sky
   if(ctxMesh){scene.remove(ctxMesh);ctxMesh.geometry.dispose();ctxMesh=null;} if(!list.length)return;
   const P=[],N=[],B=[];
   for(const it of list){await yl(); if(list!==S._ctxList)return; (({outer,zBase,h})=>{const g=new THREE.ExtrudeGeometry(new THREE.Shape(outer),{depth:h+SINK,bevelEnabled:false,curveSegments:1});
@@ -1755,7 +1755,7 @@ function pick(e){
   let annexHit=false; if(obj.userData.annexOf&&MS.has(obj.userData.annexOf)&&Math.abs(hit.face.normal.z)>=0.3){obj=obj.userData.annexOf;annexHit=true;} const prevB=S.building, prevWin=S.win;
   if(obj.userData.monu){toast(`${obj.userData.monu} : monument, pas un logement`);return;}
   if(obj!==prevB)selectBuilding(obj);
-  { if(obj!==prevB)frameBuilding(); return; }
+  { if(obj!==prevB)roofFrame(obj); return; }
   const u=obj.userData, fac=u.facades, bl=blindMap(obj);
   let idx=-1, wall=!annexHit&&Math.abs(hit.face.normal.z)<0.3;
   if(wall){ // wall hit: pick the matching façade, then aim the window where the finger landed
@@ -1887,7 +1887,7 @@ function introMove(){
   // time-lapse: from a long-shadow summer evening (21 June, 18:30) to right now, date and hour sliding together with the camera
   const np=tzParts(new Date()), dNow=Math.round((Date.UTC(np.y,np.m-1,np.d)-Date.UTC(np.y,0,1))/86400000)+1, dJun=Math.round((Date.UTC(np.y,5,21)-Date.UTC(np.y,0,1))/86400000)+1;
   const tl={y:np.y,d0:dJun,m0:18*60+30,d1:dNow,m1:np.h*60+np.mi}; S.playing=false; setTL(tl,0);
-  camTw={t0:performance.now(),tHold:performance.now(),hold:true,dur:3600,ease:'quint',tl,a,b:{t:c,th:th1,ph:ph1,d:d1},onEnd:()=>{pulseAt(hc);done();}};
+  camTw={t0:performance.now(),tHold:performance.now(),hold:true,dur:3600,ease:'quint',tl,a,b:{t:c,th:th1,ph:ph1,d:d1},onEnd:()=>{pulseAt(hc);done();roofAuto();}};
 }
 function setTL(tl,e){S.year=tl.y;S.doy=Math.round(tl.d0+(tl.d1-tl.d0)*e);S.minute=tl.m0+(tl.m1-tl.m0)*e;$('day').value=S.doy;$('time').value=Math.round(S.minute/5)*5;update();}
 function pulseAt(c){ // a ring that spreads on the ground around the address: "it's here"
@@ -2392,7 +2392,7 @@ async function load(q,at){
       S.startIRC=()=>null; const _ircUnused=()=>{if(S.ircP||S.lat!==myLat)return S.ircP;S.ircP=fetchIRC(myLat,myLon).then(I=>{if(!I||S.lat!==myLat)return null;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();return I;}).catch(()=>null);return S.ircP;};
       setTimeout(()=>{if(S.lat===myLat)S.startIRC();},9000);}
     status('Bâtiments et relief IGN…');
-    const [alt,feats]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]); const terrain=null;
+    const [alt,feats]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,130,3000)]); const terrain=null;
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
     S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.rawOrtho=null; S.slopeHouses=[]; S.lot=null; S.loading=true; /* nothing of the previous address may feed this one */ S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
@@ -3076,6 +3076,12 @@ function clearYearTimes(){const Y=new Date().getFullYear()-1,t0=Date.UTC(Y,0,1,1
 $('rSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.m==='real'&&!RF.W){toast('Météo réelle indisponible');return;}RF.mode=b.dataset.m;roofRender();});
 $('rClear').addEventListener('click',()=>{const b=S.building;roofClear();if(b)setHi(b,false);S.building=null;$('stepPick').hidden=false;$('bottom').hidden=true;});
 let roofRaf=0; function roofRenderSoon(){if(roofRaf)return;roofRaf=requestAnimationFrame(()=>{roofRaf=0;roofRender();});}
+
+/* the address leads straight to its roof */
+function roofFrame(obj){const u=obj.userData,bb=obj.geometry.boundingBox||(obj.geometry.computeBoundingBox(),obj.geometry.boundingBox);
+  const cx=(bb.min.x+bb.max.x)/2,cy=(bb.min.y+bb.max.y)/2,diag=Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y);
+  camTw={t0:performance.now(),dur:1400,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(cx,cy,u.zBase+(u.ridge||u.h)),th:cam.theta,ph:0.95,d:Math.max(isPhone()?34:26,diag*(isPhone()?2:1.5))}};}
+function roofAuto(){const t=S.addrTarget; if(!t||S.building||t.userData.monu||S.meshes.indexOf(t)<0)return; selectBuilding(t); roofFrame(t);}
 
 {const c=wallTex.image,g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);wallTex.needsUpdate=true;} /* plain walls: no windows on this page */
 
