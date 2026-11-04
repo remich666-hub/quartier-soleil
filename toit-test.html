@@ -2990,11 +2990,17 @@ function registerFamily(fam,MH){
   rings.forEach(r=>{for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[j],b=r[i],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.5)continue;let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;if(pointInPoly((a.x+b.x)/2+nx*0.4,(a.y+b.y)/2+ny*0.4,r)){nx=-nx;ny=-ny;}
     for(let t=0.25;t<L;t+=0.5){const px=a.x+(b.x-a.x)*t/L,py=a.y+(b.y-a.y)*t/L;[0.75,1.5].forEach(o=>{const qx=px+nx*o,qy=py+ny*o;if(!inAny(qx,qy,rings)&&!inAny(qx,qy,others))pout.push([qx,qy]);});}}});
   if(pin.length<8)return {dx:0,dy:0};
+  /* edge samples: a point just inside and one just outside each wall; the roof edge is where the laser height drops */
+  const Zs=S.mnsF||(S.lidarR&&S.lidarR.mnsFine)||(S.lidarR&&S.lidarR.mns), ed=[];
+  rings.forEach(r=>{for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[j],b=r[i],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.8)continue;let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;if(pointInPoly((a.x+b.x)/2+nx*0.4,(a.y+b.y)/2+ny*0.4,r)){nx=-nx;ny=-ny;}
+    for(let t=0.4;t<L-0.3;t+=0.5){const px=a.x+(b.x-a.x)*t/L,py=a.y+(b.y-a.y)*t/L,ox=px+nx*1.0,oy=py+ny*1.0;ed.push([px-nx*0.6,py-ny*0.6,ox,oy,inAny(ox,oy,others)?0.3:1]);}}});
   const frac=(pts,dx,dy)=>{let s=0,n=0;for(const [x,y] of pts){const v=MH.at(x+dx,y+dy);if(v!=null){n++;if(v>1.8)s++;}}return n?s/n:0;};
-  const score=(dx,dy)=>frac(pin,dx,dy)-0.8*frac(pout,dx,dy);
+  const edge=(dx,dy)=>{if(!Zs)return 0;let s=0,w=0;for(const [ix,iy,ox,oy,wt] of ed){const zi=Zs.at(ix+dx,iy+dy),zo=Zs.at(ox+dx,oy+dy);if(zi==null||zo==null)continue;s+=wt*Math.max(-2,Math.min(2,zi-zo));w+=wt;}return w?s/w:0;};
+  const score=(dx,dy)=>frac(pin,dx,dy)-0.8*frac(pout,dx,dy)+0.12*edge(dx,dy);
   const s0=score(0,0); let best={dx:0,dy:0,s:s0};
-  for(let dx=-3;dx<=3.001;dx+=0.25)for(let dy=-3;dy<=3.001;dy+=0.25){const sc=score(dx,dy)-0.01*Math.hypot(dx,dy);if(sc>best.s)best={dx,dy,s:sc};}
-  RF.reg={dx:best.dx,dy:best.dy,s0,s:best.s,nin:pin.length,nout:pout.length};
+  for(let dx=-2;dx<=2.001;dx+=0.25)for(let dy=-2;dy<=2.001;dy+=0.25){const sc=score(dx,dy)-0.02*Math.hypot(dx,dy);if(sc>best.s)best={dx,dy,s:sc};}
+  if(best.s<s0+0.04)best={dx:0,dy:0,s:s0};
+  RF.reg={dx:best.dx,dy:best.dy,s0,s:best.s,nin:pin.length,nout:pout.length,e0:edge(0,0),e:edge(best.dx,best.dy)};
   return {dx:best.dx,dy:best.dy};}
 function roofCells(obj){
   const F=S.mnsF||(S.lidarR&&S.lidarR.mnsFine), MH=S.lidarR&&S.lidarR.mnh, C=S.lidarR&&S.lidarR.mns; if(!(F||C)||!MH)return null;
