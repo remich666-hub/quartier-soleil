@@ -1891,7 +1891,8 @@ function facAddr(obj,f){
       const d=Math.hypot(X-px,Y-py)-(rings.some(r=>pointInPoly(X,Y,r))?1000:0); if(d<bd){bd=d;best=p.label;}});
     /* nothing near this façade: another façade of the same building on the same street may have found its number */
     if(!best){for(const m of fam)for(const g of (m.userData.facades||[]))if(g!==f&&g._addrK===key&&g._addr){best=g._addr;break;}}
-    if(best){f._addr=best; renderAddr();}
+    if(best){f._addr=best; for(const m of fam)for(const g of (m.userData.facades||[]))if(g._miss&&g._addrK===key){g._addr=best;g._miss=false;} renderAddr();}
+    else f._miss=true;
   }).catch(()=>{if(f._addrK===key)f._addrK=null;});
   return null;}
 function curAddr(){const w=S.win;return (w&&w.facade&&w.obj===S.building&&facAddr(w.obj,w.facade))||S.label||'';}
