@@ -148,12 +148,12 @@ button.link:hover{color:var(--fg);background:none}
 .rpans tr.rv td{color:var(--ink2)}
 #rMore{display:none}
 @media (max-width:760px){
-  #sheet.collapsed #left>#roofBox:not([hidden]){display:grid;gap:8px}
-  #sheet.collapsed #roofBox>*:not(.rseg):not(.big):not(#rLegend):not(#rMore){display:none}
+  #sheet.collapsed #left>#roofBox:not([hidden]){display:grid!important;gap:8px}
+  #sheet.collapsed #roofBox>*:not(.rseg):not(.big):not(#rLegend):not(#rMore){display:none!important}
   #sheet.collapsed #roofBox .big{display:flex;align-items:baseline;gap:8px}
   #sheet.collapsed #roofBox .big .v{font-size:34px}
   #sheet.collapsed #roofBox .big .c{font-size:12px}
-  #sheet.collapsed #rMore{display:block;justify-self:end;color:var(--accent-ink);text-decoration:none;font-size:13px;margin-top:-4px}
+  #sheet.collapsed #rMore{display:block!important;justify-self:end;color:var(--accent-ink);text-decoration:none;font-size:13px;margin-top:-4px}
   .rpans{font-size:11px;display:block;overflow-x:auto}
   .rpans th,.rpans td{padding:4px 3px}
   .rseg button{font-size:12.5px;padding:7px 4px}
