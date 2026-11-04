@@ -552,6 +552,9 @@ function applyFade(){
 /* cadastral parcels of the detailed zone, tinted by what covers their unbuilt part:
    green where the orthophoto or the laser sees vegetation, mineral grey otherwise */
 let parcelGroup=null, parcelTok=0;
+/* a layer that arrives after the buildings (gardens, pools, terraces) appears in a soft fade, not in one pop */
+const FADES=[]; function fadeIn(obj,ms=700){const mats=[];obj.traverse(o=>{if(!o.material)return;(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{if(mats.some(x=>x.m===m))return;mats.push({m,o:m.opacity,t:m.transparent});m.transparent=true;m.opacity=0;});});FADES.push({mats,t0:performance.now(),ms});}
+function stepFades(now){for(let i=FADES.length-1;i>=0;i--){const f=FADES[i],k=Math.min(1,(now-f.t0)/f.ms),e=k*k*k*(k*(k*6-15)+10);f.mats.forEach(x=>{x.m.opacity=x.o*e;if(k>=1)x.m.transparent=x.t;});if(k>=1)FADES.splice(i,1);}}
 /* pools as clean objects: a light stone coping in relief and a water surface whose shading gives the depth (dark blue walls at the
    rim, light floor in the middle), with slow ripples and the sun's glints — one mesh for all of them */
 const poolUni={uT:{value:0},uSun:{value:new THREE.Vector3(0,0,1)},uLight:{value:1}};
@@ -625,10 +628,11 @@ function smoothRing(pts,tol,iters){
    of what it belongs to — the pool it surrounds, else the house it runs along (its longest wall), else its own main axis — on a
    1 m grid of that frame (majority rule), so its outline is made of straight, square edges only. A pool surround that fills its
    box is that box. Pools are cut out of the slab. */
-function vectorTerraces(m,md,N,px,R,out,pools){
+async function vectorTerraces(m,md,N,px,R,out,pools){
+  const yl=slicer();
   const on=k=>m[k]>0.5&&md[k*4+3]>127, lab=new Int32Array(N*N), minPx=6/(px*px), maxPx=900/(px*px); let id=0;
   const bAxes=S.meshes.map(mm=>{const u=mm.userData;if(!u.rings||!u.facades||!u.facades.length)return null;const f=u.facades.reduce((a,b)=>b.len>a.len?b:a);return {rings:u.rings,ang:Math.atan2(f.normal.x,-f.normal.y)};}).filter(Boolean);
-  for(let k0=0;k0<N*N;k0++){if(lab[k0]||!on(k0))continue;id++;const q=[k0];lab[k0]=id;
+  for(let k0=0;k0<N*N;k0++){if(k0%N===0)await yl();if(lab[k0]||!on(k0))continue;id++;const q=[k0];lab[k0]=id;
     for(let h=0;h<q.length;h++){const k=q[h],i=k%N,j=(k/N)|0;
       if(i>0&&!lab[k-1]&&on(k-1)){lab[k-1]=id;q.push(k-1);} if(i<N-1&&!lab[k+1]&&on(k+1)){lab[k+1]=id;q.push(k+1);}
       if(j>0&&!lab[k-N]&&on(k-N)){lab[k-N]=id;q.push(k-N);} if(j<N-1&&!lab[k+N]&&on(k+N)){lab[k+N]=id;q.push(k+N);}}
@@ -665,12 +669,16 @@ function vectorTerraces(m,md,N,px,R,out,pools){
     const holes=PR?[[[PR[0],PR[2]],[PR[1],PR[2]],[PR[1],PR[3]],[PR[0],PR[3]]].map(([u,v])=>toW(u,v))]:[];
     out.push({ring,holes:holes.filter(h=>h.every(p=>pointInPoly(p.x,p.y,ring)))});}
 }
-function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
+/* long passes give the screen back every ~12 ms: the arrival animation keeps flowing while the gardens are computed */
+const yieldMC=new MessageChannel(), yieldQ=[]; yieldMC.port1.onmessage=()=>{const r=yieldQ.shift();if(r)r();}; // a message, not setTimeout: no 4 ms clamp, no 1 s throttle in a background tab
+const slicer=()=>{let t=performance.now();return async()=>{if(performance.now()-t>12){await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});t=performance.now();}};};
+async function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
+  const yl=slicer();
   const RO=S.rawOrtho; if(!RO)return null; const W=RO.raw.width,Hh=RO.raw.height,mpp=(RO.e-RO.w)/W,od=RO.raw.getContext('2d').getImageData(0,0,W,Hh).data;
   const N=GT_N,px=2*GT_R/N,cv=document.createElement('canvas');cv.width=cv.height=N;const g=cv.getContext('2d');
   // colour of the photo at a point: the 20 cm photo around the address, the 60 cm one (±350 m) beyond its edge — no seam where the fine one stops
-  const FR=S.rgbFar; const rgbAt=(x,y)=>{const oi=Math.floor((x-RO.w)/mpp),oj=Math.floor((RO.n-y)/mpp);if(oi>=0&&oj>=0&&oi<W&&oj<Hh){const o=(oj*W+oi)*4;return [od[o],od[o+1],od[o+2]];}
-    if(FR){const [fx,fy]=FR.px(x,y);const X=Math.floor(fx),Y=Math.floor(fy);if(X>=0&&Y>=0&&X<FR.W&&Y<FR.W){const o=(Y*FR.W+X)*4;return [FR.d[o],FR.d[o+1],FR.d[o+2]];}}return null;};
+  const FR=S.rgbFar; let cR=0,cG=0,cB=0; const rgbAt=(x,y)=>{const oi=Math.floor((x-RO.w)/mpp),oj=Math.floor((RO.n-y)/mpp);if(oi>=0&&oj>=0&&oi<W&&oj<Hh){const o=(oj*W+oi)*4;cR=od[o];cG=od[o+1];cB=od[o+2];return true;}
+    if(FR){const [fx,fy]=FR.px(x,y);const X=Math.floor(fx),Y=Math.floor(fy);if(X>=0&&Y>=0&&X<FR.W&&Y<FR.W){const o=(Y*FR.W+X)*4;cR=FR.d[o];cG=FR.d[o+1];cB=FR.d[o+2];return true;}}return false;};
   const X=x=>(x+GT_R)/px, Y=y=>(GT_R-y)/px;
   const path=(rings)=>{g.beginPath();rings.forEach(r=>{r.forEach((q,i)=>i?g.lineTo(X(q.x),Y(q.y)):g.moveTo(X(q.x),Y(q.y)));g.closePath();});};
   TP.forEach(t=>{g.fillStyle='#'+t.col.getHexString();path([t.outer].concat(t.holes));g.fill('evenodd');});
@@ -688,11 +696,11 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
   // keeps the soft lot tint (no more dark "waste ground" patches made of the buildings' shadows on the photo)
   const lim=GT_R/px, c0=N/2, cls=new Uint8Array(N*N); // the whole texture: a big parcel reaching the zone is read to its far edge (no seam at a radius)
   const j0=Math.max(1,Math.floor(c0-lim)), j1=Math.min(N-1,Math.ceil(c0+lim));
-  for(let j=j0;j<j1;j++)for(let i=j0;i<j1;i++){
+  for(let j=j0;j<j1;j++){await yl();for(let i=j0;i<j1;i++){
     const k=j*N+i; if(md[k*4+3]<128)continue; const x=-GT_R+(i+0.5)*px, y=GT_R-(j+0.5)*px;
-    const cc=rgbAt(x,y); if(!cc)continue; const r=cc[0],gg=cc[1],b=cc[2];
+    if(!rgbAt(x,y))continue; const r=cR,gg=cG,b=cB;
     const lum=(r+gg+b)/3,sat=Math.max(r,gg,b)-Math.min(r,gg,b),exg=2*gg-r-b;
-    cls[k]= (b>110&&b-r>35&&gg-r>15&&lum>90)?4 : lum<75?0 : exg>14?1 : (lum>155&&sat<40)?2 : 0;}
+    cls[k]= (b>110&&b-r>35&&gg-r>15&&lum>90)?4 : lum<75?0 : exg>14?1 : (lum>155&&sat<40)?2 : 0;}}
   // public lawns: parks and squares often have no cadastral parcel (public domain) and stayed bare street colour.
   // Grass seen on the photo outside the parcels, not under a tree canopy (laser), becomes a lawn outline of its own
   if(lawns&&MH&&MH.at){const lm=new Uint8ClampedArray(N*N*4);let nl=0;
@@ -700,13 +708,13 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
     TP.forEach(t=>{bg.beginPath();[t.outer].concat(t.holes).forEach(r=>{r.forEach((q,i)=>i?bg.lineTo(X(q.x),Y(q.y)):bg.moveTo(X(q.x),Y(q.y)));bg.closePath();});bg.fill('evenodd');});
     S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;bg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>i?bg.lineTo(X(q.x),Y(q.y)):bg.moveTo(X(q.x),Y(q.y)));bg.closePath();});bg.fill('evenodd');});
     const bd=bg.getImageData(0,0,N,N).data;
-    for(let j=j0;j<j1;j++)for(let i=j0;i<j1;i++){const k=j*N+i;if(bd[k*4+3]>=128)continue;const x=-GT_R+(i+0.5)*px,y=GT_R-(j+0.5)*px;
-      const cc=rgbAt(x,y);if(!cc)continue;const r=cc[0],gg=cc[1],b=cc[2];
-      if((r+gg+b)/3<75||2*gg-r-b<=14)continue; const hv=MH.at(x,y); if(hv!=null&&hv>1.2)continue; lm[k*4+3]=255;nl++;}
+    for(let j=j0;j<j1;j++){await yl();for(let i=j0;i<j1;i++){const k=j*N+i;if(bd[k*4+3]>=128)continue;const x=-GT_R+(i+0.5)*px,y=GT_R-(j+0.5)*px;
+      if(!rgbAt(x,y))continue;const r=cR,gg=cG,b=cB;
+      if((r+gg+b)/3<75||2*gg-r-b<=14)continue; const hv=MH.at(x,y); if(hv!=null&&hv>1.2)continue; lm[k*4+3]=255;nl++;}}
     if(nl){const c1=document.createElement('canvas');c1.width=c1.height=N;c1.getContext('2d').putImageData(new ImageData(lm,N,N),0,0);
       const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.filter=`blur(${Math.max(2,Math.round(1.2/px))}px)`;g2.drawImage(c1,0,0);
       const d2=g2.getImageData(0,0,N,N).data,on=k=>d2[k*4+3]>110,lab=new Int32Array(N*N);let id2=0;
-      for(let k0=0;k0<N*N;k0++){if(lab[k0]||!on(k0))continue;id2++;const q=[k0];lab[k0]=id2;for(let h=0;h<q.length;h++){const k=q[h],i=k%N;[i>0?k-1:-1,i<N-1?k+1:-1,k-N,k+N].forEach(kk=>{if(kk>=0&&kk<N*N&&!lab[kk]&&on(kk)){lab[kk]=id2;q.push(kk);}});}
+      for(let k0=0;k0<N*N;k0++){if(k0%N===0)await yl();if(lab[k0]||!on(k0))continue;id2++;const q=[k0];lab[k0]=id2;for(let h=0;h<q.length;h++){const k=q[h],i=k%N;[i>0?k-1:-1,i<N-1?k+1:-1,k-N,k+N].forEach(kk=>{if(kk>=0&&kk<N*N&&!lab[kk]&&on(kk)){lab[kk]=id2;q.push(kk);}});}
         if(q.length*px*px<40)continue;const sk=q.reduce((a,b2)=>b2<a?b2:a);const sm=smoothRing(traceOuter((i,j)=>i>=0&&j>=0&&i<N&&j<N&&lab[j*N+i]===id2,sk%N,(sk/N)|0),0.5/px,2);
         if(sm)lawns.push(sm.map(([i,j])=>({x:-GT_R+i*px,y:GT_R-j*px})));}}}
   // smooth plan shapes: per class, blur the mask (≈1.3 m) and re-threshold with a soft edge → rounded, clean outlines, specks gone
@@ -715,12 +723,12 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
     const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.filter=`blur(${blurPx}px)`;g2.drawImage(c1,0,0);
     const d=g2.getImageData(0,0,N,N).data,out=new Float32Array(N*N);for(let k=0;k<N*N;k++){const v=d[k*4+3]/255;out[k]=Math.max(0,Math.min(1,(v-0.5)*9+0.5));}return out;};
   const paint=(m,col)=>{for(let k=0;k<N*N;k++){const a=m[k]*(md[k*4+3]>127?1:0);if(a<=0)continue;id[k*4]+= (col[0]-id[k*4])*a;id[k*4+1]+=(col[1]-id[k*4+1])*a;id[k*4+2]+=(col[2]-id[k*4+2])*a;}};
-  const bp=Math.max(2,Math.round(0.6/px)); const m2=shape(2,bp); paint(shape(1,bp),[205,219,185]); if(gd)for(let k=0;k<N*N;k++)if(gd[k*4+3]>127)m2[k]=0; paint(m2,[235,230,220]);
+  const bp=Math.max(2,Math.round(0.6/px)); await yl(); const m2=shape(2,bp); await yl(); const m1=shape(1,bp); await yl(); paint(m1,[205,219,185]); if(gd)for(let k=0;k<N*N;k++)if(gd[k*4+3]>127)m2[k]=0; await yl(); paint(m2,[235,230,220]); await yl();
   g.putImageData(img,0,0);
   // pools: each connected blue patch ≥ 8 m² becomes a clean shape — an oriented rounded rectangle when it is one (most are),
   // a smoothed blob otherwise — with a thin light coping, like on an architect's plan
   const seen=new Uint8Array(N*N), minPx=8/(px*px);
-  for(let k0=0;k0<N*N;k0++){if(cls[k0]!==4||seen[k0])continue;const q=[k0];seen[k0]=1;for(let h=0;h<q.length;h++){const k=q[h];[1,-1,N,-N].forEach(d=>{const kk=k+d;if(kk>=0&&kk<N*N&&!seen[kk]&&cls[kk]===4){seen[kk]=1;q.push(kk);}});}
+  for(let k0=0;k0<N*N;k0++){if(k0%N===0)await yl();if(cls[k0]!==4||seen[k0])continue;const q=[k0];seen[k0]=1;for(let h=0;h<q.length;h++){const k=q[h];[1,-1,N,-N].forEach(d=>{const kk=k+d;if(kk>=0&&kk<N*N&&!seen[kk]&&cls[kk]===4){seen[kk]=1;q.push(kk);}});}
     if(q.length<minPx)continue;
     let mx=0,my=0;q.forEach(k=>{mx+=k%N;my+=(k/N)|0;});mx/=q.length;my/=q.length;let sxx=0,syy=0,sxy=0;q.forEach(k=>{const dx=k%N-mx,dy=((k/N)|0)-my;sxx+=dx*dx;syy+=dy*dy;sxy+=dx*dy;});
     const ang=0.5*Math.atan2(2*sxy,sxx-syy),ca=Math.cos(ang),sa=Math.sin(ang);const us=[],vs=[];q.forEach(k=>{const dx=k%N-mx,dy=((k/N)|0)-my;us.push(dx*ca+dy*sa);vs.push(-dx*sa+dy*ca);});
@@ -728,7 +736,7 @@ function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
     const u0=pc(us,0.03),u1=pc(us,0.97)+1,v0=pc(vs,0.03),v1=pc(vs,0.97)+1,fill=q.length/((u1-u0)*(v1-v0));
     if(pools){const uc=(u0+u1)/2,vc=(v0+v1)/2,pi=mx+0.5+uc*ca-vc*sa,pj=my+0.5+uc*sa+vc*ca;
       pools.push({x:-GT_R+pi*px,y:GT_R-pj*px,ux:ca,uy:-sa,hu:(u1-u0)/2*px,hv:(v1-v0)/2*px,rect:fill>0.68});}}
-  if(terr)try{vectorTerraces(m2,md,N,px,GT_R,terr,pools);}catch(err){console.error('terraces',err);}
+  if(terr)try{await vectorTerraces(m2,md,N,px,GT_R,terr,pools);}catch(err){console.error('terraces',err);}
   const tx=new THREE.CanvasTexture(cv); tx.encoding=THREE.sRGBEncoding; tx.anisotropy=8; tx.wrapS=tx.wrapT=THREE.ClampToEdgeWrapping; return tx;
 }
 async function buildParcels(lat,lon){
@@ -767,7 +775,7 @@ async function buildParcels(lat,lon){
   if(tok!==parcelTok)return;
   parcelGroup=new THREE.Group();
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
-    let mat=null, pools=[]; try{const pn=[],pf=[];const tr=[];const tn=gardenTexture(TP,MH,GN_R,GN_N,pn,tr);S._terr=tr;const lw=[];const tx=gardenTexture(TP,MH,GT_R,GT_N,pf,null,lw);S._lawns=lw;
+    let mat=null, pools=[]; try{const pn=[],pf=[];const tr=[];const tn=await gardenTexture(TP,MH,GN_R,GN_N,pn,tr);if(tok!==parcelTok)return;S._terr=tr;const lw=[];const tx=await gardenTexture(TP,MH,GT_R,GT_N,pf,null,lw);if(tok!==parcelTok)return;S._lawns=lw;
       pools=pn.concat(pf.filter(q=>Math.max(Math.abs(q.x),Math.abs(q.y))>GN_R-8));
       if(tx){const uv=new Float32Array(P.length/3*2);for(let k=0,q=0;k<P.length;k+=3,q+=2){uv[q]=(P[k]+GT_R)/(2*GT_R);uv[q+1]=(P[k+1]+GT_R)/(2*GT_R);}
       g.setAttribute('uv',new THREE.BufferAttribute(uv,2));mat=new THREE.MeshLambertMaterial({map:tx,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
@@ -791,7 +799,7 @@ async function buildParcels(lat,lon){
     const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa39a8a,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}));m.receiveShadow=true;m.renderOrder=1;fadeMat(m.material);parcelGroup.add(m);}
   if(L.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(L,3));
     const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x8a8070,transparent:true,opacity:0.75}));l.renderOrder=1;fadeMat(l.material);parcelGroup.add(l);}
-  scene.add(parcelGroup); if(nParc>20)streetsFromCadastre(); applyGroundMode(); if(S.T)S.T.parcels=performance.now();
+  scene.add(parcelGroup); fadeIn(parcelGroup); if(nParc>20)streetsFromCadastre(); applyGroundMode(); if(S.T)S.T.parcels=performance.now();
 }
 const STREET=0xf4f1eb, CAD_R0=200, CAD_R1=226;
 function streetsFromCadastre(){ // streets = the public space between parcels: no more estimated road ribbons inside the cadastral zone
@@ -2075,7 +2083,7 @@ async function lidarVegGrid(){
   const bc=document.createElement('canvas'); bc.width=bc.height=NF; const bg=bc.getContext('2d'); bg.filter='blur(2px)'; bg.drawImage(fc,0,0);
   const bd=bg.getImageData(0,0,NF,NF).data, fpx=step/F; const onF=k=>bd[k*4+3]>128; const lab=new Int32Array(NF*NF); let id=0;
   const hX=i=>-R+i*fpx, hY=j=>R-j*fpx; // fine pixel corner → metres (cell i is drawn centred on pixel i*F, i.e. at -R+i*step)
-  for(let k0=0;k0<NF*NF;k0++){if(lab[k0]||!onF(k0))continue;id++;const q=[k0];lab[k0]=id;let si=k0%NF,sj=(k0/NF)|0;
+  const ylv=slicer(); for(let k0=0;k0<NF*NF;k0++){if(k0%NF===0){await ylv();if(tok!==refineToken)return;}if(lab[k0]||!onF(k0))continue;id++;const q=[k0];lab[k0]=id;let si=k0%NF,sj=(k0/NF)|0;
     for(let h=0;h<q.length;h++){const k=q[h],i=k%NF;[i>0?k-1:-1,i<NF-1?k+1:-1,k-NF,k+NF].forEach(kk=>{if(kk>=0&&kk<NF*NF&&!lab[kk]&&onF(kk)){lab[kk]=id;q.push(kk);}});}
     const hs=[];let cx=0,cy=0;q.forEach(k=>{const i=k%NF,j=(k/NF)|0;cx+=i;cy+=j;const ci=Math.round(i/F),cj=Math.round(j/F);const v=ci<n&&cj<n?veg[cj*n+ci]:0;if(v>0&&v<4.5)hs.push(v);});
     cx/=q.length;cy/=q.length; const area=q.length*fpx*fpx; hs.sort((a,b)=>a-b); const hh=hs.length?hs[Math.floor(hs.length*0.7)]:1.5;
@@ -2584,7 +2592,7 @@ function frame(now){
     cam.target.lerpVectors(a.t,b.t,e);cam.theta=a.th+(b.th-a.th)*e;cam.phi=a.ph+(b.ph-a.ph)*e;
     cam.dist=camTw.ease==='quint'?Math.exp(Math.log(a.d)+(Math.log(b.d)-Math.log(a.d))*e):a.d+(b.d-a.d)*e; applyCam(); if(camTw.tl&&!camTw.hold)setTL(camTw.tl,e);
     if(k>=1){const cb=camTw.onEnd;camTw=null;if(cb)cb();}}
-  setLeafTarget(now); if(LEAF.cur!==LEAF.to){const k=Math.min(1,(now-LEAF.t0)/900),e=k*k*k*(k*(k*6-15)+10);LEAF.cur=k>=1?LEAF.to:LEAF.from+(LEAF.to-LEAF.from)*e;applyLeaf();}
+  stepFades(now); setLeafTarget(now); if(LEAF.cur!==LEAF.to){const k=Math.min(1,(now-LEAF.t0)/900),e=k*k*k*(k*(k*6-15)+10);LEAF.cur=k>=1?LEAF.to:LEAF.from+(LEAF.to-LEAF.from)*e;applyLeaf();}
   poolUni.uT.value=now/1000; if(S.sunDir){poolUni.uSun.value.copy(S.sunDir);poolUni.uLight.value=Math.max(0.18,Math.min(1,S.sunDir.z*2.5+0.3));}
   if(introRing){const k=Math.min(1,(now-introRing.userData.t0)/1400),e=1-Math.pow(1-k,3);introRing.scale.setScalar(1+e*1.8);introRing.material.opacity=0.9*(1-k);
     if(k>=1){scene.remove(introRing);introRing.geometry.dispose();introRing.material.dispose();introRing=null;}}
