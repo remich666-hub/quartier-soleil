@@ -3464,11 +3464,11 @@ function roofModel(R){
   /* added volumes: the laser points standing well above the main roof (a cross gable, a dormer, a raised part) are grouped;
      each group large enough gets its own small volume and typical roof, fitted on its points only; the higher roof wins */
   const zFit=(F,x,y)=>{const b=F.best,Eb=b.c.E;if(!Eb.length)return b.z0;const KS=b.ks||Eb.map(()=>b.k),ZS=b.zs||Eb.map(()=>b.z0);return Math.min(...Eb.map((e,i)=>ZS[i]+KS[i]*F.d(e,x,y)));};
-  const findSubs=(pc,F)=>{const subs=[]; const Pp=pc.P.map(([x,y])=>({x,y}));
+  const findSubs=(pc,F)=>{const subs=[],dbg=[]; const Pp=pc.P.map(([x,y])=>({x,y}));
     let pts=C.filter(c=>pointInPoly(c.x,c.y,Pp));
     for(let round=0;round<3;round++){
       const up=pts.filter(c=>c.z-Math.max(zFit(F,c.x,c.y),...subs.filter(sb=>pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y})))).map(sb=>zFit(sb.F,c.x,c.y)))>0.45);
-      if(up.length*s*s<4)break;
+      dbg.push('up'+up.length); if(up.length*s*s<4)break;
       const key=(c)=>Math.round(c.x/s)+','+Math.round(c.y/s), map=new Map(); up.forEach(c=>map.set(key(c),c)); const seen=new Set(), groups=[];
       up.forEach(c0=>{const k0=key(c0);if(seen.has(k0))return;const g=[];const q=[c0];seen.add(k0);while(q.length){const c=q.pop();g.push(c);const i=Math.round(c.x/s),j=Math.round(c.y/s);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const k=(i+di)+','+(j+dj);if(!seen.has(k)&&map.has(k)){seen.add(k);q.push(map.get(k));}}}groups.push(g);});
       let added=false;
@@ -3479,19 +3479,19 @@ function roofModel(R){
         for(let i=0;i<pc.P.length;i++){const p0=pc.P[i],p1=pc.P[(i+1)%pc.P.length];Q=MK.clipHalf(Q,p=>-((p1[0]-p0[0])*(p[1]-p0[1])-(p1[1]-p0[1])*(p[0]-p0[0])));if(Q.length<3)return;}
         if(MK.area(Q)<0)Q.reverse(); if(Math.abs(MK.area(Q))<3)return;
         const Qp=Q.map(([x,y])=>({x,y})), inner=g.filter(c=>pointInPoly(c.x,c.y,Qp)); if(inner.length<8)return;
-        const Fs=fitPiece(Q,pc.bk.top,inner); if(Fs.best.score>=9||Fs.best.rms>0.15)return;
+        const Fs=fitPiece(Q,pc.bk.top,inner); dbg.push('g'+g.length+':'+Fs.best.c.k+':'+Fs.best.rms.toFixed(2)); if(Fs.best.score>=9||Fs.best.rms>0.15)return;
         const lift=inner.map(c=>zFit(Fs,c.x,c.y)-zFit(F,c.x,c.y)).sort((a,b)=>a-b)[inner.length>>1]; if(lift<0.3)return;
         subs.push({P:Q,bk:pc.bk,F:Fs,parent:pc,sub:true}); added=true;});
       if(!added)break;}
     /* how well main + additions explain the piece's laser points */
     let e2=0,n=0,inl=0; pts.forEach(c=>{let z=zFit(F,c.x,c.y);subs.forEach(sb=>{if(pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y}))))z=Math.max(z,zFit(sb.F,c.x,c.y));});const r=c.z-z;if(Math.abs(r)<0.3){e2+=r*r;inl++;}n++;});
     const rms=Math.sqrt(e2/Math.max(1,inl)),fi=inl/Math.max(1,n),pen={flat:0,shed:0.05,gable:0.015,gable2:0.025,hip:0.03}[F.best.c.k]||0;
-    return {subs,score:rms*(1+2*(1-fi))+pen+0.02*subs.length};};
+    return {subs,dbg:dbg.join(' '),score:rms*(1+2*(1-fi))+pen+0.02*subs.length};};
   const subs=[];
   pieces.forEach(pc=>{if(pc.F.best.score>=9)return;
     /* the main roof is chosen together with its additions: a 2-pan roof plus a cross gable beats a hip roof that half-explains both */
     const tops=pc.F.fits.slice().sort((a,b)=>a.score-b.score).slice(0,4); let bestJ=null;
-    tops.forEach(fb=>{const F={...pc.F,best:fb};const r=findSubs(pc,F);if(!bestJ||r.score<bestJ.score)bestJ={F,r};});
+    tops.forEach(fb=>{const F={...pc.F,best:fb};const r=findSubs(pc,F);DBG.push(['J',fb.c.k,fb.rms.toFixed(2),r.score.toFixed(3),r.subs.length,r.dbg]);if(!bestJ||r.score<bestJ.score)bestJ={F,r};});
     if(bestJ){pc.F=bestJ.F; bestJ.r.subs.forEach(sb=>subs.push(sb));}});
   subs.forEach(sb=>pieces.push(sb));
   pieces.forEach((pc,pi)=>{const P=pc.P,n=P.length,E=pc.F.E,d=pc.F.d,best=pc.F.best;
