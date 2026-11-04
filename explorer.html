@@ -406,16 +406,20 @@ function buildGroundFloors(walls){ // walls: [{a,b,len,nx,ny,zBase,com,door}]
   groundBands.forEach(m=>{scene.remove(m);m.geometry.dispose();}); groundBands=[];
   const sets={res:{p:[],n:[],u:[]},com:{p:[],n:[],u:[]},door:{p:[],n:[],u:[]}};
   const H=3.2, OFF=0.07;
-  const quad=(set,ax,ay,bx,by,z0,z1,nx,ny,u0,u1)=>{const P=set.p,N=set.n,U=set.u;const ox=nx*OFF,oy=ny*OFF;
-    const v=[[ax+ox,ay+oy,z0,u0,0],[bx+ox,by+oy,z0,u1,0],[bx+ox,by+oy,z1,u1,1],[ax+ox,ay+oy,z0,u0,0],[bx+ox,by+oy,z1,u1,1],[ax+ox,ay+oy,z1,u0,1]];
+  const quad=(set,ax,ay,bx,by,z0,z1,nx,ny,u0,u1,v1=1)=>{const P=set.p,N=set.n,U=set.u;const ox=nx*OFF,oy=ny*OFF;
+    const v=[[ax+ox,ay+oy,z0,u0,0],[bx+ox,by+oy,z0,u1,0],[bx+ox,by+oy,z1,u1,v1],[ax+ox,ay+oy,z0,u0,0],[bx+ox,by+oy,z1,u1,v1],[ax+ox,ay+oy,z1,u0,v1]];
     v.forEach(q=>{P.push(q[0],q[1],q[2]);N.push(nx,ny,0);U.push(q[3],q[4]);});};
+  // the band never rises above the wall it is laid on as it is drawn now (a laser rebuild can draw a wall lower than the IGN height)
+  const BX=S.meshes.filter(m=>m.userData.rings&&!m.userData.monu).map(m=>{const u=m.userData,r=u.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});return {r,x0,x1,y0,y1,top:u.zBase+u.h};});
+  const topAt=(x,y)=>{for(const b of BX)if(x>=b.x0&&x<=b.x1&&y>=b.y0&&y<=b.y1&&pointInPoly(x,y,b.r))return b.top;return null;};
   walls.forEach(w=>{
     const bays=w.len>=2.2?Math.max(1,Math.round(w.len/3.5)):0, sl=slopeHouseAt((w.a.x+w.b.x)/2-w.nx*0.6,(w.a.y+w.b.y)/2-w.ny*0.6);
     if(sl)return; /* a house on a slope: its window rows are drawn on the wall at the real levels; a 3 m band would stand above the low eaves of its side walls */
     const zb=wallGround(w); // street level in front of this wall (slopes); a house on a slope: its floor, like its window rows
-    quad(w.com?sets.com:sets.res,w.a.x,w.a.y,w.b.x,w.b.y,zb-0.3,zb+H,w.nx,w.ny,0,bays||0.02);
+    const top=topAt((w.a.x+w.b.x)/2-w.nx*0.6,(w.a.y+w.b.y)/2-w.ny*0.6), z1=Math.min(zb+H,top!=null?top:w.zBase+(w.h||6)); if(z1-zb<1.6)return; // no room for a ground floor here
+    quad(w.com?sets.com:sets.res,w.a.x,w.a.y,w.b.x,w.b.y,zb-0.3,z1,w.nx,w.ny,0,bays||0.02,(z1-zb+0.3)/(H+0.3));
     if(w.door){const mx=(w.a.x+w.b.x)/2,my=(w.a.y+w.b.y)/2,dx=(w.b.x-w.a.x)/w.len,dy=(w.b.y-w.a.y)/w.len,hw=0.65;
-      quad(sets.door,mx-dx*hw,my-dy*hw,mx+dx*hw,my+dy*hw,zb,zb+2.3,w.nx*1.6,w.ny*1.6,0,1);}
+      quad(sets.door,mx-dx*hw,my-dy*hw,mx+dx*hw,my+dy*hw,zb,Math.min(zb+2.3,z1),w.nx*1.6,w.ny*1.6,0,1,Math.min(1,(z1-zb)/2.3));}
   });
   [['res',matResGround],['com',matComGround],['door',matDoor]].forEach(([k,mat])=>{const s=sets[k];if(!s.p.length)return;
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(s.p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(s.n,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(s.u,2));
