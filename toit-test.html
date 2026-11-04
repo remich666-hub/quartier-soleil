@@ -3068,7 +3068,9 @@ async function roofSelect(obj){
   const R=roofCells(obj); if(tok!==RF.tok)return;
   if(!R||R.cells.length<4){veil(false);$('rBig').textContent='—';$('rBigC').textContent=(S.lidarR&&S.lidarR.mnh)?'Pas de relevé laser exploitable sur ce toit (bâtiment trop loin de l\'adresse).':'Le relevé laser de l\'IGN (LiDAR HD) n\'est pas encore publié pour ce secteur : le toit ne peut pas être mesuré ici. Essayez une autre adresse.';return;}
   /* the schematic roof first; the laser-traced one only if it cannot be built */
-  try{const M=roofModel(R); if(M&&M.cells.length){R.M=M; R.lcells=R.cells; R.cells=M.cells; R.F={regs:M.pans,lab:Int32Array.from(M.cells,c=>c.pan),verts:M.verts};}}catch(e){console.error('model',e);R.M=null;}
+  try{const M=roofModel(R); let wr=0,wn=0; if(M)M.pieces.forEach(p=>{if(p.F.best.score<9){wr+=p.F.best.rms*p.F.np;wn+=p.F.np;}}); if(M)M.rms=wn?wr/wn:9;
+    /* a roof no simple model explains (Paris mansards, courtyards…) keeps the laser-traced pans */
+    if(M&&M.cells.length&&M.rms<=0.2){R.M=M; R.lcells=R.cells; R.cells=M.cells; R.F={regs:M.pans,lab:Int32Array.from(M.cells,c=>c.pan),verts:M.verts};}}catch(e){console.error('model',e);R.M=null;}
   if(!R.M){
   try{R.F=roofFacets(R);}catch(e){console.error('facets',e);veil(false);$('rBigC').textContent='Reconstruction du toit impossible ici.';return;}
   try{const VEC=roofVector(R); if(VEC.cells.length){R.VEC=VEC; R.lcells=R.cells; R.cells=VEC.cells; R.F.lab=Int32Array.from(VEC.cells,c=>c.reg); R.F.verts=VEC.verts;
