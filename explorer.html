@@ -896,6 +896,56 @@ function ringSegs(pts,flip){ // outward-normal segments of a ring
   return segs;
 }
 let monuments=[], roadMeshes=[];
+/* lattice towers (Eiffel-type): the IGN gives them as nested solid prisms ("Tour, donjon") and the laser then fills them in.
+   A group of nested towers, one ≥ 100 m, on a base ≥ 1500 m², is redrawn as an open iron frame — 4 legs following the
+   sections the IGN gives, ring beams and cross-braces, its platforms — so light passes through it as it does in reality */
+function detectLattices(feats){
+  const T=[]; feats.forEach(f=>{const p=f.properties||{};if(!/tour|donjon|pyl/i.test(p.nature||''))return;const g=f.geometry;const poly=g.type==='Polygon'?g.coordinates:g.type==='MultiPolygon'?g.coordinates[0]:null;if(!poly)return;
+    const ring=ringToLocal(poly[0]);if(ring.length<3)return;let a=0,cx=0,cy=0;ring.forEach((q,i)=>{const r=ring[(i+1)%ring.length];a+=q.x*r.y-r.x*q.y;cx+=q.x;cy+=q.y;});T.push({ring,area:Math.abs(a)/2,cx:cx/ring.length,cy:cy/ring.length,h:+p.hauteur||0});});
+  const out=[]; T.filter(t=>t.h>=100).forEach(top=>{if(out.some(o=>pointInPoly(top.cx,top.cy,o.base)))return;
+    const grp=T.filter(t=>pointInPoly(top.cx,top.cy,t.ring)||Math.hypot(t.cx-top.cx,t.cy-top.cy)<4); const base=grp.reduce((a,b)=>b.area>a.area?b:a);
+    if(base.area<1500)return;
+    // orientation and half-size of each section: minimum-area rectangle of the base, applied to all
+    let best={a:0,s:1e18}; for(let d=0;d<90;d+=1){const an=d*RAD,c=Math.cos(an),sn=Math.sin(an);let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;base.ring.forEach(q=>{const u=q.x*c+q.y*sn,v=-q.x*sn+q.y*c;u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});if((u1-u0)*(v1-v0)<best.s)best={a:an,s:(u1-u0)*(v1-v0)};}
+    const halfOf=t=>{const c=Math.cos(best.a),sn=Math.sin(best.a);let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;t.ring.forEach(q=>{const u=q.x*c+q.y*sn,v=-q.x*sn+q.y*c;u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});return Math.max(1,((u1-u0)+(v1-v0))/4);};
+    const lv=grp.filter(t=>t!==base).sort((a,b)=>a.h-b.h).map(t=>({h:t.h,half:halfOf(t)}));
+    out.push({cx:top.cx,cy:top.cy,ang:best.a,base:base.ring,baseHalf:halfOf(base),levels:lv,top:Math.max(...grp.map(t=>t.h))});});
+  return out;
+}
+let latticeMeshes=[];
+function applyLattices(){
+  const Ls=S.lattices||[]; if(!Ls.length)return;
+  // drop every solid volume standing in a lattice's base (IGN prisms and their laser rebuilds), keep low kiosks
+  const gone=new Set(); S.meshes.forEach(m=>{const u=m.userData;if(!u.rings||(u.h||0)<15)return;let cx=0,cy=0;u.rings[0].forEach(q=>{cx+=q.x;cy+=q.y;});cx/=u.rings[0].length;cy/=u.rings[0].length;
+    if(Ls.some(L=>pointInPoly(cx,cy,L.base))){gone.add(m);if(m.parent)m.parent.remove(m);}});
+  if(gone.size){S.meshes=S.meshes.filter(m=>!gone.has(m));S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o));rebuildEdges();}
+  if(latticeMeshes.length)return; // frame already built
+  const mat=new THREE.MeshLambertMaterial({color:0xbdb2a2}); fadeMat(mat);
+  Ls.forEach(L=>{const P=[],c=Math.cos(L.ang),sn=Math.sin(L.ang),z0=terrainZ(L.cx,L.cy);
+    const W=(u,v,z)=>new THREE.Vector3(L.cx+u*c-v*sn,L.cy+u*sn+v*c,z0+z);
+    const beam=(a,b,r)=>{const d=new THREE.Vector3().subVectors(b,a).normalize();const x=new THREE.Vector3(0,0,1).cross(d);if(x.lengthSq()<1e-4)x.set(1,0,0);x.normalize();const y=new THREE.Vector3().crossVectors(d,x);
+      const R=(p)=>[0,1,2,3].map(k=>{const t=k*Math.PI/2+Math.PI/4;return p.clone().addScaledVector(x,Math.cos(t)*r).addScaledVector(y,Math.sin(t)*r);});const A=R(a),B=R(b);
+      for(let k=0;k<4;k++){const k2=(k+1)%4;[A[k],A[k2],B[k2],A[k],B[k2],B[k]].forEach(p=>P.push(p.x,p.y,p.z));}};
+    // section profile: half-width at each height, from the base footprint to the top
+    const nodes=[{z:0,w:L.baseHalf}].concat(L.levels.map(l=>({z:l.h,w:l.half}))); const zt=L.top;
+    const wAt=z=>{for(let i=0;i<nodes.length-1;i++){const a=nodes[i],b=nodes[i+1];if(z<=b.z){const t=(z-a.z)/Math.max(1,b.z-a.z);const e=1-(1-t)*(1-t);return a.w+(b.w-a.w)*e;}}return nodes[nodes.length-1].w;}; // concave like the real legs
+    const zs=[];for(let z=0;z<zt-1;z+=Math.max(6,Math.min(14,zt/22)))zs.push(z);zs.push(Math.max(...nodes.map(n=>n.z)));
+    const Z=[...new Set(zs.concat(nodes.map(n=>n.z)))].filter(z=>z<=nodes[nodes.length-1].z).sort((a,b)=>a-b);
+    const corners=[[1,1],[-1,1],[-1,-1],[1,-1]];
+    for(let i=0;i<Z.length-1;i++){const za=Z[i],zb=Z[i+1],wa=wAt(za),wb=wAt(zb),r=Math.max(0.35,1.6*(1-za/zt));
+      corners.forEach(([su,sv],k)=>{const [tu,tv]=corners[(k+1)%4];
+        beam(W(su*wa,sv*wa,za),W(su*wb,sv*wb,zb),r);                                   // leg
+        beam(W(su*wb,sv*wb,zb),W(tu*wb,tv*wb,zb),r*0.45);                              // ring beam
+        beam(W(su*wa,sv*wa,za),W(tu*wb,tv*wb,zb),r*0.3); beam(W(tu*wa,tv*wa,za),W(su*wb,sv*wb,zb),r*0.3);});} // cross-braces
+    // platforms at the intermediate sections, a cabin and a mast at the top
+    const slab=(z,w,t)=>{const q=[[w,w],[-w,w],[-w,-w],[w,-w]];const a=q.map(([u,v])=>W(u,v,z)),b=q.map(([u,v])=>W(u,v,z+t));const quad=(p0,p1,p2,p3)=>[p0,p1,p2,p0,p2,p3].forEach(p=>P.push(p.x,p.y,p.z));
+      quad(b[0],b[1],b[2],b[3]);quad(a[3],a[2],a[1],a[0]);for(let k=0;k<4;k++){const k2=(k+1)%4;quad(a[k],a[k2],b[k2],b[k]);}};
+    L.levels.slice(0,-1).forEach(l=>slab(l.h-2,l.half+1,3));
+    const lt=nodes[nodes.length-1]; slab(lt.z-8,lt.w*0.8,8); beam(W(0,0,lt.z),W(0,0,lt.z+Math.max(8,zt*0.05)),0.8);
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.computeVertexNormals();
+    const m=new THREE.Mesh(g,mat);m.castShadow=m.receiveShadow=true;scene.add(m);latticeMeshes.push(m);monuments.push(m);(S.obstacles=S.obstacles||[]).push(m);});
+}
+
 function addBelfry(ring,h,zBase,mats){ // town hall: a slimmer clock tower rising from the middle of the front
   const n=ring.length; let cx=0,cy=0; ring.forEach(p=>{cx+=p.x;cy+=p.y;}); cx/=n;cy/=n;
   const tw=5, th=h*1.45;
@@ -1136,7 +1186,7 @@ function buildContext(list){ // the wider neighbourhood: plain blocks merged int
 function buildScene(features){
   while(buildingsGroup.children.length){const m=buildingsGroup.children.pop();m.geometry.dispose();}
   if(edgeLines){scene.remove(edgeLines);edgeLines.geometry.dispose();edgeLines=null;}
-  monuments.forEach(m=>{scene.remove(m);m.geometry.dispose();}); monuments=[];
+  monuments.forEach(m=>{scene.remove(m);m.geometry.dispose();}); monuments=[]; latticeMeshes=[];
   roofMeshes.forEach(m=>{scene.remove(m);m.geometry.dispose();}); roofMeshes=[];
   const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
   S.meshes=[]; S.target=null; S.building=null;
@@ -1995,7 +2045,7 @@ async function load(q,at){
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
     try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms)S.mnt=buildMNT(ms,mh,feats);}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
-    buildScene(feats); loadOrtho(g.lat,g.lon);
+    S.lattices=detectLattices(feats); buildScene(feats); applyLattices(); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
@@ -2375,7 +2425,7 @@ async function lidarBuildings(){
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
     (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
     roofMeshes=roofMeshes.filter(m=>!gone.has(m));S.roofEdgeParts=buildRoofSets(S.roofSkip);
-    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0;
+    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices();
     S.counts=Object.assign(S.counts||{},{lidarBuildings:n});
     return true;
   }
