@@ -2343,6 +2343,7 @@ function partsSync(o){const hi=o.material===matsFor(o.userData.usage,true);
   if(hi&&RS&&!o.userData._hiRoof){const P=RS.P.slice(rr.a,rr.b),N=RS.N.slice(rr.a,rr.b);for(let i=2;i<P.length;i+=3)P[i]+=0.03;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
     const hm=new THREE.Mesh(g,PART_HI.roof||(PART_HI.roof=new THREE.MeshLambertMaterial({color:0xd48a5c})));hm.userData.hiRoof=true;hm.position.z=-o.position.z;o.add(hm);o.userData._hiRoof=hm;}
   else if(!hi&&o.userData._hiRoof){o.remove(o.userData._hiRoof);o.userData._hiRoof.geometry.dispose();o.userData._hiRoof=null;}
+  const rm=o.userData.roofMesh; if(rm&&rm.material&&!Array.isArray(rm.material)){const b=rm.userData.baseMat||(rm.userData.baseMat=rm.material);rm.material=hi?(PART_HI.roof||(PART_HI.roof=new THREE.MeshLambertMaterial({color:0xd48a5c}))):b;}
   o.children.forEach(c=>{if(!c.isMesh||!c.material||Array.isArray(c.material)||c.userData.hiRoof)return;
   const b=c.userData.baseMat||(c.userData.baseMat=c.material); if(!hi){c.material=b;return;}
   const k=c.userData.gable?(b.map?'wallT':'wall'):'roof';
