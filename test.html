@@ -818,7 +818,7 @@ async function buildParcels(lat,lon){
     const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:0xa39a8a,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}));m.receiveShadow=true;m.renderOrder=1;fadeMat(m.material);parcelGroup.add(m);}
   if(L.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(L,3));
     const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x8a8070,transparent:true,opacity:0.75}));l.renderOrder=1;fadeMat(l.material);parcelGroup.add(l);}
-  scene.add(parcelGroup); fadeIn(parcelGroup); if(nParc>20)streetsFromCadastre(); applyGroundMode(); if(S.T)S.T.parcels=performance.now();
+  scene.add(parcelGroup); fadeIn(parcelGroup); if(S.startIRC)S.startIRC(); if(nParc>20)streetsFromCadastre(); applyGroundMode(); if(S.T)S.T.parcels=performance.now();
 }
 const STREET=0xf4f1eb, CAD_R0=200, CAD_R1=226;
 function streetsFromCadastre(){ // streets = the public space between parcels: no more estimated road ribbons inside the cadastral zone
@@ -882,10 +882,10 @@ function relFloorName(obj,fi,k){const si=streetLevel(obj,fi);return floorName(k-
 function selectRefresh(){const b=S.building;if(!b)return;const i=S.win?b.userData.facades.indexOf(S.win.facade):-1;if(i>=0)chooseFacade(i);else refreshWinUI();}
 function onGroundData(){S.groundKey=(S.groundKey||0)+1; if(S.gfWalls)buildGroundFloors(S.gfWalls); if(S.building){try{selectRefresh();}catch(e){}}}
 const MNT_R=316, MNT_ST=1;
-function buildMNT(MS,MH,feats){ // bare ground from the laser (surface − heights, same 1 m grid), metres above alt0
+async function buildMNT(MS,MH,feats){ const yl=slicer(); // bare ground from the laser (surface − heights, same 1 m grid), metres above alt0
   const N=Math.floor(2*MNT_R/MNT_ST)+1, raw=new Float32Array(N*N);
-  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const x=-MNT_R+i*MNT_ST,y=MNT_R-j*MNT_ST;const a=MS.at(x,y),h=MH.at(x,y);
-    raw[j*N+i]=(a!=null&&h!=null)?a-Math.max(0,h)-S.alt0:NaN;}
+  for(let j=0;j<N;j++){if(!(j&15))await yl();for(let i=0;i<N;i++){const x=-MNT_R+i*MNT_ST,y=MNT_R-j*MNT_ST;const a=MS.at(x,y),h=MH.at(x,y);
+    raw[j*N+i]=(a!=null&&h!=null)?a-Math.max(0,h)-S.alt0:NaN;}}
   let bad=0; for(let k=0;k<raw.length;k++)if(isNaN(raw[k]))bad++; if(bad>raw.length*0.3)return null;
   // Under a building the laser ground is only interpolated between the streets around it, so it drifts to a mid level and,
   // on a slope, the cells touching a wall would mix the upper street with the lower one. Inside footprints, take instead
@@ -902,12 +902,12 @@ function buildMNT(MS,MH,feats){ // bare ground from the laser (surface − heigh
   // Ground is smooth: 3×3 median everywhere, then any cell still > 1 m off its 5×5 median takes that median.
   const z=new Float32Array(N*N), w=new Float32Array(25);
   const isort=(c)=>{for(let a=1;a<c;a++){const v=w[a];let b=a-1;while(b>=0&&w[b]>v){w[b+1]=w[b];b--;}w[b+1]=v;}}; // small in-place sort, no allocation (≈10× faster than Array.sort here)
-  for(let j=0;j<N;j++)for(let i=0;i<N;i++){let c=0;for(let dj=-1;dj<=1;dj++){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-1;di<=1;di++){const ii=i+di;if(ii<0||ii>=N)continue;const v=raw[jj*N+ii];if(v===v)w[c++]=v;}}
-    if(!c){z[j*N+i]=NaN;continue;} isort(c);z[j*N+i]=w[c>>1];}
+  for(let j=0;j<N;j++){if(!(j&15))await yl();for(let i=0;i<N;i++){let c=0;for(let dj=-1;dj<=1;dj++){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-1;di<=1;di++){const ii=i+di;if(ii<0||ii>=N)continue;const v=raw[jj*N+ii];if(v===v)w[c++]=v;}}
+    if(!c){z[j*N+i]=NaN;continue;} isort(c);z[j*N+i]=w[c>>1];}}
   // what is left above the ground (awnings, pergolas, a hedge the height grid missed) only ever pushes it up: a cell more than
   // 50 cm above the low part of its 5×5 neighbourhood (30th percentile) takes that value
-  {const z2=new Float32Array(z);for(let j=2;j<N-2;j++)for(let i=2;i<N-2;i++){const k=j*N+i,lim=z[k]-0.5;let c=0,low=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++){const v=z[k+dj*N+di];w[c++]=v;if(v<lim)low++;}
-    if(low<8)continue; isort(25);z2[k]=w[7];} z.set(z2);} // the 30th percentile is under the limit only when 8 neighbours are: sort only then
+  {const z2=new Float32Array(z);for(let j=2;j<N-2;j++){if(!(j&15))await yl();for(let i=2;i<N-2;i++){const k=j*N+i,lim=z[k]-0.5;let c=0,low=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++){const v=z[k+dj*N+di];w[c++]=v;if(v<lim)low++;}
+    if(low<8)continue; isort(25);z2[k]=w[7];}} z.set(z2);} // the 30th percentile is under the limit only when 8 neighbours are: sort only then
   for(let j=2;j<N-2;j++)for(let i=2;i<N-2;i++){const k=j*N+i;const m4=(z[k-1]+z[k+1]+z[k-N]+z[k+N])/4;if(Math.abs(z[k]-m4)<0.6)continue;
     let c=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++)w[c++]=z[k+dj*N+di];const zk=z[k];isort(25);if(Math.abs(zk-w[12])>1)z[k]=w[12];}
   return {N,z};
@@ -1273,7 +1273,7 @@ function monumentNature(nature,usage,h){
   if(/ch[aâ]teau|tour|donjon|moulin/i.test(nature)&&h<20&&/sidentiel/i.test(usage))return null;
   return nature;
 }
-function buildScene(features){
+async function buildScene(features){ const yl=slicer();
   while(buildingsGroup.children.length){const m=buildingsGroup.children.pop();m.geometry.dispose();}
   if(edgeLines){scene.remove(edgeLines);edgeLines.geometry.dispose();edgeLines=null;}
   monuments.forEach(m=>{scene.remove(m);m.geometry.dispose();}); monuments=[]; latticeMeshes=[];
@@ -1281,7 +1281,7 @@ function buildScene(features){
   const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
   S.meshes=[]; S.target=null; S.building=null;
   const edgeArrays=[], walls=[], ctxList=[], cands=[]; let best=null,bestD=1e9,monuBest=null,monuD=1e9;
-  features.forEach(f=>{
+  const each=f=>{
     const p=f.properties; let h=p.hauteur; if(typeof h!=='number'||h<=0){const n=p.nombre_d_etages;h=(typeof n==='number'&&n>0)?n*3+1:6;}
     const sol=(typeof p.altitude_minimale_sol==='number'&&p.altitude_minimale_sol>-50)?p.altitude_minimale_sol:null;
     const tMax=(typeof p.altitude_maximale_toit==='number'&&p.altitude_maximale_toit>-50)?p.altitude_maximale_toit:null;
@@ -1319,7 +1319,8 @@ function buildScene(features){
       if(monu){if(d<monuD){monuBest=mesh;monuD=d;}} else if(bb.min.x<=0&&bb.max.x>=0&&bb.min.y<=0&&bb.max.y>=0&&bestD>-1){best=mesh;bestD=-1;} else if(d<bestD){best=mesh;bestD=d;}
       if(!far&&!monu){const de=pointInPoly(0,0,outer)?0:distToRing(0,0,outer); if(de<40)cands.push({mesh,de,area:Math.abs(areaOf(outer)),usage,h});}
     });
-  });
+  };
+  for(let fi=0;fi<features.length;fi++){each(features[fi]);if(!(fi&15))await yl();}
   // the address point often falls on the street or on a carport: prefer the main dwelling nearby over annexes
   {const annex=c=>(!c.usage||/Indiff|Annexe/i.test(c.usage))&&(c.area<60||c.h<3); const sc=c=>c.de-Math.min(8,Math.sqrt(c.area)/3)-(/sidentiel/.test(c.usage)?4:0);
    const cur=cands.find(c=>c.mesh===best); if(!cur||annex(cur)||cur.de>0){const ok=cands.filter(c=>!annex(c)).sort((a,b)=>sc(a)-sc(b)); if(ok.length&&(!cur||annex(cur)||sc(ok[0])<sc(cur)))best=ok[0].mesh;}}
@@ -1629,7 +1630,7 @@ async function recenterOn(obj){
     S.camKeep={t:cam.target.clone().sub(c),th:cam.theta,ph:cam.phi,d:cam.dist,alt0};
     const lat=S.lat+c.y/ky, lon=S.lon+c.x/kx, label=S.label||'ce bâtiment';
     toast('Recentrage du quartier…'); $('addr').value=label;
-    await load(label,{lat,lon,label});
+    await load(label,{lat,lon,label,recenter:true});
     S.camKeep=null;
     for(let i=0;i<60&&!S.lidarBuilt;i++)await new Promise(r=>setTimeout(r,250));
     const pIn=new THREE.Vector2(keep.x-keep.n.x*0.8,keep.y-keep.n.y*0.8);
@@ -1740,7 +1741,8 @@ async function addressOf(obj){
   if(!S.addrLabel)S.addrLabel=S.label;
   // the building the searched address points at keeps that address: a corner block has several numbers, and the one nearest its
   // centre is often on the other street
-  const own=(S.target&&family(S.target).includes(obj))||(obj.userData.rings||[]).some(r=>pointInPoly(0,0,r));
+  // (after a recentring on another building the centre is no longer the searched address: that building gets its own)
+  const own=!S.recentered&&((S.target&&family(S.target).includes(obj))||(obj.userData.rings||[]).some(r=>pointInPoly(0,0,r)));
   if(own&&S.addrLabel){S.label=S.addrLabel;renderAddr();return;}
   try{const r=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon.toFixed(6)}&lat=${lat.toFixed(6)}&type=housenumber&limit=1`);const j=await r.json();if(tok!==revTok)return;
     const f=j.features&&j.features[0]; const d=f?Math.hypot((f.geometry.coordinates[0]-lon)*kx,(f.geometry.coordinates[1]-lat)*ky):1e9;
@@ -1938,6 +1940,7 @@ async function fetchClimate(){ // share of clear-sky direct sun actually receive
 function rangesOf(lit,step){const out=[];let a=-1;lit.forEach((v,i)=>{if(v&&a<0)a=i;if(!v&&a>=0){out.push([a*step,i*step]);a=-1;}});if(a>=0)out.push([a*step,lit.length*step]);return out.map(([x,y])=>[fmtTime(x),fmtTime(y)]);}
 async function reportData(){
   const w=S.win; if(!w||!w.pos)throw new Error('Choisissez d\'abord une fenêtre');
+  if(!S.irc&&S.startIRC){try{await Promise.race([S.startIRC(),new Promise(r=>setTimeout(r,12000))]);}catch(e){}} // deciduous trees known before the winter figures
   if(!S.skyline||S.skyline.floor!==w.floor||S.skyline.lg!==leafGrid()){const sk=await fetchSkyline();if(sk){sk.floor=w.floor;S.skyline=sk;}}
   const L=!!S.skyline, Y=S.year, u=w.obj.userData, f=w.facade;
   const months=yearRows(L).map(r=>({m:r.m,h:+r.h.toFixed(2),free:+r.fh.toFixed(2),bare:+(bareMinutes(Y,r.m,15,10,L).min/60).toFixed(2)}));
@@ -2144,17 +2147,19 @@ async function load(q,at){
   $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('addrDone').hidden=true; $('stepAddr').hidden=false; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
-    S.T={start:performance.now()}; const g=at||await geocode(q); S.T.geo=performance.now(); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
-    S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; S.rgbFarP=fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS',g.lat,g.lon,18,3).catch(()=>null); {const myLat=g.lat; fetchIRC(g.lat,g.lon).then(I=>{if(!I||S.lat!==myLat)return;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();}).catch(()=>{});}
+    S.T={start:performance.now()}; S.recentered=!!(at&&at.recenter); const g=at||await geocode(q); S.T.geo=performance.now(); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
+    S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; S.rgbFarP=fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS',g.lat,g.lon,18,3).catch(()=>null); S.ircP=null; {const myLat=g.lat,myLon=g.lon; // the infrared photo (deciduous trees) is only fetched once the model is up: it never competes with it
+      S.startIRC=()=>{if(S.ircP||S.lat!==myLat)return S.ircP;S.ircP=fetchIRC(myLat,myLon).then(I=>{if(!I||S.lat!==myLat)return null;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();return I;}).catch(()=>null);return S.ircP;};
+      setTimeout(()=>{if(S.lat===myLat)S.startIRC();},9000);}
     status('Bâtiments et relief IGN…');
     const [alt,feats]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]); const terrain=null;
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
     S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.loading=true; S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
-    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
+    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
-    S.lattices=detectLattices(feats); S.arches=detectArches(feats); buildScene(feats); applyLattices(); S.T.scene=performance.now(); loadOrtho(g.lat,g.lon);
+    S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); S.T.scene=performance.now(); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
