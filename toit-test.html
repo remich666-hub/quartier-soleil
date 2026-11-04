@@ -3279,7 +3279,7 @@ function roofVector(R){
   /* a pan whose polygon does not close cleanly (very cut-up roofs) keeps its exact laser outline instead: no hole, ever */
   const pixA=new Map(); for(let k=0;k<L.length;k++)if(L[k]>=0)pixA.set(L[k],(pixA.get(L[k])||0)+r*r);
   const polA=new Map(); shapes.forEach(sh=>polA.set(sh.A,(polA.get(sh.A)||0)+sh.area));
-  const rasterRegs=new Set(); pixA.forEach((a,A)=>{const b=polA.get(A)||0;if(Math.abs(b-a)>Math.max(0.8,0.12*a))rasterRegs.add(A);});
+  const rasterRegs=new Set(); pixA.forEach((a,A)=>{const b=polA.get(A)||0;if(Math.abs(b-a)>Math.max(2,0.3*a))rasterRegs.add(A);});
   for(let i=shapes.length-1;i>=0;i--)if(rasterRegs.has(shapes[i].A))shapes.splice(i,1);
   /* energy cells on the planes */
   const s=R.s, cells=[], inShape=(sh,x,y)=>pointInPoly(x,y,sh.P)&&!sh.H.some(h=>pointInPoly(x,y,h));
