@@ -3591,13 +3591,16 @@ function roofModel(R){
   /* the roof can overhang the IGN wall line (eaves, a lower roof running past it): an outer edge is pushed out as far as the laser,
      just beyond it, still lies on the roof plane next to it (up to 2 m), never into another building */
   const othersR=S.meshes.filter(m=>m.userData.rings&&family(RF.sel||S.building).indexOf(m)<0).map(m=>m.userData.rings[0].map(p=>({x:p.x+R.sh.dx,y:p.y+R.sh.dy})));
-  pieces.forEach(pc=>{if(pc.sub||pc.F.best.score>=9||!MHr)return; const P=pc.P,n=P.length; let moved=false; const Q=P.map(p=>p.slice());
-    for(let i=0;i<n;i++){const a=P[i],b=P[(i+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<1.5)continue;const ox=(b[1]-a[1])/L,oy=-(b[0]-a[0])/L;
-      const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2; if(pieces.some(o=>o!==pc&&pointInPoly(mx+ox*0.3,my+oy*0.3,o.P.map(([x,y])=>({x,y})))))continue; /* inner edge */
-      let reach=0; for(let o=0.25;o<=2.001;o+=0.25){let ok=0,nn=0;for(let t=0.1;t<=0.9;t+=0.1){const x=a[0]+(b[0]-a[0])*t+ox*o,y=a[1]+(b[1]-a[1])*t+oy*o;if(othersR.some(r=>pointInPoly(x,y,r))){nn=-1;break;}const z=R.Z(x,y),h=MHr.at(x,y);nn++;if(z!=null&&h!=null&&h>1.5&&Math.abs(z-zFit(pc.F,x,y))<0.3)ok++;}
-        if(nn<=0||ok/nn<0.6)break; reach=o;}
-      if(reach>=0.5){Q[i]=[Q[i][0]+ox*reach,Q[i][1]+oy*reach];Q[(i+1)%n]=[Q[(i+1)%n][0]+ox*reach,Q[(i+1)%n][1]+oy*reach];moved=true;}}
-    if(moved&&Math.abs(MK.area(Q))>Math.abs(MK.area(P))){pc.P=Q;pc.grown=true;}});
+  const exts=[];
+  pieces.forEach(pc=>{if(pc.sub||pc.F.best.score>=9||!MHr)return; const P=pc.P,n=P.length;
+    for(let i=0;i<n;i++){const a=P[i],b=P[(i+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<1)continue;const ox=(b[1]-a[1])/L,oy=-(b[0]-a[0])/L,tx=(b[0]-a[0])/L,ty=(b[1]-a[1])/L;
+      const reachAt=t=>{let reach=0;for(let o=0.25;o<=2.001;o+=0.25){const x=a[0]+tx*t+ox*o,y=a[1]+ty*t+oy*o;if(othersR.some(r=>pointInPoly(x,y,r))||pieces.some(q=>q!==pc&&pointInPoly(x,y,q.P.map(([u,v])=>({x:u,y:v})))))break;const z=R.Z(x,y),h=MHr.at(x,y);if(!(z!=null&&h!=null&&h>1.5&&Math.abs(z-zFit(pc.F,x,y))<0.3))break;reach=o;}return reach;};
+      const ts=[];for(let t=0.125;t<L;t+=0.25)ts.push([t,reachAt(t)]);
+      /* runs of samples reaching at least 50 cm past the wall */
+      let run=[];const flush=()=>{if(run.length*0.25>=1.0){const rs=run.map(r=>r[1]).sort((x,y)=>x-y),dep=rs[Math.floor(rs.length*0.3)];const t0=run[0][0]-0.125,t1=run[run.length-1][0]+0.125;
+          if(dep>=0.5){const A=[a[0]+tx*t0,a[1]+ty*t0],B=[a[0]+tx*t1,a[1]+ty*t1];exts.push({P:[A,B,[B[0]+ox*dep,B[1]+oy*dep],[A[0]+ox*dep,A[1]+oy*dep]],bk:pc.bk,F:pc.F,ext:true,parent:pc});}}run=[];};
+      ts.forEach(r=>{if(r[1]>=0.5)run.push(r);else flush();});flush();}});
+  exts.forEach(e=>{if(MK.area(e.P)<0)e.P.reverse(); if(Math.abs(MK.area(e.P))>=0.8)pieces.push(e);});
   subs.forEach(sb=>pieces.push(sb));
   pieces.forEach((pc,pi)=>{const P=pc.P,n=P.length,E=pc.F.E,d=pc.F.d,best=pc.F.best;
     pc.fit=best; const Eb=best.c.E, z0=best.z0, kk=best.k;
