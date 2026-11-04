@@ -3447,9 +3447,9 @@ function roofModel(R){
       let e2=0;use.forEach(u=>{const r=u.p.z-zf(u.p);e2+=r*r;});const rms=Math.sqrt(e2/Math.max(1,use.length)),inl=use.length/Math.max(1,pts.length);
       const pen={flat:0,shed:0.05,gable:0.015,gable2:0.025,hip:0.03}[c.k]; if(c.k==='shed'&&k<Math.tan(10*RAD))return null;
       return {c,z0,k,ks,zs,score:rms*(1+2*(1-inl))+pen,rms,inl};};
-    let best=null; const all=[]; if(pts.length>=6)cands.forEach(c=>{const f=fit(c);all.push(f?[c.k,f.rms.toFixed(2),(f.inl*100|0),(Math.atan(f.k)*57.3).toFixed(0),f.score.toFixed(3)]:[c.k,'x']);if(f&&(!best||f.score<best.score))best=f;});
+    let best=null; const all=[], fits=[]; if(pts.length>=6)cands.forEach(c=>{const f=fit(c);if(f)fits.push(f);all.push(f?[c.k,f.rms.toFixed(2),(f.inl*100|0),(Math.atan(f.k)*57.3).toFixed(0),f.score.toFixed(3)]:[c.k,'x']);if(f&&(!best||f.score<best.score))best=f;});
     if(!best)best={c:{k:'flat',E:[]},z0:top,k:0,ks:[],zs:[],score:9,rms:9,inl:0};
-    return {best,E:RS,d,np:pts.length,all};};
+    return {best,E:RS,d,np:pts.length,all,fits};};
   /* blocks are an IGN split, not the roof's: two neighbouring pieces are one roof when their union is convex and one model fits it as well */
   const hull=pts=>{const p=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);const lo=[],up=[];
     p.forEach(q=>{while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],q)<=1e-9)lo.pop();lo.push(q);});for(let i=p.length-1;i>=0;i--){const q=p[i];while(up.length>=2&&cr(up[up.length-2],up[up.length-1],q)<=1e-9)up.pop();up.push(q);}
@@ -3464,29 +3464,35 @@ function roofModel(R){
   /* added volumes: the laser points standing well above the main roof (a cross gable, a dormer, a raised part) are grouped;
      each group large enough gets its own small volume and typical roof, fitted on its points only; the higher roof wins */
   const zFit=(F,x,y)=>{const b=F.best,Eb=b.c.E;if(!Eb.length)return b.z0;const KS=b.ks||Eb.map(()=>b.k),ZS=b.zs||Eb.map(()=>b.z0);return Math.min(...Eb.map((e,i)=>ZS[i]+KS[i]*F.d(e,x,y)));};
-  const subs=[];
-  pieces.forEach(pc=>{if(pc.F.best.score>=9)return; const Pp=pc.P.map(([x,y])=>({x,y}));
+  const findSubs=(pc,F)=>{const subs=[]; const Pp=pc.P.map(([x,y])=>({x,y}));
     let pts=C.filter(c=>pointInPoly(c.x,c.y,Pp));
     for(let round=0;round<3;round++){
-      const up=pts.filter(c=>c.z-Math.max(zFit(pc.F,c.x,c.y),...subs.filter(sb=>sb.parent===pc&&pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y})))).map(sb=>zFit(sb.F,c.x,c.y)))>0.45);
+      const up=pts.filter(c=>c.z-Math.max(zFit(F,c.x,c.y),...subs.filter(sb=>pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y})))).map(sb=>zFit(sb.F,c.x,c.y)))>0.45);
       if(up.length*s*s<4)break;
       const key=(c)=>Math.round(c.x/s)+','+Math.round(c.y/s), map=new Map(); up.forEach(c=>map.set(key(c),c)); const seen=new Set(), groups=[];
       up.forEach(c0=>{const k0=key(c0);if(seen.has(k0))return;const g=[];const q=[c0];seen.add(k0);while(q.length){const c=q.pop();g.push(c);const i=Math.round(c.x/s),j=Math.round(c.y/s);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const k=(i+di)+','+(j+dj);if(!seen.has(k)&&map.has(k)){seen.add(k);q.push(map.get(k));}}}groups.push(g);});
       let added=false;
       groups.filter(g=>g.length*s*s>=4).sort((a,b)=>b.length-a.length).forEach(g=>{
-        /* its rectangle, aligned on the main volume's axes */
-        const ax=pc.F.E[0].t; let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; g.forEach(c=>{const u=c.x*ax[0]+c.y*ax[1],v=-c.x*ax[1]+c.y*ax[0];u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});
+        const ax=F.E[0].t; let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; g.forEach(c=>{const u=c.x*ax[0]+c.y*ax[1],v=-c.x*ax[1]+c.y*ax[0];u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});
         u0-=s/2;u1+=s/2;v0-=s/2;v1+=s/2; if(u1-u0<1.5||v1-v0<1.5)return;
         const X=(u,v)=>[u*ax[0]-v*ax[1],u*ax[1]+v*ax[0]]; let Q=[X(u0,v0),X(u1,v0),X(u1,v1),X(u0,v1)];
         for(let i=0;i<pc.P.length;i++){const p0=pc.P[i],p1=pc.P[(i+1)%pc.P.length];Q=MK.clipHalf(Q,p=>-((p1[0]-p0[0])*(p[1]-p0[1])-(p1[1]-p0[1])*(p[0]-p0[0])));if(Q.length<3)return;}
         if(MK.area(Q)<0)Q.reverse(); if(Math.abs(MK.area(Q))<3)return;
         const Qp=Q.map(([x,y])=>({x,y})), inner=g.filter(c=>pointInPoly(c.x,c.y,Qp)); if(inner.length<8)return;
-        const F=fitPiece(Q,pc.bk.top,inner); if(F.best.score>=9||F.best.rms>0.15)return;
-        /* it must really stand above the main roof */
-        const lift=inner.map(c=>zFit(F,c.x,c.y)-zFit(pc.F,c.x,c.y)).sort((a,b)=>a-b)[inner.length>>1]; if(lift<0.3)return;
-        subs.push({P:Q,bk:pc.bk,F,parent:pc,sub:true}); added=true;});
+        const Fs=fitPiece(Q,pc.bk.top,inner); if(Fs.best.score>=9||Fs.best.rms>0.15)return;
+        const lift=inner.map(c=>zFit(Fs,c.x,c.y)-zFit(F,c.x,c.y)).sort((a,b)=>a-b)[inner.length>>1]; if(lift<0.3)return;
+        subs.push({P:Q,bk:pc.bk,F:Fs,parent:pc,sub:true}); added=true;});
       if(!added)break;}
-  });
+    /* how well main + additions explain the piece's laser points */
+    let e2=0,n=0,inl=0; pts.forEach(c=>{let z=zFit(F,c.x,c.y);subs.forEach(sb=>{if(pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y}))))z=Math.max(z,zFit(sb.F,c.x,c.y));});const r=c.z-z;if(Math.abs(r)<0.3){e2+=r*r;inl++;}n++;});
+    const rms=Math.sqrt(e2/Math.max(1,inl)),fi=inl/Math.max(1,n),pen={flat:0,shed:0.05,gable:0.015,gable2:0.025,hip:0.03}[F.best.c.k]||0;
+    return {subs,score:rms*(1+2*(1-fi))+pen+0.02*subs.length};};
+  const subs=[];
+  pieces.forEach(pc=>{if(pc.F.best.score>=9)return;
+    /* the main roof is chosen together with its additions: a 2-pan roof plus a cross gable beats a hip roof that half-explains both */
+    const tops=pc.F.fits.slice().sort((a,b)=>a.score-b.score).slice(0,4); let bestJ=null;
+    tops.forEach(fb=>{const F={...pc.F,best:fb};const r=findSubs(pc,F);if(!bestJ||r.score<bestJ.score)bestJ={F,r};});
+    if(bestJ){pc.F=bestJ.F; bestJ.r.subs.forEach(sb=>subs.push(sb));}});
   subs.forEach(sb=>pieces.push(sb));
   pieces.forEach((pc,pi)=>{const P=pc.P,n=P.length,E=pc.F.E,d=pc.F.d,best=pc.F.best;
     pc.fit=best; const Eb=best.c.E, z0=best.z0, kk=best.k;
