@@ -379,17 +379,17 @@ async function loadLot(lat,lon){ const T0=S.T;
     const PL=[]; pf.forEach(f=>{const g=f.geometry,id=f.properties&&(f.properties.idu||f.id);const polys=g&&g.type==='Polygon'?[g.coordinates]:(g&&g.type==='MultiPolygon'?g.coordinates:[]);
       polys.forEach(po=>{if(!po[0]||po[0].length<4)return;const r=ringToLocal(po[0]);let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});PL.push({id,r,x0,x1,y0,y1});});});
     const GB=new Map(),gk=(i,j)=>i*100003+j; PL.forEach(P=>{for(let i=Math.floor(P.x0/20);i<=Math.floor(P.x1/20);i++)for(let j=Math.floor(P.y0/20);j<=Math.floor(P.y1/20);j++){const k=gk(i,j);(GB.get(k)||GB.set(k,[]).get(k)).push(P);}});
-    const par=new Map(), adr=new Set(); await new Promise(r=>setTimeout(r,0));
+    const par=new Map(), adr=new Map(); await new Promise(r=>setTimeout(r,0));
     S.meshes.forEach(m=>{const u=m.userData;if(!u.bid||!u.rings||par.has(u.bid))return;const R=u.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;R.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});
       const votes=new Map();for(let i=0;i<5;i++)for(let j=0;j<5;j++){const x=x0+(x1-x0)*(i+0.5)/5,y=y0+(y1-y0)*(j+0.5)/5;if(!pointInPoly(x,y,R))continue;
         for(const P of (GB.get(gk(Math.floor(x/20),Math.floor(y/20)))||[])){if(x<P.x0||x>P.x1||y<P.y0||y>P.y1||!pointInPoly(x,y,P.r))continue;votes.set(P.id,(votes.get(P.id)||0)+1);break;}}
       if(votes.size){const top=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0][0];par.set(u.bid,new Set([top]));}});
-    ab.forEach(f=>{const p=f.properties;if(p.id_bat)adr.add(p.id_bat);});
-    if(!par.size)return; const adrPar=new Set(); adr.forEach(b=>{const P=par.get(b);if(P)P.forEach(x=>adrPar.add(x));}); S.lot={par,adr,adrPar}; S.T.lot=performance.now();
+    ab.forEach(f=>{const p=f.properties;if(p.id_bat&&p.id_adr)(adr.get(p.id_bat)||adr.set(p.id_bat,new Set()).get(p.id_bat)).add(p.id_adr);});
+    if(!par.size)return; const adrPar=new Set(); adr.forEach((_,b)=>{const P=par.get(b);if(P)P.forEach(x=>adrPar.add(x));}); S.lot={par,adr,adrPar}; S.T.lot=performance.now();
     if(S.target)setHi(S.target,false); linkAnnexes(); if(S.target)setHi(S.target,true);
   }catch(e){}}
 /* buildings touching a house that belong to the same lot (garage, shed, veranda: separate IGN footprints) are one selection, one colour.
-   With the cadastre and the address base: same cadastral parcel (or a parcel with no address at all: the plot next to the house), no address of their own, single storey, not taller nor bigger than the house.
+   With the cadastre and the address base: same cadastral parcel (or a parcel with no address at all: the plot next to the house), no address of their own (or only the house's), single storey, not taller nor bigger than the house.
    Without it: small low buildings touching a much bigger one */
 function linkAnnexes(){ // re-run after the laser rebuild: undo the previous links first (their houses may have been replaced)
   S.meshes.forEach(m=>{const u=m.userData;if(u.annexOf){u.gid=u._gid0;delete u.annexOf;}});
@@ -402,11 +402,12 @@ function linkAnnexes(){ // re-run after the laser rebuild: undo the previous lin
   G.forEach(g=>{g.byLot=!!(lot&&ids(g).length&&ids(g).every(i=>lot.par.has(i)));if(g.byLot)g.par=parOf(g);});
   G.sort((a,b)=>b.area-a.area);
   G.forEach(a=>{if(a.os.some(o=>(o.m.userData.floors||1)>1))return; // a storeyed lodging is not an annex
-    if(a.byLot){if(ids(a).some(i=>lot.adr.has(i))||a.h>5)return;}
+    const adrOf=g=>{const s=new Set();ids(g).forEach(i=>{const A=lot.adr.get(i);if(A)A.forEach(x=>s.add(x));});return s;};
+    if(a.byLot){a.adrs=adrOf(a);if(a.h>5)return;}
     else if(a.area>=35||!(a.h<=3.5||!a.u||/indiff/i.test(a.u)))return;
     let best=null;
     G.forEach(b=>{if(b===a||b.annex)return;
-      if(a.byLot){if(!b.byLot||b.area<=a.area||b.h<a.h-0.3||!([...a.par].some(x=>b.par.has(x))||[...a.par].every(x=>!lot.adrPar.has(x))))return;}
+      if(a.byLot){if(!b.byLot||b.area<=a.area||b.h<a.h-0.3||(a.adrs.size&&![...a.adrs].every(x=>adrOf(b).has(x)))||!([...a.par].some(x=>b.par.has(x))||[...a.par].every(x=>!lot.adrPar.has(x))))return;}
       else if(b.area<2.5*a.area||b.area<40)return;
       const near=a.os.some(o=>b.os.some(q=>o.x0<q.x1+0.6&&q.x0<o.x1+0.6&&o.y0<q.y1+0.6&&q.y0<o.y1+0.6&&dist(o.r,q.r)<0.6)); if(near&&(!best||b.area>best.area))best=b;});
     if(!best)return; a.annex=true; const main=best.os[0].m; if(!main.userData.gid){main.userData.gid=++GID;best.os.forEach(o=>o.m.userData.gid=main.userData.gid);}
