@@ -3594,7 +3594,10 @@ function roofModel(R){
   const exts=[];
   pieces.forEach(pc=>{if(pc.sub||pc.F.best.score>=9||!MHr)return; const P=pc.P,n=P.length;
     for(let i=0;i<n;i++){const a=P[i],b=P[(i+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<1)continue;const ox=(b[1]-a[1])/L,oy=-(b[0]-a[0])/L,tx=(b[0]-a[0])/L,ty=(b[1]-a[1])/L;
-      const reachAt=t=>{let reach=0;for(let o=0.25;o<=2.001;o+=0.25){const x=a[0]+tx*t+ox*o,y=a[1]+ty*t+oy*o;if(othersR.some(r=>pointInPoly(x,y,r))||pieces.some(q=>q!==pc&&pointInPoly(x,y,q.P.map(([u,v])=>({x:u,y:v})))))break;const z=R.Z(x,y),h=MHr.at(x,y);if(!(z!=null&&h!=null&&h>1.5&&Math.abs(z-zFit(pc.F,x,y))<0.3))break;reach=o;}return reach;};
+      const reachAt=t=>{let reach=0;const x0=a[0]+tx*t,y0=a[1]+ty*t;let zp=R.Z(x0-ox*0.25,y0-oy*0.25);if(zp==null)return 0;const zw=zp; /* the roof just inside the wall */
+        for(let o=0.25;o<=2.001;o+=0.25){const x=x0+ox*o,y=y0+oy*o;if(othersR.some(r=>pointInPoly(x,y,r))||pieces.some(q=>q!==pc&&pointInPoly(x,y,q.P.map(([u,v])=>({x:u,y:v})))))break;
+          const z=R.Z(x,y),h=MHr.at(x,y); /* still roof: not ground, no jump, not rising above the eave (a tree would) */
+          if(!(z!=null&&h!=null&&h>1.5&&Math.abs(z-zp)<0.45&&z<=zw+0.25))break; zp=z; reach=o;}return reach;};
       const ts=[];for(let t=0.125;t<L;t+=0.25)ts.push([t,reachAt(t)]);
       /* runs of samples reaching at least 50 cm past the wall */
       let run=[];const flush=()=>{if(run.length*0.25>=1.0){const rs=run.map(r=>r[1]).sort((x,y)=>x-y),dep=rs[Math.floor(rs.length*0.3)];const t0=run[0][0]-0.125,t1=run[run.length-1][0]+0.125;
