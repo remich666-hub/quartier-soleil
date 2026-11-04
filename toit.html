@@ -3032,7 +3032,7 @@ async function roofSelect(obj){
   ['rK1','rK2','rK3'].forEach(k=>$(k).textContent='—');
   for(let i=0;i<80&&!(S.lidarR&&S.lidarR.mnh&&(S.mnsF||S.lidarR.mns));i++){await new Promise(r=>setTimeout(r,150));if(tok!==RF.tok)return;}
   const R=roofCells(obj); if(tok!==RF.tok)return;
-  if(!R||R.cells.length<4){$('rBig').textContent='—';$('rBigC').textContent='Pas de relevé laser exploitable sur ce toit (bâtiment trop loin de l\'adresse, ou toit non couvert par le LiDAR HD).';return;}
+  if(!R||R.cells.length<4){$('rBig').textContent='—';$('rBigC').textContent=(S.lidarR&&S.lidarR.mnh)?'Pas de relevé laser exploitable sur ce toit (bâtiment trop loin de l\'adresse).':'Le relevé laser de l\'IGN (LiDAR HD) n\'est pas encore publié pour ce secteur : le toit ne peut pas être mesuré ici. Essayez une autre adresse.';return;}
   try{R.F=roofFacets(R);}catch(e){console.error('facets',e);$('rBigC').textContent='Reconstruction du toit impossible ici.';return;}
   rfMesh(R); roofHide(obj,true); RF.cells=null; R.V={cells:R.F.verts,Z:R.Z};
   const wP=roofWeather(S.lat,S.lon).catch(e=>null);
