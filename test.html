@@ -2064,7 +2064,16 @@ async function fetchSkyline(){
   if(F||C){ // rasters: instant. First register the IGN footprint on the LiDAR roof (they can be 1–2 m apart), then sample from the shifted window
     const ud=w.obj.userData; const sh=MH?(ud._sh&&ud._shMH===MH?ud._sh:(ud._shMH=MH,ud._sh=registerFootprint(w.obj,MH))):{dx:0,dy:0};
     const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8));};
-    const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+Math.sin(az)*d,y=w.pos.y+sh.dy+Math.cos(az)*d;if(d<8&&ownD(x,y,d))return;pts2.push({ai,d,x,y});}));
+    /* the IGN footprint is often smaller than the house (an extension, a porch, a deep eave left out): the laser roof then carries on,
+       at eave height and without a step, past the IGN wall, and that piece of the house's own roof would shade its own window.
+       The real wall is the roof edge less a 50 cm eave: the window is read from there (≤ 3 m out). A lower roof in front (veranda,
+       covered terrace, lean-to: a step down of more than 60 cm below the eave) is not the house: it stays an obstacle. */
+    let push=0; if(MH){const n=w.normal,tx=-n.y,ty=n.x,eave=ud.h||3,G=orthoGreen(),es=[];
+      for(const t of [-1,0,1]){const bx=w.pos.x+sh.dx+tx*t,by=w.pos.y+sh.dy+ty*t,hin=MH.at(bx-n.x*0.75,by-n.y*0.75); if(hin==null||hin<2)continue;
+        let prev=hin,e=0; for(let d=0.5;d<=4;d+=0.5){const x=bx+n.x*d,y=by+n.y*d,h=MH.at(x,y); if(h==null||h<Math.max(2,eave-0.6)||Math.abs(h-prev)>0.8||G(x,y)>18)break; e=d;prev=h;} es.push(e);}
+      if(es.length){es.sort((p,q)=>p-q);push=Math.min(3,Math.max(0,es[es.length>>1]-0.5));}}
+    w.wallPush=push; const pushX=w.normal.x*push, pushY=w.normal.y*push;
+    const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+pushX+Math.sin(az)*d,y=w.pos.y+sh.dy+pushY+Math.cos(az)*d;if(d<8&&ownD(x,y,d))return;pts2.push({ai,d,x,y});}));
     const LG=leafGrid(), horB=new Array(AZ.length).fill(-0.2), decAt=new Array(AZ.length).fill(false);
     pts2.forEach(p=>{let z=null;if(F&&p.d<115)z=F.at(p.x,p.y);if(z==null&&C)z=C.at(p.x,p.y);if(z==null)return;got++;const ang=Math.atan2(z-winZ,p.d);if(ang>hor[p.ai]){hor[p.ai]=ang;hits[p.ai]={d:p.d,z:z-S.alt0};}
       // the same horizon once the deciduous trees are bare: their crowns drop to the ground they stand on
