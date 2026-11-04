@@ -549,21 +549,36 @@ function gardenTexture(TP,MH){
   mg.globalCompositeOperation='destination-out';mg.fillStyle='#000';
   S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;mg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>i?mg.lineTo(X(q.x),Y(q.y)):mg.moveTo(X(q.x),Y(q.y)));mg.closePath();});mg.fill('evenodd');});
   const md=mg.getImageData(0,0,N,N).data, img=g.getImageData(0,0,N,N), id=img.data;
-  // classify 1 lawn, 2 gravel / terraces, 3 asphalt, 4 pool (0 = keep the lot tint: unsure, or in a photo shadow)
+  // classify — only what is reliable: 1 lawn, 2 light mineral (terraces, paths, gravel), 4 pool. Anything else, shadows included,
+  // keeps the soft lot tint (no more dark "waste ground" patches made of the buildings' shadows on the photo)
   const lim=(DETAIL_R+20)/px, c0=N/2, cls=new Uint8Array(N*N);
-  for(let j=Math.max(0,Math.floor(c0-lim));j<Math.min(N,c0+lim);j++)for(let i=Math.max(0,Math.floor(c0-lim));i<Math.min(N,c0+lim);i++){
+  const j0=Math.max(1,Math.floor(c0-lim)), j1=Math.min(N-1,Math.ceil(c0+lim));
+  for(let j=j0;j<j1;j++)for(let i=j0;i<j1;i++){
     const k=j*N+i; if(md[k*4+3]<128)continue; const x=-GT_R+(i+0.5)*px, y=GT_R-(j+0.5)*px;
     const oi=Math.floor((x-RO.w)/mpp),oj=Math.floor((RO.n-y)/mpp); if(oi<0||oj<0||oi>=W||oj>=Hh)continue; const o=(oj*W+oi)*4,r=od[o],gg=od[o+1],b=od[o+2];
-    const lum=(r+gg+b)/3,mx=Math.max(r,gg,b),mn=Math.min(r,gg,b),sat=mx-mn,exg=2*gg-r-b;
-    let c=0; if(b>110&&b-r>35&&gg-r>15&&lum>90)c=4; else if(lum<62)c=0; else if(exg>12)c=1; else if(lum>150&&sat<45)c=2; else if(lum<118&&sat<30)c=3;
-    if(c===1&&MH){const h=MH.at(x,y);if(h!=null&&h>2.5)c=1;} cls[k]=c;}
-  // 3×3 majority, twice, to turn pixels into clean plan shapes
-  for(let pass=0;pass<2;pass++){const out=new Uint8Array(cls);const cnt=new Uint8Array(5);
-    for(let j=1;j<N-1;j++)for(let i=1;i<N-1;i++){const k=j*N+i;if(md[k*4+3]<128)continue;cnt.fill(0);for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++)cnt[cls[k+dj*N+di]]++;let best=cls[k],bc=0;for(let q=0;q<5;q++)if(cnt[q]>bc){bc=cnt[q];best=q;}if(bc>=5)out[k]=best;}
-    cls.set(out);}
-  const PAL=[null,[198,215,174],[233,228,216],[194,189,180],[159,208,222]];
-  for(let k=0;k<N*N;k++){const c=cls[k];if(!c)continue;const p=PAL[c];id[k*4]=p[0];id[k*4+1]=p[1];id[k*4+2]=p[2];id[k*4+3]=255;}
+    const lum=(r+gg+b)/3,sat=Math.max(r,gg,b)-Math.min(r,gg,b),exg=2*gg-r-b;
+    cls[k]= (b>110&&b-r>35&&gg-r>15&&lum>90)?4 : lum<75?0 : exg>14?1 : (lum>155&&sat<40)?2 : 0;}
+  // smooth plan shapes: per class, blur the mask (≈1.3 m) and re-threshold with a soft edge → rounded, clean outlines, specks gone
+  const shape=(c,blurPx)=>{const a=new Uint8ClampedArray(N*N*4);for(let k=0;k<N*N;k++)if(cls[k]===c){a[k*4]=a[k*4+1]=a[k*4+2]=255;a[k*4+3]=255;}
+    const c1=document.createElement('canvas');c1.width=c1.height=N;c1.getContext('2d').putImageData(new ImageData(a,N,N),0,0);
+    const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.filter=`blur(${blurPx}px)`;g2.drawImage(c1,0,0);
+    const d=g2.getImageData(0,0,N,N).data,out=new Float32Array(N*N);for(let k=0;k<N*N;k++){const v=d[k*4+3]/255;out[k]=Math.max(0,Math.min(1,(v-0.5)*5+0.5));}return out;};
+  const paint=(m,col)=>{for(let k=0;k<N*N;k++){const a=m[k]*(md[k*4+3]>127?1:0);if(a<=0)continue;id[k*4]+= (col[0]-id[k*4])*a;id[k*4+1]+=(col[1]-id[k*4+1])*a;id[k*4+2]+=(col[2]-id[k*4+2])*a;}};
+  paint(shape(1,3),[205,219,185]); paint(shape(2,3),[235,230,220]);
   g.putImageData(img,0,0);
+  // pools: each connected blue patch ≥ 8 m² becomes a clean shape — an oriented rounded rectangle when it is one (most are),
+  // a smoothed blob otherwise — with a thin light coping, like on an architect's plan
+  const seen=new Uint8Array(N*N), minPx=8/(px*px);
+  for(let k0=0;k0<N*N;k0++){if(cls[k0]!==4||seen[k0])continue;const q=[k0];seen[k0]=1;for(let h=0;h<q.length;h++){const k=q[h];[1,-1,N,-N].forEach(d=>{const kk=k+d;if(kk>=0&&kk<N*N&&!seen[kk]&&cls[kk]===4){seen[kk]=1;q.push(kk);}});}
+    if(q.length<minPx)continue;
+    let mx=0,my=0;q.forEach(k=>{mx+=k%N;my+=(k/N)|0;});mx/=q.length;my/=q.length;let sxx=0,syy=0,sxy=0;q.forEach(k=>{const dx=k%N-mx,dy=((k/N)|0)-my;sxx+=dx*dx;syy+=dy*dy;sxy+=dx*dy;});
+    const ang=0.5*Math.atan2(2*sxy,sxx-syy),ca=Math.cos(ang),sa=Math.sin(ang);const us=[],vs=[];q.forEach(k=>{const dx=k%N-mx,dy=((k/N)|0)-my;us.push(dx*ca+dy*sa);vs.push(-dx*sa+dy*ca);});
+    us.sort((a,b)=>a-b);vs.sort((a,b)=>a-b);const pc=(a,t)=>a[Math.min(a.length-1,Math.max(0,Math.round(t*(a.length-1))))];
+    const u0=pc(us,0.03),u1=pc(us,0.97)+1,v0=pc(vs,0.03),v1=pc(vs,0.97)+1,fill=q.length/((u1-u0)*(v1-v0));
+    g.save();g.translate(mx+0.5,my+0.5);g.rotate(ang);g.beginPath();
+    if(fill>0.68){const rr=0.35/px;g.roundRect?g.roundRect(u0,v0,u1-u0,v1-v0,rr):g.rect(u0,v0,u1-u0,v1-v0);}
+    else{g.ellipse((u0+u1)/2,(v0+v1)/2,(u1-u0)/2,(v1-v0)/2,0,0,Math.PI*2);}
+    g.fillStyle='#a9d5e3';g.fill();g.lineWidth=0.45/px;g.strokeStyle='#f6f3ec';g.stroke();g.restore();}
   const tx=new THREE.CanvasTexture(cv); tx.encoding=THREE.sRGBEncoding; tx.anisotropy=8; tx.wrapS=tx.wrapT=THREE.ClampToEdgeWrapping; return tx;
 }
 async function buildParcels(lat,lon){
