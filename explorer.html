@@ -64,8 +64,11 @@ button.link:hover{color:var(--fg);background:none}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .status{font-size:13px;color:var(--ink2);min-height:1.2em}
 .status.err{color:var(--bad)}
-.addrDone{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
-.addrDone .a{font-weight:500;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.addrDone{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.addrDone .aw{min-width:0;display:flex;flex-direction:column;gap:2px}
+.addrDone .a{font-weight:500;font-size:15px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}
+.addrDone .s{font-size:13px;color:var(--ink2)}
+.addrDone button.link{flex:none;white-space:nowrap}
 .hintBox{display:flex;gap:12px;align-items:flex-start;background:var(--raised);border-radius:12px;padding:14px;color:var(--ink2);font-size:14px}
 .hintBox svg{flex:none;width:22px;height:22px;color:var(--accent)}
 .stepper{display:grid;grid-template-columns:40px 1fr 40px;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
@@ -178,7 +181,7 @@ button.link:hover{color:var(--fg);background:none}
         <div>Vos adresses ne sont enregistrées que sur cet appareil. <button class="link" type="button" id="wipe">Effacer mes données</button></div>
       </div>
 
-      <div class="addrDone" id="addrDone" hidden><span class="a" id="addrDoneText"></span><button class="link" type="button" id="addrChange">Changer d'adresse</button></div>
+      <div class="addrDone" id="addrDone" hidden><span class="aw"><span class="a" id="addrDoneText"></span><span class="s" id="addrSide" hidden></span></span><button class="link" type="button" id="addrChange">Changer d'adresse</button></div>
       <div class="step collapsible" id="stepAddr">
         <span class="n">01 · Adresse</span>
         <form id="form" class="row">
@@ -363,7 +366,31 @@ function slopeWalls(m){const u=m.userData; if(!u||!u.lidar||!u.facades||nFloorsR
         tri.forEach(w=>{P.push(w[0],w[1],w[2]);N.push(nx,ny,0);U.push(w[3],w[4]);});}});}
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
   gm.geometry.dispose(); gm.geometry=g; gm.material=patchWall(new THREE.MeshLambertMaterial({color:src.mat.color,map:wallTex})); gm.userData.baseMat=gm.material; partsSync(m);}
-/* small low buildings touching a house (garage, shed, veranda: separate IGN footprints) belong to it: one selection, one colour */
+/* address ↔ building ↔ parcel links of the national address base (IGN BAN PLUS) */
+async function addrLink(g){
+  const fs=await wfs('BAN-PLUS:lien_adresse_bati',g.lat,g.lon,6,200); const kx=111320*Math.cos(g.lat*RAD),ky=110574;
+  const L=fs.map(f=>{const c=f.geometry&&f.geometry.coordinates;if(!c||c.length<2)return null;return {f,d0:Math.hypot((c[0][0]-g.lon)*kx,(c[0][1]-g.lat)*ky),b:c[c.length-1]};}).filter(o=>o&&o.d0<3&&o.f.properties.id_bat);
+  if(!L.length)return null; const d0=Math.min(...L.map(o=>o.d0)), M=L.filter(o=>o.d0<d0+0.5);
+  const lon=M.reduce((s,o)=>s+o.b[0],0)/M.length, lat=M.reduce((s,o)=>s+o.b[1],0)/M.length;
+  return {ids:new Set(M.map(o=>o.f.properties.id_bat)),lat,lon,d:Math.hypot((lon-g.lon)*kx,(lat-g.lat)*ky)};}
+async function loadLot(lat,lon){ const T0=S.T;
+  try{const [pf,ab]=await Promise.all([wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',lat,lon,DETAIL_R+20,2500),wfs('BAN-PLUS:lien_adresse_bati',lat,lon,DETAIL_R+60,8000)]); if(S.T!==T0)return;
+    /* parcel of each building: the cadastral parcel holding most of its footprint (a 5×5 grid of points inside it) */
+    const PL=[]; pf.forEach(f=>{const g=f.geometry,id=f.properties&&(f.properties.idu||f.id);const polys=g&&g.type==='Polygon'?[g.coordinates]:(g&&g.type==='MultiPolygon'?g.coordinates:[]);
+      polys.forEach(po=>{if(!po[0]||po[0].length<4)return;const r=ringToLocal(po[0]);let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});PL.push({id,r,x0,x1,y0,y1});});});
+    const GB=new Map(),gk=(i,j)=>i*100003+j; PL.forEach(P=>{for(let i=Math.floor(P.x0/20);i<=Math.floor(P.x1/20);i++)for(let j=Math.floor(P.y0/20);j<=Math.floor(P.y1/20);j++){const k=gk(i,j);(GB.get(k)||GB.set(k,[]).get(k)).push(P);}});
+    const par=new Map(), adr=new Map(); await new Promise(r=>setTimeout(r,0));
+    S.meshes.forEach(m=>{const u=m.userData;if(!u.bid||!u.rings||par.has(u.bid))return;const R=u.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;R.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);});
+      const votes=new Map();for(let i=0;i<5;i++)for(let j=0;j<5;j++){const x=x0+(x1-x0)*(i+0.5)/5,y=y0+(y1-y0)*(j+0.5)/5;if(!pointInPoly(x,y,R))continue;
+        for(const P of (GB.get(gk(Math.floor(x/20),Math.floor(y/20)))||[])){if(x<P.x0||x>P.x1||y<P.y0||y>P.y1||!pointInPoly(x,y,P.r))continue;votes.set(P.id,(votes.get(P.id)||0)+1);break;}}
+      if(votes.size){const top=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0][0];par.set(u.bid,new Set([top]));}});
+    const adrPt=new Map(); ab.forEach(f=>{const p=f.properties;if(!p.id_bat||!p.id_adr)return;(adr.get(p.id_bat)||adr.set(p.id_bat,new Set()).get(p.id_bat)).add(p.id_adr);const c=f.geometry&&f.geometry.coordinates;if(c&&c[0]&&!adrPt.has(p.id_adr))adrPt.set(p.id_adr,c[0]);});
+    if(!par.size)return; const adrPar=new Set(); const parBats=new Map(); adr.forEach((_,b)=>{const P=par.get(b);if(P)P.forEach(x=>{adrPar.add(x);(parBats.get(x)||parBats.set(x,[]).get(x)).push(b);});}); S.lot={par,adr,adrPar,adrPt,parBats,lab:new Map()}; S.T.lot=performance.now();
+    if(S.target)setHi(S.target,false); linkAnnexes(); if(S.target)setHi(S.target,true);
+  }catch(e){}}
+/* buildings touching a house that belong to the same lot (garage, shed, veranda: separate IGN footprints) are one selection, one colour.
+   With the cadastre and the address base: same cadastral parcel (or, for a single-storey shed, a parcel with no address at all: the plot next to the house), no address of their own (or only the house's), not taller nor bigger than the house.
+   Without it: small low buildings touching a much bigger one */
 function linkAnnexes(){ // re-run after the laser rebuild: undo the previous links first (their houses may have been replaced)
   S.meshes.forEach(m=>{const u=m.userData;if(u.annexOf){u.gid=u._gid0;delete u.annexOf;}});
   const L=S.meshes.filter(m=>m.userData.rings&&m.userData.facades&&!m.userData.monu).map(m=>{const r=m.userData.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});return {m,r,x0,x1,y0,y1};});
@@ -371,8 +398,18 @@ function linkAnnexes(){ // re-run after the laser rebuild: undo the previous lin
   const G=[...fam.values()].map(os=>({os,area:os.reduce((s,o)=>s+Math.abs(areaOf(o.r)),0),h:Math.max(...os.map(o=>o.m.userData.h||0)),u:os[0].m.userData.usage}));
   const dist=(a,b)=>{let d=1e9;const seg=(p,q,r)=>{const dx=r.x-q.x,dy=r.y-q.y,l2=dx*dx+dy*dy;const t=l2?Math.max(0,Math.min(1,((p.x-q.x)*dx+(p.y-q.y)*dy)/l2)):0;return Math.hypot(p.x-q.x-t*dx,p.y-q.y-t*dy);};
     for(const [A,B] of [[a,b],[b,a]])for(const p of A)for(let i=0;i<B.length;i++){d=Math.min(d,seg(p,B[i],B[(i+1)%B.length]));if(d<0.05)return d;}return d;};
-  G.forEach(a=>{if(a.area>=35||!(a.h<=3.5||!a.u||/indiff/i.test(a.u))||a.os.some(o=>(o.m.userData.floors||1)>1))return; let best=null; // a storeyed lodging is not an annex
-    G.forEach(b=>{if(b===a||b.area<2.5*a.area||b.area<40||b.annex)return; const near=a.os.some(o=>b.os.some(q=>o.x0<q.x1+0.6&&q.x0<o.x1+0.6&&o.y0<q.y1+0.6&&q.y0<o.y1+0.6&&dist(o.r,q.r)<0.6)); if(near&&(!best||b.area>best.area))best=b;});
+  const lot=S.lot, ids=g=>[...new Set(g.os.map(o=>o.m.userData.bid).filter(Boolean))], parOf=g=>{const s=new Set();ids(g).forEach(i=>{const P=lot.par.get(i);if(P)P.forEach(x=>s.add(x));});return s;};
+  G.forEach(g=>{g.byLot=!!(lot&&ids(g).length&&ids(g).every(i=>lot.par.has(i)));if(g.byLot)g.par=parOf(g);});
+  G.sort((a,b)=>b.area-a.area);
+  G.forEach(a=>{if(a.os.some(o=>(o.m.userData.floors||1)>1))return; // a storeyed lodging is not an annex
+    const adrOf=g=>{const s=new Set();ids(g).forEach(i=>{const A=lot.adr.get(i);if(A)A.forEach(x=>s.add(x));});return s;};
+    if(a.byLot)a.adrs=adrOf(a);
+    else if(a.area>=35||!(a.h<=3.5||!a.u||/indiff/i.test(a.u)))return;
+    let best=null;
+    G.forEach(b=>{if(b===a||b.annex)return;
+      if(a.byLot){if(!b.byLot||b.area<=a.area||b.h<a.h-0.3||(a.adrs.size&&![...a.adrs].every(x=>adrOf(b).has(x)))||!([...a.par].some(x=>b.par.has(x))||(a.h<=5&&[...a.par].every(x=>!lot.adrPar.has(x)))))return;}
+      else if(b.area<2.5*a.area||b.area<40)return;
+      const near=a.os.some(o=>b.os.some(q=>o.x0<q.x1+0.6&&q.x0<o.x1+0.6&&o.y0<q.y1+0.6&&q.y0<o.y1+0.6&&dist(o.r,q.r)<0.6)); if(near&&(!best||b.area>best.area))best=b;});
     if(!best)return; a.annex=true; const main=best.os[0].m; if(!main.userData.gid){main.userData.gid=++GID;best.os.forEach(o=>o.m.userData.gid=main.userData.gid);}
     a.os.forEach(o=>{o.m.userData._gid0=o.m.userData.gid;o.m.userData.gid=main.userData.gid;o.m.userData.annexOf=main;});});}
 function applySlopeWalls(){S.slopeHouses=[]; S.meshes.forEach(m=>{try{slopeWalls(m);}catch(e){console.error('slopeWalls',e);}});}
@@ -490,7 +527,7 @@ el.addEventListener('pointerdown',e=>{if(drag)return;drag={x:e.clientX,y:e.clien
 el.addEventListener('pointermove',e=>{
   if(!drag||e.pointerId!==drag.id||pinch)return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
   if(Math.abs(e.clientX-drag.x0)+Math.abs(e.clientY-drag.y0)>(e.pointerType==='touch'?14:4))moved=true;
-  if(cam.mode==='window'){const inv=e.pointerType==='touch'?-1:1; /* on a phone the view follows the finger */ cam.yaw=Math.max(-1.35,Math.min(1.35,cam.yaw+inv*dx*0.004));cam.pitch=Math.max(-0.7,Math.min(1.2,cam.pitch+inv*dy*0.004));drag.x=e.clientX;drag.y=e.clientY;applyCam();return;}
+  if(cam.mode==='window'){const inv=e.pointerType==='touch'?-1:1; /* on a phone the view follows the finger sideways; up/down tilts like on a computer */ cam.yaw=Math.max(-1.35,Math.min(1.35,cam.yaw+inv*dx*0.004));cam.pitch=Math.max(-0.7,Math.min(1.2,cam.pitch+dy*0.004));drag.x=e.clientX;drag.y=e.clientY;applyCam();return;}
   if(drag.b===2||drag.b===1||drag.shift){const k=cam.dist*0.0016;const right=new THREE.Vector3(Math.cos(cam.theta),-Math.sin(cam.theta),0);const fwd=new THREE.Vector3(-Math.sin(cam.theta),-Math.cos(cam.theta),0);const sg=1;cam.target.addScaledVector(right,sg*dx*k).addScaledVector(fwd,sg*dy*k);}
   else{cam.theta+=dx*0.006;cam.phi=Math.max(0.08,Math.min(1.5,cam.phi+dy*0.006));}
   drag.x=e.clientX;drag.y=e.clientY;applyCam();
@@ -1386,7 +1423,7 @@ async function buildScene(features){ const yl=slicer();
       fitWallUVs(geo,h);
       const mesh=new THREE.Mesh(geo,matsFor(usage,false));
       mesh.position.z=zBase-SINK; mesh.castShadow=true; mesh.receiveShadow=true;
-      mesh.userData={monu,h,floors:p.nombre_d_etages,usage,zBase,zTop:tMax!=null?tMax-S.alt0:null,roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes)};
+      mesh.userData={bid:p.cleabs,monu,h,floors:p.nombre_d_etages,usage,zBase,zTop:tMax!=null?tMax-S.alt0:null,roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes)};
       if(rise>0&&!far){let done=false;const ra=roofSets[roofKey].P.length;if(!holes.length&&convexity(outer)>0.8)done=addRoof(roofSets[roofKey],outer,zBase+h,zBase+h+rise);if(done)mesh.userData.roofRef={key:roofKey,a:ra,b:roofSets[roofKey].P.length};
         if(!done){const g2=new THREE.ExtrudeGeometry(shape,{depth:rise+0.02,bevelEnabled:false});const m2=new THREE.Mesh(g2,ROOF[roofKey]);m2.position.z=zBase+h-0.01;m2.castShadow=m2.receiveShadow=true;scene.add(m2);roofMeshes.push(m2);mesh.userData.roofMesh=m2;}
         mesh.userData.ridge=h+rise;}
@@ -1406,6 +1443,8 @@ async function buildScene(features){ const yl=slicer();
   // the address point often falls on the street or on a carport: prefer the main dwelling nearby over annexes
   {const annex=c=>(!c.usage||/Indiff|Annexe/i.test(c.usage))&&(c.area<60||c.h<3); const sc=c=>c.de-Math.min(8,Math.sqrt(c.area)/3)-(/sidentiel/.test(c.usage)?4:0);
    const cur=cands.find(c=>c.mesh===best); if(!cur||annex(cur)||cur.de>0){const ok=cands.filter(c=>!annex(c)).sort((a,b)=>sc(a)-sc(b)); if(ok.length&&(!cur||annex(cur)||sc(ok[0])<sc(cur)))best=ok[0].mesh;}}
+  /* the address base links the number to its building(s): take the biggest of them */
+  {const ids=S.addrBats; const L=ids&&ids.size?S.meshes.filter(m=>ids.has(m.userData.bid)):[]; if(L.length)best=L.reduce((a,b)=>Math.abs(areaOf(b.userData.rings[0]))>Math.abs(areaOf(a.userData.rings[0]))?b:a);}
   if(!best)best=monuBest; if(best){best.material=matsFor(best.userData.usage,true);S.target=best;} S.addrTarget=best; // the building the searched address points at (S.target then follows the user's picks)
   S.roofSets=roofSets; S.roofSkip=new Set(); S.roofSetMeshes=[]; S.roofEdgeParts=buildRoofSets(new Set()); edgeArrays.push(...S.roofEdgeParts);
   S.gfWalls=walls; buildGroundFloors(walls); S._ctxList=ctxList; await buildContext(ctxList);
@@ -1676,7 +1715,8 @@ function pick(e){
   ray.setFromCamera(m,camera); ray.far=Infinity; const hits=ray.intersectObjects(S.meshes,true); // children too: laser roof pans, upper wall pieces
   if(!hits.length){toast('Touchez un bâtiment');return;}
   const hit=hits[0]; let obj=hit.object; const MS=new Set(S.meshes); while(obj&&!MS.has(obj))obj=obj.parent; if(!obj){toast('Touchez un bâtiment');return;}
-  let annexHit=false; if(obj.userData.annexOf&&MS.has(obj.userData.annexOf)){obj=obj.userData.annexOf;annexHit=true;} /* an annex selects its house */ const prevB=S.building, prevWin=S.win;
+  /* the whole lot lights up together; a wall of an annex is still a wall of its own (a roof or a sliver selects the house) */
+  let annexHit=false; if(obj.userData.annexOf&&MS.has(obj.userData.annexOf)&&Math.abs(hit.face.normal.z)>=0.3){obj=obj.userData.annexOf;annexHit=true;} const prevB=S.building, prevWin=S.win;
   if(obj.userData.monu){toast(`${obj.userData.monu} : monument, pas un logement`);return;}
   if(obj!==prevB)selectBuilding(obj);
   const u=obj.userData, fac=u.facades, bl=blindMap(obj);
@@ -1712,9 +1752,11 @@ async function recenterOn(obj){
     const w=S.win, c=obj.geometry.boundingSphere.center.clone(); c.z=0; const kx=111320*Math.cos(S.lat*RAD),ky=110574;
     const keep={x:w.pos.x-c.x,y:w.pos.y-c.y,n:w.normal.clone(),floor:w.floor,along:w.along}, alt0=S.alt0;
     S.camKeep={t:cam.target.clone().sub(c),th:cam.theta,ph:cam.phi,d:cam.dist,alt0};
-    const lat=S.lat+c.y/ky, lon=S.lon+c.x/kx, label=S.label||'ce bâtiment';
+    const own=S.addrTarget&&family(S.addrTarget).includes(obj)&&!S.recentered&&S.addrLabel, bats=S.addrBats;
+    const lat=S.lat+c.y/ky, lon=S.lon+c.x/kx, label=own?S.addrLabel:(S.label||'ce bâtiment');
     toast('Recentrage du quartier…'); $('addr').value=label;
-    await load(label,{lat,lon,label,recenter:true});
+    if(own)S.addrBats=bats;
+    await load(label,{lat,lon,label,recenter:true,keepAddr:!!own});
     S.camKeep=null;
     for(let i=0;i<60&&!S.lidarBuilt;i++)await new Promise(r=>setTimeout(r,250));
     const pIn=new THREE.Vector2(keep.x-keep.n.x*0.8,keep.y-keep.n.y*0.8);
@@ -1844,7 +1886,25 @@ async function addressOf(obj){
   // centre is often on the other street
   // (after a recentring on another building the centre is no longer the searched address: that building gets its own)
   const own=!S.recentered&&((S.addrTarget&&family(S.addrTarget).includes(obj))||(obj.userData.rings||[]).some(r=>pointInPoly(0,0,r)));
+  S.dep=!!obj.userData.annexOf;
   if(own&&S.addrLabel){S.label=S.addrLabel;renderAddr();return;}
+  /* the address base links each number to its building(s): use it whatever the distance to the address point (often on the road).
+     A building with no number of its own on a parcel whose house has one is that house's dependency */
+  const lot=S.lot, u=obj.userData;
+  if(lot&&u.bid){ const ad=new Set(), addOf=b=>{const A=lot.adr.get(b);if(A)A.forEach(x=>ad.add(x));}; family(obj).forEach(m=>addOf(m.userData.bid));
+    if(!ad.size){const P=lot.par.get(u.bid);let best=null,bd=1e9;
+      if(P)P.forEach(idu=>(lot.parBats.get(idu)||[]).forEach(b=>{const m=S.meshes.find(x=>x.userData.bid===b);if(!m)return;const d=m.geometry.boundingSphere.center.distanceTo(bs.center);if(d<bd){bd=d;best=b;}}));
+      if(best){addOf(best);S.dep=true;}}
+    else if((u.floors||1)<=1&&!/sidentiel/i.test(u.usage||'')){ /* a single-storey building whose numbers also belong to a bigger building is that building's dependency (a wing of a block of flats sharing its number is not) */
+      const area=m=>Math.abs(areaOf(m.userData.rings[0])), my=family(obj).reduce((t,m)=>t+area(m),0);
+      if(S.meshes.some(m=>{const B=lot.adr.get(m.userData.bid);return B&&!family(obj).includes(m)&&area(m)>my&&[...ad].every(x=>B.has(x));}))S.dep=true;}
+    if(ad.size){ const tg=new Set(); if(S.addrTarget&&!S.recentered)family(S.addrTarget).forEach(m=>{const A=lot.adr.get(m.userData.bid);if(A)A.forEach(x=>tg.add(x));});
+      let id=null,bd=1e9; ad.forEach(x=>{const c=lot.adrPt.get(x);const d=c?Math.hypot((c[0]-lon)*kx,(c[1]-lat)*ky):1e8;if(d<bd){bd=d;id=x;}});
+      if(S.addrLabel&&[...ad].some(x=>tg.has(x))){S.label=S.addrLabel;renderAddr();return;}
+      let lb=lot.lab.get(id); if(!lb){const c=lot.adrPt.get(id); if(c)try{const r=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${c[0].toFixed(6)}&lat=${c[1].toFixed(6)}&type=housenumber&limit=5`);const j=await r.json();
+          const fs=j.features||[]; const f=fs.find(f=>f.properties.id===id)||fs[0]; if(f){lb=f.properties.label;lot.lab.set(id,lb);}}catch(_){} }
+      if(tok!==revTok)return; if(lb){S.label=lb;renderAddr();return;} }
+  }
   try{const r=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon.toFixed(6)}&lat=${lat.toFixed(6)}&type=housenumber&limit=1`);const j=await r.json();if(tok!==revTok)return;
     const f=j.features&&j.features[0]; const d=f?Math.hypot((f.geometry.coordinates[0]-lon)*kx,(f.geometry.coordinates[1]-lat)*ky):1e9;
     S.label=f&&d<Math.max(30,bs.radius+8)?f.properties.label:('Bâtiment voisin de '+S.addrLabel);}catch(_){if(tok!==revTok)return;}
@@ -1895,8 +1955,8 @@ function facAddr(obj,f){
     else f._miss=true;
   }).catch(()=>{if(f._addrK===key)f._addrK=null;});
   return null;}
-function curAddr(){const w=S.win;return (w&&w.facade&&w.obj===S.building&&facAddr(w.obj,w.facade))||S.label||'';}
-function renderAddr(){const w=S.win;const t=w&&w.facade&&w.obj===S.building?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=curAddr()+(t?' · façade '+t:'');}
+function curAddr(){const w=S.win;if(S.dep)return S.label||'';return (w&&w.facade&&w.obj===S.building&&facAddr(w.obj,w.facade))||S.label||'';}
+function renderAddr(){const w=S.win;const t=w&&w.facade&&w.obj===S.building?sideText(sideOf(w.obj,w.facade)):'';$('addrDoneText').textContent=curAddr();const sd=$('addrSide'),dp=S.dep&&w&&w.obj===S.building;sd.textContent=[dp?'Dépendance':'',t?(dp?'façade ':'Façade ')+t:''].filter(Boolean).join(' · ');sd.hidden=!(t||dp);}
 function selectBuilding(obj){
   S.building=obj; const u=obj.userData;
   $('bInfo').textContent=`${u.h.toFixed(0)} m à l'égout${u.ridge?`, ${u.ridge.toFixed(0)} m au faîtage`:''}${u.floors?`, ${u.floors} étages`:''}${u.usage?`, ${u.usage.toLowerCase()}`:''}`;
@@ -1918,7 +1978,7 @@ function selectBuilding(obj){
   // one highlighted building at a time: the one being studied
   const fam=family(obj); if(S.selMesh&&fam.indexOf(S.selMesh)<0)setHi(S.selMesh,false); if(S.target&&fam.indexOf(S.target)<0)setHi(S.target,false);
   setHi(obj,true); S.selMesh=obj; S.target=obj;
-  $('stepPick').hidden=true; $('stepAddr').hidden=true; $('addrDone').hidden=false; $('addrDoneText').textContent=S.label||''; refreshWinUI();
+  $('stepPick').hidden=true; $('stepAddr').hidden=true; $('addrDone').hidden=false; $('addrDoneText').textContent=S.label||''; $('addrSide').hidden=true; refreshWinUI();
   addressOf(obj);
 }
 function chooseFacade(idx){
@@ -2282,7 +2342,10 @@ async function load(q,at){
   $('go').disabled=true; $('site').hidden=true; $('results').hidden=true; $('winBox').hidden=true; $('stepPick').hidden=true; $('addrDone').hidden=true; $('stepAddr').hidden=false; $('viewWin').disabled=true; if(cam.mode==='window')setMode('orbit'); S.win=null; S.building=null; marker.visible=false; markerArrow.visible=false; facadeLine.visible=false;
   try{
     status('Recherche de l\'adresse…');
-    S.T={start:performance.now()}; S.recentered=!!(at&&at.recenter); const g=at||await geocode(q); S.T.geo=performance.now(); S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
+    S.T={start:performance.now()}; S.recentered=!!(at&&at.recenter&&!at.keepAddr); let g=at||await geocode(q); S.T.geo=performance.now();
+    /* the address point is often on the road, far from the house (countryside): centre the model on the building the number belongs to */
+    if(!(at&&at.recenter)){S.addrBats=null; const lk=await Promise.race([addrLink(g),new Promise(r=>setTimeout(()=>r(null),2500))]).catch(()=>null);
+      if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
     S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; S.rgbFarP=fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS',g.lat,g.lon,18,3).catch(()=>null); S.ircP=null; {const myLat=g.lat,myLon=g.lon; // the infrared photo (deciduous trees) is only fetched once the model is up: it never competes with it
       S.startIRC=()=>{if(S.ircP||S.lat!==myLat)return S.ircP;S.ircP=fetchIRC(myLat,myLon).then(I=>{if(!I||S.lat!==myLat)return null;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();return I;}).catch(()=>null);return S.ircP;};
       setTimeout(()=>{if(S.lat===myLat)S.startIRC();},9000);}
@@ -2290,11 +2353,11 @@ async function load(q,at){
     const [alt,feats]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]); const terrain=null;
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
-    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.rawOrtho=null; S.slopeHouses=[]; S.loading=true; /* nothing of the previous address may feed this one */ S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
+    S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.rawOrtho=null; S.slopeHouses=[]; S.lot=null; S.loading=true; /* nothing of the previous address may feed this one */ S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
     try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
-    S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} S.T.scene=performance.now(); loadOrtho(g.lat,g.lon);
+    S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} S.T.scene=performance.now(); loadOrtho(g.lat,g.lon); loadLot(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
@@ -2554,7 +2617,7 @@ function makeBlock(src,rings,model,roofSets){
   const shape=new THREE.Shape(outer);holes.forEach(hr=>shape.holes.push(new THREE.Path(hr)));
   const floors=model.floors||Math.max(1,Math.round(h/3));const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});fitWallUVs(geo,h,floors);
   const mesh=new THREE.Mesh(geo,matsFor(u.usage,false));mesh.position.z=u.zBase-SINK;mesh.castShadow=true;mesh.receiveShadow=true;
-  mesh.userData={monu:u.monu,h,floors,usage:u.usage,zBase:u.zBase,roofKey:u.roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes),lidar:true,shift:u.shift,church:u.church};
+  mesh.userData={bid:u.bid,monu:u.monu,h,floors,usage:u.usage,zBase:u.zBase,roofKey:u.roofKey,facades:facadesOf(outer).concat(...holes.map(holeFacades)),rings:[outer].concat(holes),lidar:true,shift:u.shift,church:u.church};
   if(pr){ // roof pans measured by the laser, attached to the block (moves and disappears with it)
     const parts=planeRoofMeshes(pr,u.zBase,ROOF[u.roofKey||'autre']||ROOF.autre,new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0]}));
     const ea=[];parts.forEach(pm=>{pm.position.z=-(u.zBase-SINK);mesh.add(pm);const eg=new THREE.EdgesGeometry(pm.geometry,20);ea.push(eg.attributes.position.array.slice());eg.dispose();});
