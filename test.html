@@ -2726,8 +2726,8 @@ function frame(now){
     cam.dist=camTw.ease==='quint'?Math.exp(Math.log(a.d)+(Math.log(b.d)-Math.log(a.d))*e):a.d+(b.d-a.d)*e; applyCam(); if(camTw.tl&&!camTw.hold)setTL(camTw.tl,e);
     if(k>=1){const cb=camTw.onEnd;camTw=null;if(cb)cb();}}
   stepFades(now); setLeafTarget(now);
-  if(facadeLine.visible&&S.win&&S.win.facade){const f=S.win.facade,n=S.win.normal,front=n.x*(camera.position.x-f.mid.x)+n.y*(camera.position.y-f.mid.y)>0,mt=facadeLine.material,tg=front?0.95:0.12;
-    if(Math.abs(mt.opacity-tg)>0.005)mt.opacity+=(tg-mt.opacity)*0.12;} /* façade turned away: its outline fades (eased), it is not drawn through the house */ if(LEAF.cur!==LEAF.to){const k=Math.min(1,(now-LEAF.t0)/900),e=k*k*k*(k*(k*6-15)+10);LEAF.cur=k>=1?LEAF.to:LEAF.from+(LEAF.to-LEAF.from)*e;applyLeaf();}
+  if(facadeLine.visible&&S.win&&S.win.facade){const f=S.win.facade,n=S.win.normal,front=n.x*(camera.position.x-f.mid.x)+n.y*(camera.position.y-f.mid.y)>0,mt=facadeLine.material,tg=front?0.95:0;
+    if(Math.abs(mt.opacity-tg)>0.005)mt.opacity+=(tg-mt.opacity)*0.12; else mt.opacity=tg; facadeLine.material.visible=mt.opacity>0.01;} /* façade turned away: its outline fades (eased), it is not drawn through the house */ if(LEAF.cur!==LEAF.to){const k=Math.min(1,(now-LEAF.t0)/900),e=k*k*k*(k*(k*6-15)+10);LEAF.cur=k>=1?LEAF.to:LEAF.from+(LEAF.to-LEAF.from)*e;applyLeaf();}
   poolUni.uT.value=now/1000; if(S.sunDir){poolUni.uSun.value.copy(S.sunDir);poolUni.uLight.value=Math.max(0.18,Math.min(1,S.sunDir.z*2.5+0.3));}
   if(introRing){const k=Math.min(1,(now-introRing.userData.t0)/1400),e=1-Math.pow(1-k,3);introRing.scale.setScalar(1+e*1.8);introRing.material.opacity=0.9*(1-k);
     if(k>=1){scene.remove(introRing);introRing.geometry.dispose();introRing.material.dispose();introRing=null;}}
