@@ -793,7 +793,7 @@ function facGroundMax(f){facGround(f);return f._gzMax;}
 function wallGround(w){const m={x:(w.a.x+w.b.x)/2,y:(w.a.y+w.b.y)/2};const g=groundAt(m,{x:w.nx,y:w.ny});
   return Math.max(w.zBase,Math.min(w.zBase+Math.max(0,(w.h||6)-3),g));}
 const WIN_CLEAR=1.2; // a window centre always stands at least this high above the street in front of it
-const WIN_SILL=0.6; // a level is only buried when the ground in front reaches its window sill (centre − 0.9 m): a 30–50 cm step or terrace is normal
+const WIN_SILL=0.9; // window centre to sill: a level is only buried when the ground in front reaches the sill (a 30–50 cm step or terrace in front is normal)
 function streetLevel(obj,fi){ // index of the first level above the street of façade fi (0 unless the street is higher than the base)
   const u=obj.userData,f=u.facades[fi]; if(!f||facGround(f)-u.zBase<=1.2)return 0; const bc=blindMap(obj)[fi]||[]; const k=bc.findIndex(b=>b!==2); return k<0?0:k;}
 function relFloorName(obj,fi,k){const si=streetLevel(obj,fi);return floorName(k-si)+(si>0&&k===si?' (rue haute)':'');}
@@ -1463,7 +1463,7 @@ function blindMap(obj){
     const tops=[0.2,0.5,0.8].map(t=>{const p=pointAlong(f,t);
       downRay.set(new THREE.Vector3(p.x+f.normal.x*0.8,p.y+f.normal.y*0.8,u.zBase+u.h+300),down);downRay.far=1000;
       const h=downRay.intersectObjects(others,true); return h.length?h[0].point.z:-1e9;});
-    const gz=facGroundMax(f); const out=[]; for(let k=0;k<nF;k++){const z=u.zBase+k*sh+1.5; out.push(z<gz+WIN_SILL+0.9?2:(tops.every(t=>t>z+0.3)?1:0));} return out;
+    const gz=facGroundMax(f); const out=[]; for(let k=0;k<nF;k++){const z=u.zBase+k*sh+1.5; out.push(z<gz+WIN_SILL?2:(tops.every(t=>t>z+0.3)?1:0));} return out;
   });
   u._blindN=S.meshes.length; return u._blind;
 }
@@ -1587,7 +1587,7 @@ function placeMarker(){
   if(!pt)pt=f.mid;
   const ud=w.obj.userData,sh=ud.floors&&ud.h?Math.max(2.5,Math.min(3.6,ud.h/ud.floors)):3;
   { // never a window in or under the ground: lift it to the first level clear of the street right in front of it
-    const gl=groundAt(pt,w.normal), nF=nFloors(ud); let k=w.floor; while(k<nF-1&&ud.zBase+k*sh+1.5<gl+WIN_SILL+0.9)k++;
+    const gl=groundAt(pt,w.normal), nF=nFloors(ud); let k=w.floor; while(k<nF-1&&ud.zBase+k*sh+1.5<gl+WIN_SILL)k++;
     if(k!==w.floor){w.floor=k;$('floor').value=k;setTimeout(refreshWinUI,0);} }
   const z=Math.max(ud.zBase+w.floor*sh+1.5,groundAt(pt,w.normal)+WIN_CLEAR);
   const p=new THREE.Vector3(pt.x,pt.y,z).addScaledVector(w.normal,0.45);
