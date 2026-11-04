@@ -4,50 +4,58 @@
 <meta charset="utf-8">
 <meta name="robots" content="noindex,nofollow">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<script>try{var qsT=localStorage.getItem("qs-theme");if(qsT)document.documentElement.dataset.theme=qsT;}catch(e){}</script>
+<script>document.documentElement.dataset.theme="dark";</script>
 <title>Toit Soleil</title>
 <meta name="description" content="L'énergie solaire reçue par un toit, pan par pan, à partir des relevés laser de l'IGN et de la météo réelle.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
+/* "caméra thermique": near-black, the energy ramp (violet → orange → yellow) as the only colour, condensed type */
 :root{
-  --bg:#f7f4ee; --card:#fdfbf7; --raised:#efe9df; --ink:#1f1b16; --ink2:#5e554a; --muted:#7b7266; --fg:#1f1b16;
-  --line:rgba(31,27,22,.12); --sun:#e8772e; --sun-ink:#ad4f16; --btn:#1f1b16; --btn-ink:#fdfbf7;
-  --sans:"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-  --serif:"Instrument Serif",ui-serif,Georgia,serif;
-  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --bg:#0b0a0c; --card:#141217; --raised:#1c191f; --ink:#f3ede6; --ink2:#a9a2ad; --muted:#7f7884; --fg:#f3ede6;
+  --line:rgba(255,255,255,.1); --hot:#fde15a; --warm:#f08a24; --btn:#fde15a; --btn-ink:#0b0a0c;
+  --ramp:linear-gradient(90deg,#2b1a4f,#6a2c70 25%,#c1404a 50%,#f08a24 75%,#fde15a);
+  --sans:"Barlow",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"Barlow Condensed",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --ease:cubic-bezier(.22,1,.36,1);
+  color-scheme:dark;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161513;--card:#1c1a18;--raised:#262421;--ink:#efe9de;--ink2:#aaa398;--muted:#8a847a;--fg:#efe9de;--line:rgba(239,233,222,.12);--sun:#ef8a44;--sun-ink:#f2a066;--btn:#efe9de;--btn-ink:#161513;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#161513;--card:#1c1a18;--raised:#262421;--ink:#efe9de;--ink2:#aaa398;--muted:#8a847a;--fg:#efe9de;--line:rgba(239,233,222,.12);--sun:#ef8a44;--sun-ink:#f2a066;--btn:#efe9de;--btn-ink:#161513;color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--sans);-webkit-text-size-adjust:100%}
-main{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+main{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
   padding:max(28px,env(safe-area-inset-top,0px)) max(20px,env(safe-area-inset-right,0px)) max(28px,env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px))}
-.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;letter-spacing:-.01em;text-decoration:none;color:var(--ink)}
+.brand{display:flex;align-items:center;gap:8px;font:600 17px var(--cond);letter-spacing:.08em;text-transform:uppercase;text-decoration:none;color:var(--ink)}
 .scene{width:min(420px,88vw);aspect-ratio:1/1;position:relative}
 .scene canvas{width:100%;height:100%;display:block}
-.read{font:400 12px/1.4 var(--mono);color:var(--muted);text-align:center;min-height:1.4em;font-variant-numeric:tabular-nums}
-.read b{color:var(--ink2);font-weight:500}
-h1{margin:0;font:400 clamp(30px,6vw,44px)/1.05 var(--serif);text-align:center;letter-spacing:-.01em;text-wrap:balance;max-width:16ch}
-h1 em{color:var(--sun-ink)}
-.box{width:min(520px,100%);display:flex;flex-direction:column;gap:0}
+.scale{width:min(320px,80vw);display:flex;flex-direction:column;gap:6px}
+.scale i{display:block;height:6px;border-radius:2px;background:var(--ramp)}
+.scale span{display:flex;justify-content:space-between;font:400 10.5px var(--mono);color:var(--muted)}
+.read{font:400 12px/1.5 var(--mono);color:var(--muted);text-align:center;min-height:3em;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.read b{color:var(--ink);font-weight:500}
+h1{margin:4px 0 0;font:600 clamp(40px,10vw,64px)/.95 var(--cond);text-align:center;text-transform:uppercase;letter-spacing:-.005em;text-wrap:balance;max-width:12ch}
+h1 em{font-style:normal;background:var(--ramp);-webkit-background-clip:text;background-clip:text;color:transparent}
+.box{width:min(520px,100%);display:flex;flex-direction:column}
 form{display:flex;gap:8px}
-input{flex:1;min-width:0;font:400 16px var(--sans);color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 14px;outline:none;transition:border-color .2s var(--ease)}
-input:focus{border-color:var(--sun)}
-button{font:500 15px var(--sans);border:0;border-radius:12px;padding:0 18px;background:var(--btn);color:var(--btn-ink);cursor:pointer;transition:transform .15s var(--ease)}
+input{flex:1;min-width:0;font:400 16px var(--sans);color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:14px;outline:none;transition:border-color .2s var(--ease)}
+input::placeholder{color:var(--muted)}
+input:focus{border-color:var(--warm)}
+button{font:600 17px var(--cond);letter-spacing:.06em;text-transform:uppercase;border:0;border-radius:6px;padding:0 20px;background:var(--btn);color:var(--btn-ink);cursor:pointer;transition:transform .15s var(--ease),filter .2s var(--ease)}
+button:hover{filter:brightness(1.06)}
 button:active{transform:scale(.97)}
-.hint{margin-top:12px;font-size:12.5px;color:var(--muted);text-align:center}
+.hint{margin-top:12px;font:400 11px/1.5 var(--mono);color:var(--muted);text-align:center;letter-spacing:.02em}
+.qsac{background:var(--card)!important;border-color:var(--line)!important}
 @media (prefers-reduced-motion:reduce){input,button{transition:none}}
 </style>
 </head>
 <body>
 <main>
-  <a class="brand" href="./"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><path d="M5 17 12 10 19 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Toit Soleil</a>
+  <a class="brand" href="./"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#6a2c70"/><stop offset=".5" stop-color="#f08a24"/><stop offset="1" stop-color="#fde15a"/></linearGradient></defs><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="url(#lg)" stroke-width="1.8" stroke-linecap="round"/><path d="M6 17 12 11 18 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Toit Soleil</a>
   <div class="scene" aria-label="Schéma : le soleil traverse la journée au-dessus d'une maison, chaque pan de toit se colore selon la puissance reçue"><canvas id="cv"></canvas></div>
+  <div class="scale" aria-hidden="true"><i></i><span><span>0</span><span>500</span><span>1 000 W/m²</span></span></div>
   <div class="read" id="read" aria-live="off"></div>
   <h1>Quelle énergie solaire reçoit <em>ce toit</em>&nbsp;?</h1>
   <div class="box">
@@ -121,7 +129,7 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   cam.up.set(0,0,1); cam.position.set(24,-30,16); cam.lookAt(0,0,4.2);
   const css=()=>getComputedStyle(document.documentElement);
   const ground=new THREE.Mesh(new THREE.CircleGeometry(16,64),new THREE.ShadowMaterial({opacity:0.22})); ground.receiveShadow=true; sc.add(ground);
-  const hemi=new THREE.HemisphereLight(0xffffff,0xffffff,0.55); sc.add(hemi);
+  const hemi=new THREE.HemisphereLight(0xffffff,0x332c38,0.5); sc.add(hemi);
   const sunL=new THREE.DirectionalLight(0xffffff,0.75); sunL.castShadow=true; sunL.shadow.mapSize.set(1024,1024); const sh=sunL.shadow.camera; sh.left=-20;sh.right=20;sh.top=20;sh.bottom=-20;sh.near=1;sh.far=80; sc.add(sunL); sc.add(sunL.target);
   /* house 8 m (east-west) x 6 m, walls 3 m, ridge east-west: one pan faces south, one north */
   const W=8,D=6,H=3,T=35*Math.PI/180,rise=D/2*Math.tan(T);
@@ -131,12 +139,12 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   const pan=(sgn)=>{const o=0.35,g=new THREE.BufferGeometry();const y0=sgn*(D/2+o*Math.cos(T)),z0=H-o*Math.sin(T);
     g.setAttribute('position',new THREE.Float32BufferAttribute([-W/2-o,y0,z0, W/2+o,y0,z0, W/2+o,0,H+rise, -W/2-o,0,H+rise],3)); g.setIndex(sgn<0?[0,1,2,0,2,3]:[0,2,1,0,3,2]); g.computeVertexNormals();
     const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:0xcccccc,side:THREE.DoubleSide})); m.castShadow=true; sc.add(m);
-    const e=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0x2a1f17,transparent:true,opacity:.55})); sc.add(e); return m;};
+    const e=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0x0b0a0c,transparent:true,opacity:.7})); sc.add(e); return m;};
   const south=pan(-1), north=pan(1);
   const nS=[0,-Math.sin(T),Math.cos(T)], nN=[0,Math.sin(T),Math.cos(T)];
-  const sun=new THREE.Mesh(new THREE.SphereGeometry(0.6,24,16),new THREE.MeshBasicMaterial({color:0xe8772e})); sc.add(sun);
-  const pathG=new THREE.BufferGeometry(), path=new THREE.Line(pathG,new THREE.LineDashedMaterial({color:0xe8772e,dashSize:0.5,gapSize:0.4,transparent:true,opacity:.6})); sc.add(path);
-  const rays=[]; for(let k=0;k<5;k++){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xe8772e,transparent:true,opacity:.35}));sc.add(l);rays.push(l);}
+  const sun=new THREE.Mesh(new THREE.SphereGeometry(0.6,24,16),new THREE.MeshBasicMaterial({color:0xfde15a})); sc.add(sun);
+  const pathG=new THREE.BufferGeometry(), path=new THREE.Line(pathG,new THREE.LineDashedMaterial({color:0xfde15a,dashSize:0.4,gapSize:0.5,transparent:true,opacity:.45})); sc.add(path);
+  const rays=[]; for(let k=0;k<5;k++){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xfde15a,transparent:true,opacity:.4}));sc.add(l);rays.push(l);}
   const RAMP=[[0,[43,26,79]],[0.25,[106,44,112]],[0.5,[193,64,74]],[0.75,[240,138,36]],[1,[253,225,90]]];
   const ramp=t=>{t=Math.max(0,Math.min(1,t));for(let i=1;i<RAMP.length;i++){if(t<=RAMP[i][0]){const [a,ca]=RAMP[i-1],[b,cb]=RAMP[i];const u=(t-a)/(b-a);return new THREE.Color(...ca.map((v,k)=>(v+(cb[k]-v)*u)/255));}}return new THREE.Color(1,.88,.35);};
   const lat=46*Math.PI/180, DAYS=[['21 juin',23.44],['20 mars',0],['21 déc.',-23.44]];
@@ -148,7 +156,7 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   function size(){const r=cv.getBoundingClientRect();if(r.width<10||r.height<10)return;R.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.updateProjectionMatrix();}
   size(); addEventListener('resize',size);
   const theme=()=>{const c=css(),bg=c.getPropertyValue('--bg').trim(),dark=document.documentElement.dataset.theme==='dark'||(!document.documentElement.dataset.theme&&matchMedia('(prefers-color-scheme: dark)').matches);
-    ground.material.opacity=dark?0.45:0.2; walls.material.color.set(dark?0x3a3631:0xf6f1e9); gm.material.color.copy(walls.material.color);};
+    ground.material.opacity=0.55; walls.material.color.set(0x1f1c22); gm.material.color.copy(walls.material.color);};
   theme(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
   const DUR=7, PAUSE=0.8, still=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let cur=-1, H0=0;
