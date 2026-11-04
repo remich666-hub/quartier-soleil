@@ -909,7 +909,7 @@ function detectLattices(feats){
     let best={a:0,s:1e18}; for(let d=0;d<90;d+=1){const an=d*RAD,c=Math.cos(an),sn=Math.sin(an);let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;base.ring.forEach(q=>{const u=q.x*c+q.y*sn,v=-q.x*sn+q.y*c;u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});if((u1-u0)*(v1-v0)<best.s)best={a:an,s:(u1-u0)*(v1-v0)};}
     const halfOf=t=>{const c=Math.cos(best.a),sn=Math.sin(best.a);let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;t.ring.forEach(q=>{const u=q.x*c+q.y*sn,v=-q.x*sn+q.y*c;u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});return Math.max(1,((u1-u0)+(v1-v0))/4);};
     const lv=grp.filter(t=>t!==base).sort((a,b)=>a.h-b.h).map(t=>({h:t.h,half:halfOf(t)}));
-    out.push({cx:top.cx,cy:top.cy,ang:best.a,base:base.ring,baseHalf:halfOf(base),levels:lv,top:top.h});});
+    out.push({cx:top.cx,cy:top.cy,ang:best.a,base:base.ring,baseHalf:halfOf(base),levels:lv,top:Math.max(...grp.map(t=>t.h))});});
   return out;
 }
 let latticeMeshes=[];
@@ -917,7 +917,7 @@ function applyLattices(){
   const Ls=S.lattices||[]; if(!Ls.length)return;
   // drop every solid volume standing in a lattice's base (IGN prisms and their laser rebuilds), keep low kiosks
   const gone=new Set(); S.meshes.forEach(m=>{const u=m.userData;if(!u.rings||(u.h||0)<15)return;let cx=0,cy=0;u.rings[0].forEach(q=>{cx+=q.x;cy+=q.y;});cx/=u.rings[0].length;cy/=u.rings[0].length;
-    if(Ls.some(L=>pointInPoly(cx,cy,L.base))){gone.add(m);scene.remove(m);}});
+    if(Ls.some(L=>pointInPoly(cx,cy,L.base))){gone.add(m);if(m.parent)m.parent.remove(m);}});
   if(gone.size){S.meshes=S.meshes.filter(m=>!gone.has(m));S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o));rebuildEdges();}
   if(latticeMeshes.length)return; // frame already built
   const mat=new THREE.MeshLambertMaterial({color:0xbdb2a2}); fadeMat(mat);
