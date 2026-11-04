@@ -2919,7 +2919,7 @@ const SCALE={real:[700,1700],clear:[1200,2800],instant:[0,1000]};
 const UNIT={real:'kWh/m²/an',clear:'kWh/m²/an',instant:'W/m²'};
 function roofHide(obj,on){ /* while it is studied, the coloured map IS the roof: the drawn roof would poke through it */
   (RF.hidden||[]).forEach(o=>o.visible=true); RF.hidden=[]; if(!on||!obj)return;
-  family(obj).forEach(m=>{m.children.forEach(ch=>{if(ch.isMesh&&!ch.userData.gable&&ch.visible){ch.visible=false;RF.hidden.push(ch);}});const rm=m.userData.roofMesh;if(rm&&rm.visible){rm.visible=false;RF.hidden.push(rm);}});}
+  family(obj).forEach(m=>{m.children.forEach(ch=>{if(ch.isMesh&&ch.visible){ch.visible=false;RF.hidden.push(ch);}});const rm=m.userData.roofMesh;if(rm&&rm.visible){rm.visible=false;RF.hidden.push(rm);}});}
 function roofClear(){RF.tok++;roofHide(null,false);if(RF.mesh){scene.remove(RF.mesh);RF.mesh.geometry.dispose();RF.mesh=null;}RF.sel=null;RF.cells=null;$('roofBox').hidden=true;}
 async function roofWeather(lat,lon){
   const Y=new Date().getFullYear()-1, k=lat.toFixed(2)+','+lon.toFixed(2)+','+Y; if(RF.wx.has(k))return RF.wx.get(k);
