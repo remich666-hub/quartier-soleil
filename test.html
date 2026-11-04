@@ -1667,7 +1667,7 @@ function pick(e){
   ray.setFromCamera(m,camera); ray.far=Infinity; const hits=ray.intersectObjects(S.meshes,true); // children too: laser roof pans, upper wall pieces
   if(!hits.length){toast('Touchez un bâtiment');return;}
   const hit=hits[0]; let obj=hit.object; const MS=new Set(S.meshes); while(obj&&!MS.has(obj))obj=obj.parent; if(!obj){toast('Touchez un bâtiment');return;}
-  let annexHit=false; if(obj.userData.annexOf&&MS.has(obj.userData.annexOf)){obj=obj.userData.annexOf;annexHit=true;} // an annex selects its house const prevB=S.building, prevWin=S.win;
+  let annexHit=false; if(obj.userData.annexOf&&MS.has(obj.userData.annexOf)){obj=obj.userData.annexOf;annexHit=true;} /* an annex selects its house */ const prevB=S.building, prevWin=S.win;
   if(obj.userData.monu){toast(`${obj.userData.monu} : monument, pas un logement`);return;}
   if(obj!==prevB)selectBuilding(obj);
   const u=obj.userData, fac=u.facades, bl=blindMap(obj);
@@ -2727,7 +2727,7 @@ function frame(now){
     if(k>=1){const cb=camTw.onEnd;camTw=null;if(cb)cb();}}
   stepFades(now); setLeafTarget(now);
   if(facadeLine.visible&&S.win&&S.win.facade){const f=S.win.facade,n=S.win.normal,front=n.x*(camera.position.x-f.mid.x)+n.y*(camera.position.y-f.mid.y)>0,mt=facadeLine.material,tg=front?0.95:0.12;
-    if(Math.abs(mt.opacity-tg)>0.005)mt.opacity+=(tg-mt.opacity)*0.12;} // façade turned away: its outline fades (eased), it is not drawn through the house if(LEAF.cur!==LEAF.to){const k=Math.min(1,(now-LEAF.t0)/900),e=k*k*k*(k*(k*6-15)+10);LEAF.cur=k>=1?LEAF.to:LEAF.from+(LEAF.to-LEAF.from)*e;applyLeaf();}
+    if(Math.abs(mt.opacity-tg)>0.005)mt.opacity+=(tg-mt.opacity)*0.12;} /* façade turned away: its outline fades (eased), it is not drawn through the house */ if(LEAF.cur!==LEAF.to){const k=Math.min(1,(now-LEAF.t0)/900),e=k*k*k*(k*(k*6-15)+10);LEAF.cur=k>=1?LEAF.to:LEAF.from+(LEAF.to-LEAF.from)*e;applyLeaf();}
   poolUni.uT.value=now/1000; if(S.sunDir){poolUni.uSun.value.copy(S.sunDir);poolUni.uLight.value=Math.max(0.18,Math.min(1,S.sunDir.z*2.5+0.3));}
   if(introRing){const k=Math.min(1,(now-introRing.userData.t0)/1400),e=1-Math.pow(1-k,3);introRing.scale.setScalar(1+e*1.8);introRing.material.opacity=0.9*(1-k);
     if(k>=1){scene.remove(introRing);introRing.geometry.dispose();introRing.material.dispose();introRing=null;}}
