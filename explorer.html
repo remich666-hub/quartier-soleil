@@ -624,15 +624,29 @@ function smoothRing(pts,tol,iters){
   for(let it=0;it<iters;it++){const o=[];for(let k=0;k<sm.length;k++){const a=sm[k],b=sm[(k+1)%sm.length];o.push([a[0]*0.75+b[0]*0.25,a[1]*0.75+b[1]*0.25],[a[0]*0.25+b[0]*0.75,a[1]*0.25+b[1]*0.75]);}sm=o;}
   return sm;
 }
-/* terraces, pool surrounds, paths and paved yards as geometric slabs. Each light-mineral patch ≥ 6 m² is redrawn in the frame
-   of what it belongs to — the pool it surrounds, else the house it runs along (its longest wall), else its own main axis — on a
-   1 m grid of that frame (majority rule), so its outline is made of straight, square edges only. A pool surround that fills its
-   box is that box. Pools are cut out of the slab. */
-async function vectorTerraces(m,md,N,px,R,out,pools){
-  const yl=slicer();
-  const on=k=>m[k]>0.5&&md[k*4+3]>127, lab=new Int32Array(N*N), minPx=6/(px*px), maxPx=900/(px*px); let id=0;
-  const bAxes=S.meshes.map(mm=>{const u=mm.userData;if(!u.rings||!u.facades||!u.facades.length)return null;const f=u.facades.reduce((a,b)=>b.len>a.len?b:a);return {rings:u.rings,ang:Math.atan2(f.normal.x,-f.normal.y)};}).filter(Boolean);
-  for(let k0=0;k0<N*N;k0++){if(k0%N===0)await yl();if(lab[k0]||!on(k0))continue;id++;const q=[k0];lab[k0]=id;
+/* ---------- gardens, computed off the main thread ----------
+   Everything below until gardensRun is pure (no DOM, no globals): it runs in a Web Worker (the screen never waits for the
+   2–3 million photo pixels it reads), or on the main thread if workers are unavailable. */
+function rasterPolys(mask,polys,val,N,R,px){ // even-odd fill of [[ring,...],...] (rings of {x,y} in metres) at pixel centres
+  const xs=[];
+  for(const rings of polys){let y0=1e9,y1=-1e9;rings.forEach(r=>r.forEach(p=>{if(p.y<y0)y0=p.y;if(p.y>y1)y1=p.y;}));
+    const j0=Math.max(0,Math.floor((R-y1)/px)),j1=Math.min(N-1,Math.ceil((R-y0)/px));
+    for(let j=j0;j<=j1;j++){const y=R-(j+0.5)*px;xs.length=0;
+      for(const r of rings)for(let a=0,b=r.length-1;a<r.length;b=a++){const pa=r[a],pb=r[b];if((pa.y>y)!==(pb.y>y))xs.push(pa.x+(y-pa.y)*(pb.x-pa.x)/(pb.y-pa.y));}
+      if(xs.length<2)continue;xs.sort((u,v)=>u-v);
+      for(let k=0;k+1<xs.length;k+=2){const i0=Math.max(0,Math.ceil((xs[k]+R)/px-0.5)),i1=Math.min(N-1,Math.floor((xs[k+1]+R)/px-0.5));for(let i=i0;i<=i1;i++)mask[j*N+i]=val;}}}
+}
+function blurF(a,N,sigma){ // gaussian blur of a float field, as 3 box passes (what canvas 'filter: blur(σpx)' does)
+  const n=3,wI=Math.floor(Math.sqrt(12*sigma*sigma/n+1)),wl=wI%2?wI:wI-1,m=Math.round((12*sigma*sigma-n*wl*wl-4*n*wl-3*n)/(-4*wl-4));
+  const sizes=[0,1,2].map(i=>i<m?wl:wl+2), tmp=new Float32Array(N*N);
+  const pass=(src,dst,r,horiz)=>{const iarr=1/(r+r+1);for(let l=0;l<N;l++){let acc=0;const at=k=>horiz?src[l*N+Math.min(N-1,Math.max(0,k))]:src[Math.min(N-1,Math.max(0,k))*N+l];
+      for(let k=-r-1;k<r;k++)acc+=at(k);for(let k=0;k<N;k++){acc+=at(k+r)-at(k-r-1);if(horiz)dst[l*N+k]=acc*iarr;else dst[k*N+l]=acc*iarr;}}};
+  for(const w of sizes){const r=(w-1)/2;if(r<1)continue;pass(a,tmp,r,true);pass(tmp,a,r,false);}
+  return a;
+}
+function vectorTerraces(m,mdm,N,px,R,out,pools,bAxes){
+  const on=k=>m[k]>0.5&&mdm[k], lab=new Int32Array(N*N), minPx=6/(px*px), maxPx=900/(px*px); let id=0;
+  for(let k0=0;k0<N*N;k0++){if(lab[k0]||!on(k0))continue;id++;const q=[k0];lab[k0]=id;
     for(let h=0;h<q.length;h++){const k=q[h],i=k%N,j=(k/N)|0;
       if(i>0&&!lab[k-1]&&on(k-1)){lab[k-1]=id;q.push(k-1);} if(i<N-1&&!lab[k+1]&&on(k+1)){lab[k+1]=id;q.push(k+1);}
       if(j>0&&!lab[k-N]&&on(k-N)){lab[k-N]=id;q.push(k-N);} if(j<N-1&&!lab[k+N]&&on(k+N)){lab[k+N]=id;q.push(k+N);}}
@@ -669,75 +683,80 @@ async function vectorTerraces(m,md,N,px,R,out,pools){
     const holes=PR?[[[PR[0],PR[2]],[PR[1],PR[2]],[PR[1],PR[3]],[PR[0],PR[3]]].map(([u,v])=>toW(u,v))]:[];
     out.push({ring,holes:holes.filter(h=>h.every(p=>pointInPoly(p.x,p.y,ring)))});}
 }
-/* long passes give the screen back every ~12 ms: the arrival animation keeps flowing while the gardens are computed */
-const yieldMC=new MessageChannel(), yieldQ=[]; yieldMC.port1.onmessage=()=>{const r=yieldQ.shift();if(r)r();}; // a message, not setTimeout: no 4 ms clamp, no 1 s throttle in a background tab
-const slicer=()=>{let t=performance.now();return async()=>{if(performance.now()-t>12){await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});t=performance.now();}};};
-async function gardenTexture(TP,MH,GT_R,GT_N,pools,terr,lawns){
-  const yl=slicer();
-  const RO=S.rawOrtho; if(!RO)return null; const W=RO.raw.width,Hh=RO.raw.height,mpp=(RO.e-RO.w)/W,od=RO.raw.getContext('2d').getImageData(0,0,W,Hh).data;
-  const N=GT_N,px=2*GT_R/N,cv=document.createElement('canvas');cv.width=cv.height=N;const g=cv.getContext('2d');
-  // colour of the photo at a point: the 20 cm photo around the address, the 60 cm one (±350 m) beyond its edge — no seam where the fine one stops
-  const FR=S.rgbFar; let cR=0,cG=0,cB=0; const rgbAt=(x,y)=>{const oi=Math.floor((x-RO.w)/mpp),oj=Math.floor((RO.n-y)/mpp);if(oi>=0&&oj>=0&&oi<W&&oj<Hh){const o=(oj*W+oi)*4;cR=od[o];cG=od[o+1];cB=od[o+2];return true;}
-    if(FR){const [fx,fy]=FR.px(x,y);const X=Math.floor(fx),Y=Math.floor(fy);if(X>=0&&Y>=0&&X<FR.W&&Y<FR.W){const o=(Y*FR.W+X)*4;cR=FR.d[o];cG=FR.d[o+1];cB=FR.d[o+2];return true;}}return false;};
-  const X=x=>(x+GT_R)/px, Y=y=>(GT_R-y)/px;
-  const path=(rings)=>{g.beginPath();rings.forEach(r=>{r.forEach((q,i)=>i?g.lineTo(X(q.x),Y(q.y)):g.moveTo(X(q.x),Y(q.y)));g.closePath();});};
-  TP.forEach(t=>{g.fillStyle='#'+t.col.getHexString();path([t.outer].concat(t.holes));g.fill('evenodd');});
-  // open ground only: buildings punched out of a mask
-  const mk=document.createElement('canvas');mk.width=mk.height=N;const mg=mk.getContext('2d');mg.fillStyle='#fff';
-  TP.forEach(t=>{mg.beginPath();[t.outer].concat(t.holes).forEach(r=>{r.forEach((q,i)=>i?mg.lineTo(X(q.x),Y(q.y)):mg.moveTo(X(q.x),Y(q.y)));mg.closePath();});mg.fill('evenodd');});
-  mg.globalCompositeOperation='destination-out';mg.fillStyle='#000';
-  S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;mg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>i?mg.lineTo(X(q.x),Y(q.y)):mg.moveTo(X(q.x),Y(q.y)));mg.closePath();});mg.fill('evenodd');});
-  const md=mg.getImageData(0,0,N,N).data, img=g.getImageData(0,0,N,N), id=img.data;
-  // big unbuilt parcels (squares, public gardens, fields): their lawns are drawn, but not the 'light ground' read from the photo
-  // (cars, shadows, mixed paving there make ragged patches) — a mask of the parcels that are not that
-  const big=TP.filter(t=>t.garden===false); let gd=null; if(big.length){const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.fillStyle='#fff';
-    big.forEach(t=>{g2.beginPath();[t.outer].concat(t.holes).forEach(r=>{r.forEach((q,i)=>i?g2.lineTo(X(q.x),Y(q.y)):g2.moveTo(X(q.x),Y(q.y)));g2.closePath();});g2.fill('evenodd');}); gd=g2.getImageData(0,0,N,N).data;}
-  // classify — only what is reliable: 1 lawn, 2 light mineral (terraces, paths, gravel), 4 pool. Anything else, shadows included,
-  // keeps the soft lot tint (no more dark "waste ground" patches made of the buildings' shadows on the photo)
-  const lim=GT_R/px, c0=N/2, cls=new Uint8Array(N*N); // the whole texture: a big parcel reaching the zone is read to its far edge (no seam at a radius)
-  const j0=Math.max(1,Math.floor(c0-lim)), j1=Math.min(N-1,Math.ceil(c0+lim));
-  for(let j=j0;j<j1;j++){await yl();for(let i=j0;i<j1;i++){
-    const k=j*N+i; if(md[k*4+3]<128)continue; const x=-GT_R+(i+0.5)*px, y=GT_R-(j+0.5)*px;
-    if(!rgbAt(x,y))continue; const r=cR,gg=cG,b=cB;
-    const lum=(r+gg+b)/3,sat=Math.max(r,gg,b)-Math.min(r,gg,b),exg=2*gg-r-b;
-    cls[k]= (b>110&&b-r>35&&gg-r>15&&lum>90)?4 : lum<75?0 : exg>14?1 : (lum>155&&sat<40)?2 : 0;}}
-  // public lawns: parks and squares often have no cadastral parcel (public domain) and stayed bare street colour.
-  // Grass seen on the photo outside the parcels, not under a tree canopy (laser), becomes a lawn outline of its own
-  if(lawns&&MH&&MH.at){const lm=new Uint8ClampedArray(N*N*4);let nl=0;
-    const bc=document.createElement('canvas');bc.width=bc.height=N;const bg=bc.getContext('2d');bg.fillStyle='#fff';
-    TP.forEach(t=>{bg.beginPath();[t.outer].concat(t.holes).forEach(r=>{r.forEach((q,i)=>i?bg.lineTo(X(q.x),Y(q.y)):bg.moveTo(X(q.x),Y(q.y)));bg.closePath();});bg.fill('evenodd');});
-    S.meshes.forEach(m=>{const rs=m.userData.rings;if(!rs)return;bg.beginPath();rs.forEach(r=>{r.forEach((q,i)=>i?bg.lineTo(X(q.x),Y(q.y)):bg.moveTo(X(q.x),Y(q.y)));bg.closePath();});bg.fill('evenodd');});
-    const bd=bg.getImageData(0,0,N,N).data;
-    for(let j=j0;j<j1;j++){await yl();for(let i=j0;i<j1;i++){const k=j*N+i;if(bd[k*4+3]>=128)continue;const x=-GT_R+(i+0.5)*px,y=GT_R-(j+0.5)*px;
-      if(!rgbAt(x,y))continue;const r=cR,gg=cG,b=cB;
-      if((r+gg+b)/3<75||2*gg-r-b<=14)continue; const hv=MH.at(x,y); if(hv!=null&&hv>1.2)continue; lm[k*4+3]=255;nl++;}}
-    if(nl){const c1=document.createElement('canvas');c1.width=c1.height=N;c1.getContext('2d').putImageData(new ImageData(lm,N,N),0,0);
-      const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.filter=`blur(${Math.max(2,Math.round(1.2/px))}px)`;g2.drawImage(c1,0,0);
-      const d2=g2.getImageData(0,0,N,N).data,on=k=>d2[k*4+3]>110,lab=new Int32Array(N*N);let id2=0;
-      for(let k0=0;k0<N*N;k0++){if(k0%N===0)await yl();if(lab[k0]||!on(k0))continue;id2++;const q=[k0];lab[k0]=id2;for(let h=0;h<q.length;h++){const k=q[h],i=k%N;[i>0?k-1:-1,i<N-1?k+1:-1,k-N,k+N].forEach(kk=>{if(kk>=0&&kk<N*N&&!lab[kk]&&on(kk)){lab[kk]=id2;q.push(kk);}});}
+function gardenCompute(job){ // → {rgba, pools, terr, lawns} for one texture (N px over ±R m)
+  const {N,R,TP,BL,BA,RO,FR,MH}=job, px=2*R/N, NN=N*N, out={pools:[],terr:job.terr?[]:null,lawns:job.lawns?[]:null};
+  const mhAt=MH?(x,y)=>{const i=Math.floor((x+MH.R)/MH.res),j=Math.floor((MH.R-y)/MH.res);if(i<0||j<0||i>=MH.W||j>=MH.W)return null;const v=MH.f[j*MH.W+i];return v>-500&&v<9000?v:null;}:null;
+  let cR=0,cG=0,cB=0; const RAD=Math.PI/180;
+  const rgbAt=(x,y)=>{const oi=Math.floor((x-RO.w)/RO.mpp),oj=Math.floor((RO.n-y)/RO.mpp);if(oi>=0&&oj>=0&&oi<RO.W&&oj<RO.H){const o=(oj*RO.W+oi)*4;cR=RO.d[o];cG=RO.d[o+1];cB=RO.d[o+2];return true;}
+    if(FR){const lon=FR.lon0+x/FR.kx,lat=FR.lat0+y/FR.ky,g=FR.geo;const X=Math.floor(((lon+180)/360*g.n-g.tx0)*256),Y=Math.floor(((1-Math.log(Math.tan(lat*RAD)+1/Math.cos(lat*RAD))/Math.PI)/2*g.n-g.ty0)*256);
+      if(X>=0&&Y>=0&&X<FR.W&&Y<FR.W){const o=(Y*FR.W+X)*4;cR=FR.d[o];cG=FR.d[o+1];cB=FR.d[o+2];return true;}}return false;};
+  // lot tints, then the open ground of every lot (buildings punched out), the big unbuilt lots, everything built or cadastral
+  const rgba=new Uint8ClampedArray(NN*4), lot=new Int32Array(NN).fill(-1);
+  TP.forEach((t,ti)=>rasterPolys(lot,[[t.outer].concat(t.holes)],ti,N,R,px));
+  for(let k=0;k<NN;k++){const t=lot[k];if(t<0)continue;const c=TP[t].col;rgba[k*4]=c[0];rgba[k*4+1]=c[1];rgba[k*4+2]=c[2];rgba[k*4+3]=255;}
+  const bm=new Uint8Array(NN); rasterPolys(bm,BL,1,N,R,px);
+  const mdm=new Uint8Array(NN), gd=new Uint8Array(NN); for(let k=0;k<NN;k++){if(lot[k]>=0&&!bm[k])mdm[k]=1;if(lot[k]>=0&&TP[lot[k]].garden===false)gd[k]=1;}
+  // classify: 1 lawn, 2 light mineral, 4 pool; shadows and anything doubtful keep the lot tint
+  const cls=new Uint8Array(NN);
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const k=j*N+i;if(!mdm[k])continue;const x=-R+(i+0.5)*px,y=R-(j+0.5)*px;if(!rgbAt(x,y))continue;const r=cR,gg=cG,b=cB;
+    const lum=(r+gg+b)/3,sat=Math.max(r,gg,b)-Math.min(r,gg,b),exg=2*gg-r-b;cls[k]=(b>110&&b-r>35&&gg-r>15&&lum>90)?4:lum<75?0:exg>14?1:(lum>155&&sat<40)?2:0;}
+  // public lawns: grass outside every parcel and building, not under a tree canopy
+  if(out.lawns&&mhAt){const lm=new Float32Array(NN);let nl=0;
+    for(let j=0;j<N;j++)for(let i=0;i<N;i++){const k=j*N+i;if(lot[k]>=0||bm[k])continue;const x=-R+(i+0.5)*px,y=R-(j+0.5)*px;if(!rgbAt(x,y))continue;
+      if((cR+cG+cB)/3<75||2*cG-cR-cB<=14)continue;const hv=mhAt(x,y);if(hv!=null&&hv>1.2)continue;lm[k]=1;nl++;}
+    if(nl){blurF(lm,N,Math.max(2,Math.round(1.2/px)));const on=k=>lm[k]>110/255,lab=new Int32Array(NN);let id2=0;
+      for(let k0=0;k0<NN;k0++){if(lab[k0]||!on(k0))continue;id2++;const q=[k0];lab[k0]=id2;for(let h=0;h<q.length;h++){const k=q[h],i=k%N;[i>0?k-1:-1,i<N-1?k+1:-1,k-N,k+N].forEach(kk=>{if(kk>=0&&kk<NN&&!lab[kk]&&on(kk)){lab[kk]=id2;q.push(kk);}});}
         if(q.length*px*px<40)continue;const sk=q.reduce((a,b2)=>b2<a?b2:a);const sm=smoothRing(traceOuter((i,j)=>i>=0&&j>=0&&i<N&&j<N&&lab[j*N+i]===id2,sk%N,(sk/N)|0),0.5/px,2);
-        if(sm)lawns.push(sm.map(([i,j])=>({x:-GT_R+i*px,y:GT_R-j*px})));}}}
-  // smooth plan shapes: per class, blur the mask (≈1.3 m) and re-threshold with a soft edge → rounded, clean outlines, specks gone
-  const shape=(c,blurPx)=>{const a=new Uint8ClampedArray(N*N*4);for(let k=0;k<N*N;k++)if(cls[k]===c){a[k*4]=a[k*4+1]=a[k*4+2]=255;a[k*4+3]=255;}
-    const c1=document.createElement('canvas');c1.width=c1.height=N;c1.getContext('2d').putImageData(new ImageData(a,N,N),0,0);
-    const c2=document.createElement('canvas');c2.width=c2.height=N;const g2=c2.getContext('2d');g2.filter=`blur(${blurPx}px)`;g2.drawImage(c1,0,0);
-    const d=g2.getImageData(0,0,N,N).data,out=new Float32Array(N*N);for(let k=0;k<N*N;k++){const v=d[k*4+3]/255;out[k]=Math.max(0,Math.min(1,(v-0.5)*9+0.5));}return out;};
-  const paint=(m,col)=>{for(let k=0;k<N*N;k++){const a=m[k]*(md[k*4+3]>127?1:0);if(a<=0)continue;id[k*4]+= (col[0]-id[k*4])*a;id[k*4+1]+=(col[1]-id[k*4+1])*a;id[k*4+2]+=(col[2]-id[k*4+2])*a;}};
-  const bp=Math.max(2,Math.round(0.6/px)); await yl(); const m2=shape(2,bp); await yl(); const m1=shape(1,bp); await yl(); paint(m1,[205,219,185]); if(gd)for(let k=0;k<N*N;k++)if(gd[k*4+3]>127)m2[k]=0; await yl(); paint(m2,[235,230,220]); await yl();
-  g.putImageData(img,0,0);
-  // pools: each connected blue patch ≥ 8 m² becomes a clean shape — an oriented rounded rectangle when it is one (most are),
-  // a smoothed blob otherwise — with a thin light coping, like on an architect's plan
-  const seen=new Uint8Array(N*N), minPx=8/(px*px);
-  for(let k0=0;k0<N*N;k0++){if(k0%N===0)await yl();if(cls[k0]!==4||seen[k0])continue;const q=[k0];seen[k0]=1;for(let h=0;h<q.length;h++){const k=q[h];[1,-1,N,-N].forEach(d=>{const kk=k+d;if(kk>=0&&kk<N*N&&!seen[kk]&&cls[kk]===4){seen[kk]=1;q.push(kk);}});}
+        if(sm)out.lawns.push(sm.map(([i,j])=>({x:-R+i*px,y:R-j*px})));}}}
+  // smooth plan shapes per class (blur ≈ 0.6 m, re-threshold with a soft edge), painted over the lot tints
+  const shape=(c,bp)=>{const a=new Float32Array(NN);for(let k=0;k<NN;k++)if(cls[k]===c)a[k]=1;blurF(a,N,bp);for(let k=0;k<NN;k++)a[k]=Math.max(0,Math.min(1,(a[k]-0.5)*9+0.5));return a;};
+  const paint=(m,col)=>{for(let k=0;k<NN;k++){const a=mdm[k]?m[k]:0;if(a<=0)continue;rgba[k*4]+=(col[0]-rgba[k*4])*a;rgba[k*4+1]+=(col[1]-rgba[k*4+1])*a;rgba[k*4+2]+=(col[2]-rgba[k*4+2])*a;}};
+  const bp=Math.max(2,Math.round(0.6/px)); const m2=shape(2,bp); paint(shape(1,bp),[205,219,185]); for(let k=0;k<NN;k++)if(gd[k])m2[k]=0; paint(m2,[235,230,220]);
+  // pools: each blue patch ≥ 8 m² → an oriented rounded rectangle (or an ellipse when it is not one)
+  const seen=new Uint8Array(NN), minPx=8/(px*px);
+  for(let k0=0;k0<NN;k0++){if(cls[k0]!==4||seen[k0])continue;const q=[k0];seen[k0]=1;for(let h=0;h<q.length;h++){const k=q[h];[1,-1,N,-N].forEach(d=>{const kk=k+d;if(kk>=0&&kk<NN&&!seen[kk]&&cls[kk]===4){seen[kk]=1;q.push(kk);}});}
     if(q.length<minPx)continue;
     let mx=0,my=0;q.forEach(k=>{mx+=k%N;my+=(k/N)|0;});mx/=q.length;my/=q.length;let sxx=0,syy=0,sxy=0;q.forEach(k=>{const dx=k%N-mx,dy=((k/N)|0)-my;sxx+=dx*dx;syy+=dy*dy;sxy+=dx*dy;});
     const ang=0.5*Math.atan2(2*sxy,sxx-syy),ca=Math.cos(ang),sa=Math.sin(ang);const us=[],vs=[];q.forEach(k=>{const dx=k%N-mx,dy=((k/N)|0)-my;us.push(dx*ca+dy*sa);vs.push(-dx*sa+dy*ca);});
     us.sort((a,b)=>a-b);vs.sort((a,b)=>a-b);const pc=(a,t)=>a[Math.min(a.length-1,Math.max(0,Math.round(t*(a.length-1))))];
     const u0=pc(us,0.03),u1=pc(us,0.97)+1,v0=pc(vs,0.03),v1=pc(vs,0.97)+1,fill=q.length/((u1-u0)*(v1-v0));
-    if(pools){const uc=(u0+u1)/2,vc=(v0+v1)/2,pi=mx+0.5+uc*ca-vc*sa,pj=my+0.5+uc*sa+vc*ca;
-      pools.push({x:-GT_R+pi*px,y:GT_R-pj*px,ux:ca,uy:-sa,hu:(u1-u0)/2*px,hv:(v1-v0)/2*px,rect:fill>0.68});}}
-  if(terr)try{await vectorTerraces(m2,md,N,px,GT_R,terr,pools);}catch(err){console.error('terraces',err);}
-  const tx=new THREE.CanvasTexture(cv); tx.encoding=THREE.sRGBEncoding; tx.anisotropy=8; tx.wrapS=tx.wrapT=THREE.ClampToEdgeWrapping; return tx;
+    const uc=(u0+u1)/2,vc=(v0+v1)/2,pi=mx+0.5+uc*ca-vc*sa,pj=my+0.5+uc*sa+vc*ca;
+    out.pools.push({x:-R+pi*px,y:R-pj*px,ux:ca,uy:-sa,hu:(u1-u0)/2*px,hv:(v1-v0)/2*px,rect:fill>0.68});}
+  if(out.terr)vectorTerraces(m2,mdm,N,px,R,out.terr,out.pools,BA);
+  out.rgba=rgba; return out;
+}
+/* long passes on the main thread give the screen back every ~12 ms (a message, not setTimeout: no 4 ms clamp, no 1 s throttle in a background tab) */
+const yieldMC=new MessageChannel(), yieldQ=[]; yieldMC.port1.onmessage=()=>{const r=yieldQ.shift();if(r)r();};
+const slicer=()=>{let t=performance.now();return async()=>{if(performance.now()-t>12){await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});t=performance.now();}};};
+const GARDEN_FNS=[rasterPolys,blurF,vectorTerraces,gardenCompute,traceOuter,smoothRing,distToRing,pointInPoly];
+let gardenWorker=null, gardenSeq=0;
+function gardenWorkerGet(){
+  if(gardenWorker!==null)return gardenWorker;
+  try{const src=GARDEN_FNS.map(f=>f.toString()).join('\n')+'\nonmessage=e=>{const {id,jobs}=e.data;try{const res=jobs.map(gardenCompute);postMessage({id,res},res.map(r=>r.rgba.buffer));}catch(err){postMessage({id,err:String(err&&err.stack||err)});}};';
+    gardenWorker=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));gardenWorker._cb=new Map();
+    gardenWorker.onmessage=e=>{const cb=gardenWorker._cb.get(e.data.id);if(cb){gardenWorker._cb.delete(e.data.id);cb(e.data);}};
+    gardenWorker.onerror=()=>{gardenWorker._broken=true;};}catch(e){gardenWorker=false;}
+  return gardenWorker;
+}
+/* the two garden textures (fine 0.2 m near the address, coarse 0.64 m over the zone): inputs gathered here, computed in the worker */
+async function gardensRun(TP,MH){
+  const RO=S.rawOrtho; if(!RO)return null;
+  const W=RO.raw.width,H=RO.raw.height, ro={d:RO.raw.getContext('2d').getImageData(0,0,W,H).data,W,H,w:RO.w,n:RO.n,mpp:(RO.e-RO.w)/W};
+  const kx=111320*Math.cos(S.lat*RAD),ky=110574; const F=S.rgbFar, fr=F?{d:F.d,W:F.W,geo:F.geo,lat0:S.lat,lon0:S.lon,kx,ky}:null;
+  const mh=MH&&MH.f?{f:MH.f,R:MH.R,res:MH.res,W:MH.W}:null;
+  const tp=TP.map(t=>({outer:t.outer.map(p=>({x:p.x,y:p.y})),holes:t.holes.map(h=>h.map(p=>({x:p.x,y:p.y}))),col:[Math.round(t.col.r*255),Math.round(t.col.g*255),Math.round(t.col.b*255)],garden:t.garden}));
+  const bl=S.meshes.filter(m=>m.userData.rings).map(m=>m.userData.rings.map(r=>r.map(p=>({x:p.x,y:p.y}))));
+  const ba=S.meshes.map(mm=>{const u=mm.userData;if(!u.rings||!u.facades||!u.facades.length)return null;const f=u.facades.reduce((a,b)=>b.len>a.len?b:a);return {rings:u.rings.map(r=>r.map(p=>({x:p.x,y:p.y}))),ang:Math.atan2(f.normal.x,-f.normal.y)};}).filter(Boolean);
+  const base={TP:tp,BL:bl,BA:ba,RO:ro,FR:fr,MH:mh};
+  const jobs=[Object.assign({N:GN_N,R:GN_R,terr:true,lawns:false},base),Object.assign({N:GT_N,R:GT_R,terr:false,lawns:true},base)];
+  let res=null; const w=gardenWorkerGet();
+  if(w&&!w._broken){res=await new Promise(done=>{const id=++gardenSeq;w._cb.set(id,d=>done(d.err?null:d.res));try{w.postMessage({id,jobs});}catch(e){w._cb.delete(id);done(null);}
+    setTimeout(()=>{if(w._cb.has(id)){w._cb.delete(id);done(null);}},30000);});}
+  S.gardenMode=res?'worker':'main';
+  if(!res){try{res=jobs.map(gardenCompute);}catch(e){console.error('gardens',e);return null;}} // no worker: same code, on the main thread
+  const tex=r=>{const c=document.createElement('canvas');c.width=c.height=Math.round(Math.sqrt(r.rgba.length/4));c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(r.rgba.buffer),c.width,c.width),0,0);
+    const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.anisotropy=8;t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;return t;};
+  return {near:Object.assign(res[0],{tex:tex(res[0])}),far:Object.assign(res[1],{tex:tex(res[1])})};
 }
 async function buildParcels(lat,lon){
   const tok=++parcelTok;
@@ -775,8 +794,8 @@ async function buildParcels(lat,lon){
   if(tok!==parcelTok)return;
   parcelGroup=new THREE.Group();
   if(P.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
-    let mat=null, pools=[]; try{const pn=[],pf=[];const tr=[];const tn=await gardenTexture(TP,MH,GN_R,GN_N,pn,tr);if(tok!==parcelTok)return;S._terr=tr;const lw=[];const tx=await gardenTexture(TP,MH,GT_R,GT_N,pf,null,lw);if(tok!==parcelTok)return;S._lawns=lw;
-      pools=pn.concat(pf.filter(q=>Math.max(Math.abs(q.x),Math.abs(q.y))>GN_R-8));
+    let mat=null, pools=[]; try{const GR=await gardensRun(TP,MH);if(tok!==parcelTok)return;const tn=GR&&GR.near.tex,tx=GR&&GR.far.tex;S._terr=GR?GR.near.terr:[];S._lawns=GR?GR.far.lawns:[];
+      pools=GR?GR.near.pools.concat(GR.far.pools.filter(q=>Math.max(Math.abs(q.x),Math.abs(q.y))>GN_R-8)):[];
       if(tx){const uv=new Float32Array(P.length/3*2);for(let k=0,q=0;k<P.length;k+=3,q+=2){uv[q]=(P[k]+GT_R)/(2*GT_R);uv[q+1]=(P[k+1]+GT_R)/(2*GT_R);}
       g.setAttribute('uv',new THREE.BufferAttribute(uv,2));mat=new THREE.MeshLambertMaterial({map:tx,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
       if(tn){const un={value:tn}; mat.onBeforeCompile=sh=>{sh.uniforms.uNear=un; sh.fragmentShader='uniform sampler2D uNear;\n'+sh.fragmentShader.replace('#include <map_fragment>',
@@ -1379,7 +1398,7 @@ async function fetchLidarRaster(kind,R,res){
   const f=new Float32Array(buf); const ok=v=>v>-500&&v<9000; let nv=0; for(let k=0;k<f.length;k+=97)if(ok(f[k]))nv++; if(nv<(f.length/97)*0.6)return null;
   const at=(x,y)=>{const i=Math.floor((x+R)/res),j=Math.floor((R-y)/res);if(i<0||j<0||i>=W||j>=W)return null;const v=f[j*W+i];return ok(v)?v:null;};
   const max=(x,y,rad)=>{let m=null;for(let dy=-rad;dy<=rad+1e-6;dy+=res)for(let dx=-rad;dx<=rad+1e-6;dx+=res){const v=at(x+dx,y+dy);if(v!=null&&(m==null||v>m))m=v;}return m;};
-  return {R,res,W,at,max};
+  return {R,res,W,at,max,f};
 }
 function startLidar(){ // launched right after geocoding, in parallel with buildings
   const c=p=>p.catch(()=>null);
@@ -1436,7 +1455,7 @@ function fetchTileGrid(layer,lat,lon,z,R){
     .then(r=>{if(!r.ok)throw 0;return r.blob();}).then(b=>createImageBitmap(b)).then(im=>{g.drawImage(im,(x-tx+R)*256,(y-ty+R)*256);ok++;}).catch(()=>{}));
   return Promise.all(jobs).then(()=>{if(ok<Math.min(12,jobs.length*0.5))return null;const d=g.getImageData(0,0,W,W).data;
     const px=(x,y)=>{const ll=unproj(x,y);return [((ll[0]+180)/360*n-(tx-R))*256,((1-Math.log(Math.tan(ll[1]*RAD)+1/Math.cos(ll[1]*RAD))/Math.PI)/2*n-(ty-R))*256];};
-    return {d,W,px};});
+    return {d,W,px,geo:{n,tx0:tx-R,ty0:ty-R}};});
 }
 function classifyTrees(){ // sets s.ev (evergreen) on every tree spot; returns true when something changed
   const I=S.irc, Z=S.vegZoneRings||[]; let changed=false;
