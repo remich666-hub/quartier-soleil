@@ -1708,6 +1708,10 @@ async function addressOf(obj){
   const tok=++revTok; const bs=obj.geometry.boundingSphere||(obj.geometry.computeBoundingSphere(),obj.geometry.boundingSphere);
   const kx=111320*Math.cos(S.lat*RAD),ky=110574,lon=S.lon+bs.center.x/kx,lat=S.lat+bs.center.y/ky; S.bLat=lat;S.bLon=lon;
   if(!S.addrLabel)S.addrLabel=S.label;
+  // the building the searched address points at keeps that address: a corner block has several numbers, and the one nearest its
+  // centre is often on the other street
+  const own=(S.target&&family(S.target).includes(obj))||(obj.userData.rings||[]).some(r=>pointInPoly(0,0,r)||distToRing(0,0,r)<12);
+  if(own&&S.addrLabel){S.label=S.addrLabel;$('addrDoneText').textContent=S.label;return;}
   try{const r=await fetch(`https://api-adresse.data.gouv.fr/reverse/?lon=${lon.toFixed(6)}&lat=${lat.toFixed(6)}&type=housenumber&limit=1`);const j=await r.json();if(tok!==revTok)return;
     const f=j.features&&j.features[0]; const d=f?Math.hypot((f.geometry.coordinates[0]-lon)*kx,(f.geometry.coordinates[1]-lat)*ky):1e9;
     S.label=f&&d<Math.max(30,bs.radius+8)?f.properties.label:('Bâtiment voisin de '+S.addrLabel);}catch(_){if(tok!==revTok)return;}
