@@ -684,7 +684,14 @@ function buildMNT(MS,MH,feats){ // bare ground from the laser (surface − heigh
     for(let k=0;k<N*N;k++){if(occ[k*4+3]<128&&!isNaN(raw[k])){val[k]=raw[k];seen[k]=1;q[qt++]=k;}}
     while(qh<qt){const k=q[qh++],i=k%N,j=(k/N)|0;[[1,0],[-1,0],[0,1],[0,-1]].forEach(([di,dj])=>{const ii=i+di,jj=j+dj;if(ii<0||jj<0||ii>=N||jj>=N)return;const kk=jj*N+ii;if(seen[kk])return;seen[kk]=1;val[kk]=val[k];q[qt++]=kk;});}
     for(let k=0;k<N*N;k++)if(seen[k])raw[k]=val[k];}
-  return {N,z:raw};
+  // the surface and height grids do not always agree on a building's edge or a crown's rim: thin spikes of several metres.
+  // Ground is smooth: 3×3 median everywhere, then any cell still > 1 m off its 5×5 median takes that median.
+  const z=new Float32Array(N*N), w=new Float32Array(25);
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){let c=0;for(let dj=-1;dj<=1;dj++){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-1;di<=1;di++){const ii=i+di;if(ii<0||ii>=N)continue;w[c++]=raw[jj*N+ii];}}
+    const a=Array.prototype.slice.call(w,0,c).sort((p,q)=>p-q);z[j*N+i]=a[c>>1];}
+  for(let j=2;j<N-2;j++)for(let i=2;i<N-2;i++){const k=j*N+i;const m4=(z[k-1]+z[k+1]+z[k-N]+z[k+N])/4;if(Math.abs(z[k]-m4)<0.6)continue;
+    let c=0;for(let dj=-2;dj<=2;dj++)for(let di=-2;di<=2;di++)w[c++]=z[k+dj*N+di];const a=Array.prototype.slice.call(w).sort((p,q)=>p-q);if(Math.abs(z[k]-a[12])>1)z[k]=a[12];}
+  return {N,z};
 }
 function terrainZ(x,y){ // metres above alt0: the laser ground grid (its edge beyond), the coarse IGN relief only when the laser is missing
   const M=S.mnt; if(!M)return coarseZ(x,y); const L=MNT_R-MNT_ST-0.01; x=Math.max(-L,Math.min(L,x)); y=Math.max(-L,Math.min(L,y));
