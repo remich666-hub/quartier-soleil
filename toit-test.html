@@ -3206,6 +3206,10 @@ function roofVector(R){
   const L=new Int32Array(hx*hy).fill(-1);
   for(let j=0;j<hy;j++)for(let i=0;i<hx;i++){const k=j*hx+i;if(F.hl[k]<0)continue;const px=X0+(i+0.5)*r,py=Y0+(j+0.5)*r;if(OR.some(rg=>pointInPoly(px,py,rg)))L[k]=F.hl[k];}
   const lab=(i,j)=>(i<0||j<0||i>=hx||j>=hy)?-1:L[j*hx+i];
+  /* parts of the outline the laser gives no pan for (no return, low annex): a flat roof at the measured height, per block */
+  (R.blocks||[]).forEach(bk=>{const ring=bk.r.map(p=>({x:p.x+R.sh.dx,y:p.y+R.sh.dy}));const ks=[],zs=[];
+    for(let j=0;j<hy;j++)for(let i=0;i<hx;i++){const k=j*hx+i;if(L[k]>=0)continue;const px=X0+(i+0.5)*r,py=Y0+(j+0.5)*r;if(!pointInPoly(px,py,ring))continue;ks.push(k);if(!(k%7)){const z=R.Z(px,py);if(z!=null)zs.push(z);}}
+    if(ks.length*r*r<1)return; zs.sort((a,b)=>a-b); const z=zs.length?zs[Math.floor(zs.length/2)]:bk.top; const g={a:0,b:0,c:Math.min(z,bk.top+1.5),n:[0,0,1],tilt:0,az:0,flat:true,small:false,cells:[],synth:true}; g.id=regs.length; regs.push(g); ks.forEach(k=>L[k]=g.id);});
   /* 2. clean: majority smoothing, then pans under 3 m² join the neighbour they share most border with */
   for(let pass=0;pass<2;pass++){const L2=L.slice();for(let j=1;j<hy-1;j++)for(let i=1;i<hx-1;i++){const k=j*hx+i,a=L[k];if(a<0)continue;const cnt=new Map();
     for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){if(!di&&!dj)continue;const v=L[k+dj*hx+di];if(v>=0)cnt.set(v,(cnt.get(v)||0)+1);}
@@ -3302,7 +3306,7 @@ function roofVector(R){
         let pa=p,pb=o,ya=za,yb=zb; if(za<top){const t=(top-za)/(zb-za);pa=[p[0]+dx*t,p[1]+dy*t];ya=top;} if(zb<top){const t=(top-za)/(zb-za);pb=[p[0]+dx*t,p[1]+dy*t];yb=top;}
         q.push([[pa[0],pa[1],top],[pb[0],pb[1],top],[pb[0],pb[1],yb],[pa[0],pa[1],ya]]);nx+=ox*w;ny+=oy*w;}
       if(q.length)mkV(q,nx,ny);}});
-  return {shapes,segs,cells,verts,L,rasterRegs,lr:r,LX0:X0,LY0:Y0,lhx:hx,lhy:hy};}
+  return {polys,shapes,segs,cells,verts,L,rasterRegs,lr:r,LX0:X0,LY0:Y0,lhx:hx,lhy:hy};}
 function rfMeshVec(R){
   ['mesh','vmesh','lines','wall','wlines'].forEach(k=>{const m=RF[k];if(m){scene.remove(m);m.geometry.dispose();if(m.material.map)m.material.map.dispose();RF[k]=null;}});
   const VEC=R.VEC, F=R.F, s=R.s, A0=S.alt0, regs=F.regs;
