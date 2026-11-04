@@ -118,9 +118,9 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   const cv=document.getElementById('cv'), read=document.getElementById('read');
   const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true}); R.setPixelRatio(Math.min(2,devicePixelRatio||1)); R.shadowMap.enabled=true; R.shadowMap.type=THREE.PCFSoftShadowMap;
   const sc=new THREE.Scene(), cam=new THREE.PerspectiveCamera(30,1,1,200);
-  cam.up.set(0,0,1); cam.position.set(19,-24,15); cam.lookAt(0,0,2.4);
+  cam.up.set(0,0,1); cam.position.set(24,-30,16); cam.lookAt(0,0,4.2);
   const css=()=>getComputedStyle(document.documentElement);
-  const ground=new THREE.Mesh(new THREE.CircleGeometry(13,64),new THREE.MeshLambertMaterial({color:0xffffff})); ground.receiveShadow=true; sc.add(ground);
+  const ground=new THREE.Mesh(new THREE.CircleGeometry(16,64),new THREE.ShadowMaterial({opacity:0.22})); ground.receiveShadow=true; sc.add(ground);
   const hemi=new THREE.HemisphereLight(0xffffff,0xffffff,0.55); sc.add(hemi);
   const sunL=new THREE.DirectionalLight(0xffffff,0.75); sunL.castShadow=true; sunL.shadow.mapSize.set(1024,1024); const sh=sunL.shadow.camera; sh.left=-14;sh.right=14;sh.top=14;sh.bottom=-14;sh.near=1;sh.far=80; sc.add(sunL); sc.add(sunL.target);
   /* house 8 m (east-west) x 6 m, walls 3 m, ridge east-west: one pan faces south, one north */
@@ -134,7 +134,7 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
     const e=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0x2a1f17,transparent:true,opacity:.55})); sc.add(e); return m;};
   const south=pan(-1), north=pan(1);
   const nS=[0,-Math.sin(T),Math.cos(T)], nN=[0,Math.sin(T),Math.cos(T)];
-  const sun=new THREE.Mesh(new THREE.SphereGeometry(0.75,24,16),new THREE.MeshBasicMaterial({color:0xe8772e})); sc.add(sun);
+  const sun=new THREE.Mesh(new THREE.SphereGeometry(0.6,24,16),new THREE.MeshBasicMaterial({color:0xe8772e})); sc.add(sun);
   const pathG=new THREE.BufferGeometry(), path=new THREE.Line(pathG,new THREE.LineDashedMaterial({color:0xe8772e,dashSize:0.5,gapSize:0.4,transparent:true,opacity:.6})); sc.add(path);
   const rays=[]; for(let k=0;k<5;k++){const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xe8772e,transparent:true,opacity:.35}));sc.add(l);rays.push(l);}
   const RAMP=[[0,[43,26,79]],[0.25,[106,44,112]],[0.5,[193,64,74]],[0.75,[240,138,36]],[1,[253,225,90]]];
@@ -148,18 +148,18 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   function size(){const r=cv.getBoundingClientRect();R.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.updateProjectionMatrix();}
   size(); addEventListener('resize',size);
   const theme=()=>{const c=css(),bg=c.getPropertyValue('--bg').trim(),dark=document.documentElement.dataset.theme==='dark'||(!document.documentElement.dataset.theme&&matchMedia('(prefers-color-scheme: dark)').matches);
-    ground.material.color.set(dark?0x24221f:0xece6dc); walls.material.color.set(dark?0x3a3631:0xf6f1e9); gm.material.color.copy(walls.material.color);};
+    ground.material.opacity=dark?0.45:0.2; walls.material.color.set(dark?0x3a3631:0xf6f1e9); gm.material.color.copy(walls.material.color);};
   theme(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
   const DUR=6.2, PAUSE=0.9, still=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let cur=-1, H0=0;
   function setDay(i){cur=i;const dec=DAYS[i][1]*Math.PI/180;H0=Math.acos(Math.max(-1,Math.min(1,-Math.tan(lat)*Math.tan(dec))));
-    const pts=[];for(let k=0;k<=64;k++){const h=-H0+2*H0*k/64;pts.push(vec(sunAt(DAYS[i][1],h),22));}pathG.setFromPoints(pts);path.computeLineDistances();}
+    const pts=[];for(let k=0;k<=64;k++){const h=-H0+2*H0*k/64;pts.push(vec(sunAt(DAYS[i][1],h),13));}pathG.setFromPoints(pts);path.computeLineDistances();}
   const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; /* smooth in and out */
   const t0=performance.now();
   function frame(now){
     const T_=(now-t0)/1000, cyc=DUR+PAUSE, k=Math.floor(T_/cyc)%3, u=still?0.5:Math.min(1,(T_%cyc)/DUR);
     if(k!==cur)setDay(k);
-    const h=-H0+2*H0*ease(u), s=sunAt(DAYS[k][1],h), p=vec(s,22);
+    const h=-H0+2*H0*ease(u), s=sunAt(DAYS[k][1],h), p=vec(s,13);
     sun.position.copy(p); sunL.position.copy(vec(s,40)); sunL.target.position.set(0,0,0);
     const pS=pw(nS,s),pN=pw(nN,s); south.material.color.copy(ramp(pS/1000)); north.material.color.copy(ramp(pN/1000));
     const roofPts=[[-2.5,-1.6],[0,-1.6],[2.5,-1.6],[-1.2,-0.6],[1.2,-0.6]];
