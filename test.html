@@ -472,7 +472,7 @@ QC.put=async(u,blob,type)=>{const db=await QC.open();if(!db||!blob.size)return;t
 QC.trim=async()=>{const db=await QC.open();if(!db||QC.trimming)return;QC.trimming=true;QC.size=0;
   try{const os=db.transaction('r','readwrite').objectStore('r');const all=[];os.index('t').openCursor().onsuccess=e=>{const c=e.target.result;if(c){all.push([c.value.u,c.value.n||0,c.value.t]);c.continue();return;}
     let tot=all.reduce((a,b)=>a+b[1],0);const tx=db.transaction('r','readwrite').objectStore('r');for(const [u,n,t] of all){if(tot<=QC.max*0.8&&Date.now()-t<QC.ttl)break;tx.delete(u);tot-=n;}QC.trimming=false;};}catch(e){QC.trimming=false;}};
-const cacheable=u=>/^https:\/\/data\.geopf\.fr\/(wfs|wms-r|wmts|altimetrie)\//.test(u);
+const cacheable=u=>/^https:\/\/data\.geopf\.fr\/(wfs\/|wms-r\/|wmts\?|altimetrie\/)/.test(u);
 function gpf(url,opt){
   if(!cacheable(url))return new Promise((res,rej)=>{GPF.q.push({url,opt,res,rej});pump();});
   return QC.get(url).then(hit=>{if(hit)return new Response(hit.blob,{status:200,headers:{'content-type':hit.type||''}});
