@@ -122,7 +122,7 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   const css=()=>getComputedStyle(document.documentElement);
   const ground=new THREE.Mesh(new THREE.CircleGeometry(16,64),new THREE.ShadowMaterial({opacity:0.22})); ground.receiveShadow=true; sc.add(ground);
   const hemi=new THREE.HemisphereLight(0xffffff,0xffffff,0.55); sc.add(hemi);
-  const sunL=new THREE.DirectionalLight(0xffffff,0.75); sunL.castShadow=true; sunL.shadow.mapSize.set(1024,1024); const sh=sunL.shadow.camera; sh.left=-14;sh.right=14;sh.top=14;sh.bottom=-14;sh.near=1;sh.far=80; sc.add(sunL); sc.add(sunL.target);
+  const sunL=new THREE.DirectionalLight(0xffffff,0.75); sunL.castShadow=true; sunL.shadow.mapSize.set(1024,1024); const sh=sunL.shadow.camera; sh.left=-20;sh.right=20;sh.top=20;sh.bottom=-20;sh.near=1;sh.far=80; sc.add(sunL); sc.add(sunL.target);
   /* house 8 m (east-west) x 6 m, walls 3 m, ridge east-west: one pan faces south, one north */
   const W=8,D=6,H=3,T=35*Math.PI/180,rise=D/2*Math.tan(T);
   const walls=new THREE.Mesh(new THREE.BoxGeometry(W,D,H),new THREE.MeshLambertMaterial({color:0xf3eee6})); walls.position.z=H/2; walls.castShadow=walls.receiveShadow=true; sc.add(walls);
@@ -150,17 +150,17 @@ document.getElementById('addr').addEventListener('input',e=>e.target.setCustomVa
   const theme=()=>{const c=css(),bg=c.getPropertyValue('--bg').trim(),dark=document.documentElement.dataset.theme==='dark'||(!document.documentElement.dataset.theme&&matchMedia('(prefers-color-scheme: dark)').matches);
     ground.material.opacity=dark?0.45:0.2; walls.material.color.set(dark?0x3a3631:0xf6f1e9); gm.material.color.copy(walls.material.color);};
   theme(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
-  const DUR=6.2, PAUSE=0.9, still=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const DUR=7, PAUSE=0.8, still=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let cur=-1, H0=0;
   function setDay(i){cur=i;const dec=DAYS[i][1]*Math.PI/180;H0=Math.acos(Math.max(-1,Math.min(1,-Math.tan(lat)*Math.tan(dec))));
     const pts=[];for(let k=0;k<=64;k++){const h=-H0+2*H0*k/64;pts.push(vec(sunAt(DAYS[i][1],h),13));}pathG.setFromPoints(pts);path.computeLineDistances();}
-  const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; /* smooth in and out */
+  const ease=t=>(1-Math.cos(Math.PI*t))/2; /* gentle in and out: the sun does not linger at dawn and dusk */
   const t0=performance.now();
   function frame(now){
     const T_=(now-t0)/1000, cyc=DUR+PAUSE, k=Math.floor(T_/cyc)%3, u=still?0.5:Math.min(1,(T_%cyc)/DUR);
     if(k!==cur)setDay(k);
-    const h=-H0+2*H0*ease(u), s=sunAt(DAYS[k][1],h), p=vec(s,13);
-    sun.position.copy(p); sunL.position.copy(vec(s,40)); sunL.target.position.set(0,0,0);
+    const h=-0.9*H0+1.8*H0*ease(u), s=sunAt(DAYS[k][1],h), p=vec(s,13);
+    sun.position.copy(p); sunL.position.copy(vec({alt:Math.max(s.alt,0.17),az:s.az},40)); /* shadows kept on the ground at dawn and dusk */ sunL.target.position.set(0,0,0);
     const pS=pw(nS,s),pN=pw(nN,s); south.material.color.copy(ramp(pS/1000)); north.material.color.copy(ramp(pN/1000));
     const roofPts=[[-2.5,-1.6],[0,-1.6],[2.5,-1.6],[-1.2,-0.6],[1.2,-0.6]];
     rays.forEach((l,i)=>{const [x,y]=roofPts[i],z=H+rise*(1-Math.abs(y)/(D/2)),a=l.geometry.attributes.position;const d=new THREE.Vector3(x,y,z).add(vec(s,9));a.setXYZ(0,d.x,d.y,d.z);a.setXYZ(1,x,y,z);a.needsUpdate=true;l.visible=s.alt>0.02&&pS>40;});
