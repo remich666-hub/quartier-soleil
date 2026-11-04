@@ -2337,7 +2337,13 @@ function family(m){const g=m&&m.userData.gid;return g?S.meshes.filter(o=>o.userD
 function setHi(m,on){family(m).forEach(o=>{o.material=on?matsFor(o.userData.usage,true):baseMats(o);partsSync(o);});}
 /* the laser roof pans and the upper wall pieces are child meshes with their own materials: they follow the selection colour too */
 const PART_HI={};
-function partsSync(o){const hi=o.material===matsFor(o.userData.usage,true);o.children.forEach(c=>{if(!c.isMesh||!c.material||Array.isArray(c.material))return;
+function partsSync(o){const hi=o.material===matsFor(o.userData.usage,true);
+  // an IGN pitched roof lives in a shared roof mesh: while selected, an orange copy of its triangles sits just above it
+  const rr=o.userData.roofRef, RS=rr&&S.roofSets&&S.roofSets[rr.key];
+  if(hi&&RS&&!o.userData._hiRoof){const P=RS.P.slice(rr.a,rr.b),N=RS.N.slice(rr.a,rr.b);for(let i=2;i<P.length;i+=3)P[i]+=0.03;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+    const hm=new THREE.Mesh(g,PART_HI.roof||(PART_HI.roof=new THREE.MeshLambertMaterial({color:0xd48a5c})));hm.userData.hiRoof=true;hm.position.z=-o.position.z;o.add(hm);o.userData._hiRoof=hm;}
+  else if(!hi&&o.userData._hiRoof){o.remove(o.userData._hiRoof);o.userData._hiRoof.geometry.dispose();o.userData._hiRoof=null;}
+  o.children.forEach(c=>{if(!c.isMesh||!c.material||Array.isArray(c.material)||c.userData.hiRoof)return;
   const b=c.userData.baseMat||(c.userData.baseMat=c.material); if(!hi){c.material=b;return;}
   const k=c.userData.gable?(b.map?'wallT':'wall'):'roof';
   c.material=PART_HI[k]||(PART_HI[k]=k==='roof'?new THREE.MeshLambertMaterial({color:0xd48a5c}):k==='wallT'?patchWall(new THREE.MeshLambertMaterial({color:0xe8a070,map:wallTex})):new THREE.MeshLambertMaterial({color:0xe8a070,side:THREE.DoubleSide}));});}
