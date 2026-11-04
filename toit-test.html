@@ -3236,7 +3236,7 @@ function roofVector(R){
   const SEG=new Map(), segs=[];
   const geom=(lo,hi,C)=>{const P=C.map(cxy); const p0=jpos(C[0]),p1=jpos(C[C.length-1]),closed=C[0]===C[C.length-1]&&!isJ(C[0]);
     let kind,G;
-    if(lo===-1){kind='out';const S=dpSimplify(P,0.12);G=S.map((p,i)=>(!closed&&i===0)?p0:(!closed&&i===S.length-1)?p1:snapO(p[0],p[1]));}
+    if(lo===-1){kind='out';const S=dpSimplify(P,0.12);G=dpSimplify(S.map((p,i)=>(!closed&&i===0)?p0:(!closed&&i===S.length-1)?p1:snapO(p[0],p[1])),0.04);}
     else{let dz=0;P.forEach(([x,y])=>dz+=Math.abs(zOf(regs[lo],x,y)-zOf(regs[hi],x,y)));dz/=P.length;
       if(dz<0.35&&!closed){kind='ridge';G=[p0,p1];}
       else{kind='step';const S=dpSimplify(P,0.2);G=S.map((p,i)=>(!closed&&i===0)?p0:(!closed&&i===S.length-1)?p1:p);}}
@@ -3300,6 +3300,12 @@ function rfMeshVec(R){
   R.cells.forEach((c,ci)=>{const i=Math.round((c.x-cx0)/tr),j=Math.round((c.y-cy0)/tr);if(i>=0&&j>=0&&i<nx&&j<ny)near[j*nx+i]=ci;});
   for(let pass=0;pass<2;pass++){ const q=[]; for(let k=0;k<near.length;k++)if(near[k]>=0)q.push(k);
     for(let h=0;h<q.length;h++){const k=q[h],i=k%nx,j=(k-i)/nx,lk=R.cells[near[k]].reg;for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=i+di,b=j+dj;if(a<0||b<0||a>=nx||b>=ny)continue;const kk=b*nx+a;if(near[kk]>=0)continue;if(pass===0&&rp[kk]>=0&&rp[kk]!==lk)continue;near[kk]=near[k];q.push(kk);}} }
+  /* smooth colours: each pixel blends the (up to) four cells around it that belong to its own pan */
+  const ck=new Map(); R.cells.forEach((c,ci)=>ck.set(Math.round(c.x/s-0.5)+','+Math.round(c.y/s-0.5),ci));
+  const WI=new Int32Array(nx*ny*4).fill(-1), WW=new Float32Array(nx*ny*4);
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i,A=rp[k];if(A<0)continue;const x=cx0+i*tr,y=cy0+j*tr,gx=x/s-0.5,gy=y/s-0.5,i0=Math.floor(gx),j0=Math.floor(gy),fx=gx-i0,fy=gy-j0;let t=0,n=0;
+    [[0,0,(1-fx)*(1-fy)],[1,0,fx*(1-fy)],[0,1,(1-fx)*fy],[1,1,fx*fy]].forEach(([di,dj,w])=>{const ci=ck.get((i0+di)+','+(j0+dj));if(ci==null||R.cells[ci].reg!==A||w<=0)return;WI[k*4+n]=ci;WW[k*4+n]=w;t+=w;n++;});
+    if(n)for(let u=0;u<n;u++)WW[k*4+u]/=t;}
   const U0=cx0-tr/2, V0=cy0-tr/2, UW=nx*tr, VH=ny*tr;
   const LD=[-0.42,0.5,0.76], shade=n=>0.72+0.28*Math.max(0,n[0]*LD[0]+n[1]*LD[1]+n[2]*LD[2]);
   const P=[],UV=[],I=[],SH=[];
@@ -3310,7 +3316,7 @@ function rfMeshVec(R){
   const K=Math.max(2,Math.min(8,Math.floor(2048/Math.max(nx,ny)))), small=document.createElement('canvas'), big=document.createElement('canvas'); small.width=nx;small.height=ny;big.width=nx*K;big.height=ny*K;
   const tex=new THREE.CanvasTexture(big);tex.encoding=THREE.sRGBEncoding;tex.anisotropy=4;
   const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({map:tex,vertexColors:true,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));m.renderOrder=5;scene.add(m);RF.mesh=m;
-  RF.grid={nx,ny,near,small,big,K,rings:[]};
+  RF.grid={nx,ny,near,small,big,K,rings:[],WI,WW};
   /* walls: the IGN outline from the ground up to the roof edge */
   const fam=family(RF.sel||S.building), zb=Math.min(...fam.map(o=>o.userData.zBase||0))-0.6;
   const WP=[],WN=[],WI=[],CL=[],LP=[];
@@ -3389,7 +3395,7 @@ function roofPaint(){
   const R=RF.cells; if(!R||!RF.mesh||!RF.grid)return; const mode=RF.mode,[lo,hi]=SCALE[mode],G=RF.grid;
   const val=c=>mode==='real'?c.real:mode==='clear'?c.clear:c.inst;
   const sc=G.small.getContext('2d'),im=sc.createImageData(G.nx,G.ny);
-  for(let j=0;j<G.ny;j++)for(let i=0;i<G.nx;i++){const ci=G.near[j*G.nx+i];const r=(G.ny-1-j)*G.nx+i;if(ci<0)continue;const k=rampCol((val(R.cells[ci])-lo)/(hi-lo));im.data[r*4]=k[0]*255;im.data[r*4+1]=k[1]*255;im.data[r*4+2]=k[2]*255;im.data[r*4+3]=255;}
+  for(let j=0;j<G.ny;j++)for(let i=0;i<G.nx;i++){const q=j*G.nx+i,ci=G.near[q];const r=(G.ny-1-j)*G.nx+i;if(ci<0)continue;let v=val(R.cells[ci]);if(G.WI&&G.WI[q*4]>=0){v=0;for(let u=0;u<4;u++){const c=G.WI[q*4+u];if(c<0)break;v+=val(R.cells[c])*G.WW[q*4+u];}}const k=rampCol((v-lo)/(hi-lo));im.data[r*4]=k[0]*255;im.data[r*4+1]=k[1]*255;im.data[r*4+2]=k[2]*255;im.data[r*4+3]=255;}
   sc.putImageData(im,0,0);
   const bc=G.big.getContext('2d');bc.globalCompositeOperation='source-over';bc.clearRect(0,0,G.big.width,G.big.height);bc.imageSmoothingEnabled=true;bc.imageSmoothingQuality='high';bc.drawImage(G.small,0,0,G.big.width,G.big.height);
   if(G.rings.length){bc.globalCompositeOperation='destination-in';bc.beginPath();G.rings.forEach(r=>{r.forEach(([x,y],i)=>i?bc.lineTo(x,y):bc.moveTo(x,y));bc.closePath();});bc.fillStyle='#000';bc.fill('nonzero');bc.globalCompositeOperation='source-over';}
