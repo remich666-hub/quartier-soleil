@@ -567,7 +567,8 @@ const poolMat=new THREE.ShaderMaterial({uniforms:poolUni,transparent:true,depthW
 function buildPools(list){
   const grp=new THREE.Group(), WP=[],WE=[],WI=[], copeMat=new THREE.MeshLambertMaterial({color:0xf1ede4,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10}); fadeMat(copeMat);
   const CP=[],CN=[];
-  list.forEach(q=>{const z=terrainZ(q.x,q.y), W=(u,v)=>[q.x+q.ux*u-q.uy*v, q.y+q.uy*u+q.ux*v];
+  list.forEach(q=>{const W=(u,v)=>[q.x+q.ux*u-q.uy*v, q.y+q.uy*u+q.ux*v]; let z=-1e9; // highest ground under the pool and its coping: the water never sinks under the draped lawn
+    for(const a of [-1,-0.5,0,0.5,1])for(const b of [-1,-0.5,0,0.5,1]){const p=W(a*(q.hu+0.4),b*(q.hv+0.4));z=Math.max(z,terrainZ(p[0],p[1]));}
     const outline=(hu,hv,r,steps)=>{const pts=[];if(q.rect){const cr=Math.min(r,hu*0.4,hv*0.4);[[hu-cr,hv-cr,0],[-hu+cr,hv-cr,Math.PI/2],[-hu+cr,-hv+cr,Math.PI],[hu-cr,-hv+cr,1.5*Math.PI]].forEach(([cu,cv,a0])=>{for(let k=0;k<=steps;k++){const a=a0+k/steps*Math.PI/2;pts.push([cu+Math.cos(a)*cr,cv+Math.sin(a)*cr]);}});}
       else for(let k=0;k<32;k++){const a=k/32*Math.PI*2;pts.push([Math.cos(a)*hu,Math.sin(a)*hv]);}return pts;};
     // water: a fan from the centre, each vertex knows its distance to the rim
@@ -2438,7 +2439,7 @@ function frame(now){
   renderer.render(scene,camera); requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.QS={S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown},get treesD(){return treeCrownD},LEAF,classifyTrees};
+window.QS={terrainZ,S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown},get treesD(){return treeCrownD},LEAF,classifyTrees};
 update(); load($('addr').value);
 })();
 </script>
