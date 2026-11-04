@@ -336,7 +336,7 @@ const SINK=2.5;
 /* a house on a slope (floor above its IGN base): window rows start at the real floor, and the upper wall pieces under the roof edge
    (above the plain block) carry the same rows, so the uphill façade shows its windows; above the last storey the wall stays plain */
 function slopeWalls(m){const u=m.userData; if(!u||!u.lidar||!u.facades||nFloorsRaw(u)>2)return;
-  const off=floorBase(u)-u.zBase, sh=u._gl?u._sh:3, F=nFloors(u), key=(off>=0.3||u._gl)?Math.round(off*20)+'|'+Math.round(sh*20)+'|'+F:0;
+  const off=floorBase(u)-u.zBase, sh=u._gl?u._glH:3, F=nFloors(u), key=(off>=0.3||u._gl)?Math.round(off*20)+'|'+Math.round(sh*20)+'|'+F:0;
   if(key){const r=u.rings[0];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});(S.slopeHouses=S.slopeHouses||[]).push({r,x0,x1,y0,y1,base:u.zBase+off,sh,n:F});}
   if((u._swK||0)===key)return; u._swK=key;
   const O=key?off:null; fitWallUVs(m.geometry,u.h,u.floors,O,sh);
@@ -1701,7 +1701,7 @@ const nFloorsRaw=u=>Math.max(1,u.floors||Math.round(u.h/3));
 const storeyRaw=u=>u.floors&&u.h?Math.max(2.5,Math.min(3.6,u.h/u.floors)):3;
 // a house on a slope may gain a garden level (below its street-level floor, see floorBase): levels and storey height follow
 const nFloors=u=>{if(u.lidar&&u.facades)floorBase(u);return nFloorsRaw(u)+(u._gl||0);};
-const storeyH=u=>{if(u.lidar&&u.facades)floorBase(u);return u._gl?u._sh:storeyRaw(u);};
+const storeyH=u=>{if(u.lidar&&u.facades)floorBase(u);return u._gl?u._glH:storeyRaw(u);};
 const downRay=new THREE.Raycaster();
 function floorBase(u){ // ground-floor level. The IGN base is the lowest ground around the footprint; on a gentle slope (less than a storey
   // between the low and high sides) a house's floor sits at the high side, the low side having a step or a crawl space
@@ -1713,7 +1713,7 @@ function floorBase(u){ // ground-floor level. The IGN base is the lowest ground 
     if(d>0&&nFloorsRaw(u)<=2){const E=facEave(u,fh); if(E!=null&&E-d>=2.4){fb=Math.max(fb,u.zBase+Math.max(0,Math.min(d-0.1,E-nFloorsRaw(u)*2.9)));
       // ≥ 2.4 m of plinth on the downhill side: that is a garden level (rez-de-jardin), one more storey under the street-level floor;
       // each façade only offers the levels standing above its own ground (the blind map does that)
-      const hg=fb-u.zBase; if(hg>=2.4){u._gl=1;u._sh=Math.min(3.2,hg);fb-=u._sh;}}}}
+      const hg=fb-u.zBase; if(hg>=2.4){u._gl=1;u._glH=Math.min(3.2,hg);fb-=u._glH;}}}}
   u._fb=fb; u._fbK=S.groundKey; return fb;}
 function blindMap(obj){
   const u=obj.userData; if(u._blind&&u._blindN===S.meshes.length&&u._blindK===S.groundKey)return u._blind; u._blindK=S.groundKey;
