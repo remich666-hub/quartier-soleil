@@ -1034,19 +1034,31 @@ function coarseZ(x,y){ // metres above alt0, bilinear on the IGN relief grid
   const i=Math.floor(fx),j=Math.floor(fy),u=fx-i,v=fy-j; const g=(ii,jj)=>T.z[jj*N+ii]-S.alt0;
   return (g(i,j)*(1-u)+g(i+1,j)*u)*(1-v)+(g(i,j+1)*(1-u)+g(i+1,j+1)*u)*v;
 }
-function displace(mesh,segs){ // rebuild a plane's geometry with terrain heights: 2.5 m cells over the laser ground, coarse beyond
+function displace(mesh,segs){ // rebuild a plane's geometry with terrain heights
+  /* nested square rings around the address, each a regular grid of its own step: 1 m to 80 m, 2 m to 200 m, 4 m to the edge of the
+     laser grid, coarse beyond. (A single grid made of fine and coarse rows used to carry the 1 m rows of the centre out to the
+     edges: long thin strips nobody sees, ~2/3 of the triangles.) Every zone keeps the step it had. Vertices of a finer ring lying on
+     its outer edge take the height of the coarser edge (linear between its vertices): no crack between rings. */
   const p=mesh.geometry.parameters, W=p.width, H=p.height, ox=mesh.position.x, oy=mesh.position.y;
-  // cell size: 1 m near the address (lanes), 2 m to 200 m, 4 m to the edge of the laser grid, coarse beyond
-  const fineAt=w=>{const d=Math.abs(w);return d<80?1:d<200?2:d<MNT_R?4:0;};
-  const axis=(L,o)=>{const a=[],c=L/segs;let t=-L/2;a.push(t);while(t<L/2-1e-6){const f=S.mnt?fineAt(o+t):0;t+=f&&f<c?f:c;a.push(Math.min(t,L/2));}return a;};
-  const xs=axis(W,ox), ys=axis(H,oy), nx=xs.length, ny=ys.length, P=new Float32Array(nx*ny*3), U=new Float32Array(nx*ny*2), I=new Uint32Array((nx-1)*(ny-1)*6), Nn=new Float32Array(nx*ny*3);
-  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i,x=xs[i],y=ys[ny-1-j];P[k*3]=x;P[k*3+1]=y;P[k*3+2]=terrainZ(ox+x,oy+y);U[k*2]=(x+W/2)/W;U[k*2+1]=(y+H/2)/H;}
-  let q=0; for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){const a=j*nx+i,b=a+1,c=a+nx,d=c+1;I[q++]=a;I[q++]=c;I[q++]=b;I[q++]=b;I[q++]=c;I[q++]=d;}
-  // normals straight from the height grid (central differences): same result as computeVertexNormals on a regular grid, ~10× cheaper
-  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i,il=i?k-1:k,ir=i<nx-1?k+1:k,ju=j?k-nx:k,jd=j<ny-1?k+nx:k;
-    const dzx=(P[ir*3+2]-P[il*3+2])/((P[ir*3]-P[il*3])||1), dzy=(P[ju*3+2]-P[jd*3+2])/((P[ju*3+1]-P[jd*3+1])||1), l=Math.hypot(dzx,dzy,1);
-    Nn[k*3]=-dzx/l;Nn[k*3+1]=-dzy/l;Nn[k*3+2]=1/l;}
-  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(P,3)); g.setAttribute('uv',new THREE.BufferAttribute(U,2)); g.setAttribute('normal',new THREE.BufferAttribute(Nn,3)); g.setIndex(new THREE.BufferAttribute(I,1));
+  const X0=ox-W/2,X1=ox+W/2,Y0=oy-H/2,Y1=oy+H/2, c=Math.max(4,Math.round(Math.max(W,H)/segs/4)*4);
+  const LV=S.mnt?[[80,1],[200,2],[Math.floor(MNT_R/4)*4,4],[1e9,c]]:[[1e9,Math.max(W,H)/segs]];
+  const P=[],U=[],Nn=[],I=[];
+  /* beyond the laser grid the relief is its edge carried outwards: along that edge the outer ring keeps the 4 m step, coarse only going away */
+  const RL=LV.length>1?LV[LV.length-2][0]:0, sAt=(v,st,L)=>L===LV.length-1&&RL&&Math.abs(v)<RL-1e-6?LV[LV.length-2][1]:st;
+  const ax=(a,b,st,L)=>{const o=[a];let v=a;while(true){const s1=sAt(v+1e-4,st,L);let nv=(Math.floor(v/s1+1e-9)+1)*s1;if(nv<=v+1e-6)nv=v+s1;if(L===LV.length-1&&RL)for(const bp of [-RL,RL])if(bp>v+1e-6&&bp<nv)nv=bp;if(nv>=b-1e-6)break;o.push(nv);v=nv;}o.push(b);return o;};
+  const zEdge=(t,lo,hi,sc,zf)=>{let a=Math.floor(t/sc)*sc,b=a+sc;a=Math.max(lo,a);b=Math.min(hi,b);if(t<=a+1e-6||b-a<1e-6)return zf(a);const w=(t-a)/(b-a);return zf(a)*(1-w)+zf(b)*w;};
+  LV.forEach(([R,st],L)=>{const r=L?LV[L-1][0]:0, nxt=LV[L+1];
+    const rects=L?[[-R,R,r,R],[-R,R,-R,-r],[-R,-r,-r,r],[r,R,-r,r]]:[[-R,R,-R,R]];
+    rects.forEach(([a,b,cc,d])=>{a=Math.max(a,X0);b=Math.min(b,X1);cc=Math.max(cc,Y0);d=Math.min(d,Y1);if(b-a<1e-6||d-cc<1e-6)return;
+      const xs=ax(a,b,st,L),ys=ax(cc,d,st,L),nx=xs.length,base=P.length/3;
+      ys.forEach(y=>xs.forEach(x=>{let z=terrainZ(x,y);
+        if(nxt){const sc=L===LV.length-2?st:nxt[1],lo=Math.max(-R,X0),hi=Math.min(R,X1),lo2=Math.max(-R,Y0),hi2=Math.min(R,Y1);
+          if(Math.abs(Math.abs(y)-R)<1e-6&&!(Math.abs(Math.abs(x)-R)<1e-6))z=zEdge(x,lo,hi,sc,t=>terrainZ(t,y));
+          else if(Math.abs(Math.abs(x)-R)<1e-6&&!(Math.abs(Math.abs(y)-R)<1e-6))z=zEdge(y,lo2,hi2,sc,t=>terrainZ(x,t));}
+        const h=Math.max(1,Math.min(st,4)/2), dzx=(terrainZ(x+h,y)-terrainZ(x-h,y))/(2*h), dzy=(terrainZ(x,y+h)-terrainZ(x,y-h))/(2*h), l=Math.hypot(dzx,dzy,1);
+        P.push(x-ox,y-oy,z); U.push((x-X0)/W,(y-Y0)/H); Nn.push(-dzx/l,-dzy/l,1/l);}));
+      for(let j=0;j<ys.length-1;j++)for(let i=0;i<nx-1;i++){const q=base+j*nx+i,q2=q+1,q3=q+nx,q4=q3+1;I.push(q,q2,q3,q2,q4,q3);}});});
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(P,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2)); g.setAttribute('normal',new THREE.Float32BufferAttribute(Nn,3)); g.setIndex(new THREE.BufferAttribute(new Uint32Array(I),1));
   g.parameters={width:W,height:H}; mesh.geometry.dispose(); mesh.geometry=g;
 }
 /* draping helpers: split long edges so that flat layers follow the 2 m relief instead of cutting through it */
