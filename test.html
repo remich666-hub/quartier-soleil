@@ -2254,7 +2254,7 @@ async function load(q,at){
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
     try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
-    S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); S.T.scene=performance.now(); loadOrtho(g.lat,g.lon);
+    S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} S.T.scene=performance.now(); loadOrtho(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
