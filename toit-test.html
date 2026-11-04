@@ -3430,7 +3430,21 @@ function roofModel(R){
       if(G1.length>=2)cands.push({k:'gable',E:G1}); if(G2.length>=2)cands.push({k:'gable2',E:G2});
       if(long.length>=3)cands.push({k:'hip',E:long});
       long.forEach(e=>cands.push({k:'shed',E:[e]}));}
-    const fit=c=>{const m=p=>c.E.length?Math.min(...c.E.map(e=>d(e,p.x,p.y))):0;
+    /* two-pan roofs: the ridge position is searched across the whole width (each side its own plane), not guessed */
+    const fitGable=c=>{const [e1,e2]=c.E; if(pts.length<8)return null; const W=Math.max(...pts.map(p=>d(e1,p.x,p.y)+d(e2,p.x,p.y)));
+      const lsq=g=>{let S1=0,Sm=0,Smm=0,Sz=0,Smz=0;g.forEach(([m,z])=>{S1++;Sm+=m;Smm+=m*m;Sz+=z;Smz+=m*z;});const D=S1*Smm-Sm*Sm;if(S1<4||Math.abs(D)<1e-6)return null;const k=(S1*Smz-Sm*Sz)/D;return {k,z0:(Sz-k*Sm)/S1};};
+      let best=null;
+      for(let f=0.15;f<=0.851;f+=0.0125){const t=W*f; let A=[],B=[]; pts.forEach(p=>{const m1=d(e1,p.x,p.y),m2=d(e2,p.x,p.y);if(m1<t)A.push([m1,p.z,p]);else B.push([m2,p.z,p]);});
+        let fa=lsq(A),fb=lsq(B); if(!fa||!fb)continue;
+        for(let pass=0;pass<2;pass++){const ra=A.map(([m,z])=>Math.abs(z-(fa.z0+fa.k*m))),rb=B.map(([m,z])=>Math.abs(z-(fb.z0+fb.k*m)));const all=ra.concat(rb).sort((x,y)=>x-y),lim=Math.max(0.3,3*all[all.length>>1]);
+          const A2=A.filter((_,i)=>ra[i]<lim),B2=B.filter((_,i)=>rb[i]<lim);const na=lsq(A2),nb=lsq(B2);if(!na||!nb)break;fa=na;fb=nb;}
+        if(fa.k<Math.tan(5*RAD)||fb.k<Math.tan(5*RAD)||fa.k>Math.tan(65*RAD)||fb.k>Math.tan(65*RAD))continue;
+        let e2s=0,inl=0;A.forEach(([m,z])=>{const r=z-(fa.z0+fa.k*m);if(Math.abs(r)<0.3){e2s+=r*r;inl++;}});B.forEach(([m,z])=>{const r=z-(fb.z0+fb.k*m);if(Math.abs(r)<0.3){e2s+=r*r;inl++;}});
+        const rms=Math.sqrt(e2s/Math.max(1,inl)),fi=inl/pts.length,sc=rms*(1+2*(1-fi));
+        if(!best||sc<best.sc)best={sc,rms,inl:fi,fa,fb};}
+      if(!best)return null; const pen={gable:0.015,gable2:0.025}[c.k];
+      return {c,z0:(best.fa.z0+best.fb.z0)/2,k:(best.fa.k+best.fb.k)/2,ks:[best.fa.k,best.fb.k],zs:[best.fa.z0,best.fb.z0],score:best.sc+pen,rms:best.rms,inl:best.inl};};
+    const fit=c=>{if((c.k==='gable'||c.k==='gable2')&&c.E.length===2)return fitGable(c); const m=p=>c.E.length?Math.min(...c.E.map(e=>d(e,p.x,p.y))):0;
       let use=pts.map(p=>({p,m:m(p)})), z0=0,k=0;
       for(let pass=0;pass<3;pass++){ if(use.length<4)return null;
         if(!c.E.length){const z=use.map(u=>u.p.z).sort((a,b)=>a-b);z0=z[Math.floor(z.length/2)];k=0;}
@@ -3467,7 +3481,7 @@ function roofModel(R){
   const findSubs=(pc,F)=>{const subs=[],dbg=[]; const Pp=pc.P.map(([x,y])=>({x,y}));
     let pts=C.filter(c=>pointInPoly(c.x,c.y,Pp));
     for(let round=0;round<3;round++){
-      const up=pts.filter(c=>c.z-Math.max(zFit(F,c.x,c.y),...subs.filter(sb=>pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y})))).map(sb=>zFit(sb.F,c.x,c.y)))>0.45);
+      const up=pts.filter(c=>c.z-Math.max(zFit(F,c.x,c.y),...subs.filter(sb=>pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y})))).map(sb=>zFit(sb.F,c.x,c.y)))>0.6);
       dbg.push('up'+up.length); if(up.length*s*s<4)break;
       const key=(c)=>Math.round(c.x/s)+','+Math.round(c.y/s), map=new Map(); up.forEach(c=>map.set(key(c),c)); const seen=new Set(), groups=[];
       up.forEach(c0=>{const k0=key(c0);if(seen.has(k0))return;const g=[];const q=[c0];seen.add(k0);while(q.length){const c=q.pop();g.push(c);const i=Math.round(c.x/s),j=Math.round(c.y/s);for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){const k=(i+di)+','+(j+dj);if(!seen.has(k)&&map.has(k)){seen.add(k);q.push(map.get(k));}}}groups.push(g);});
@@ -3486,7 +3500,7 @@ function roofModel(R){
     /* how well main + additions explain the piece's laser points */
     let e2=0,n=0,inl=0; pts.forEach(c=>{let z=zFit(F,c.x,c.y);subs.forEach(sb=>{if(pointInPoly(c.x,c.y,sb.P.map(([x,y])=>({x,y}))))z=Math.max(z,zFit(sb.F,c.x,c.y));});const r=c.z-z;if(Math.abs(r)<0.3){e2+=r*r;inl++;}n++;});
     const rms=Math.sqrt(e2/Math.max(1,inl)),fi=inl/Math.max(1,n),pen={flat:0,shed:0.05,gable:0.015,gable2:0.025,hip:0.03}[F.best.c.k]||0;
-    return {subs,dbg:dbg.join(' '),score:rms*(1+2*(1-fi))+pen+0.02*subs.length};};
+    return {subs,dbg:dbg.join(' '),score:rms*(1+2*(1-fi))+pen+0.04*subs.length};};
   const subs=[];
   pieces.forEach(pc=>{if(pc.F.best.score>=9)return;
     /* the main roof is chosen together with its additions: a 2-pan roof plus a cross gable beats a hip roof that half-explains both */
