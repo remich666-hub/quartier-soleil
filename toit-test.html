@@ -3820,9 +3820,10 @@ const MB=35*RAD;
 function mthAt(doy,min){const lat=S.lat||46.5,lon=S.lon||2.5,y=S.year||new Date().getFullYear(),md=dayOfYearToMD(y,doy);
   const sp=sunPos(localToInstant(y,md.m,md.d,Math.floor(min/60),Math.round(min%60)),lat,lon),h=sp.alt,a=sp.az,cs=clearSky(h);
   const ci=Math.sin(h)*Math.cos(MB)+Math.cos(h)*Math.sin(MB)*Math.cos(a-Math.PI);
-  const hT=Math.atan2(52,230), south=Math.abs(((a/RAD-180+540)%360)-180)<35, V=h>0&&!(south&&h<hT)?1:0;
+  const hT=Math.atan2(54,232), south=Math.abs(((a/RAD-180+540)%360)-180)<35, V=h>0&&!(south&&h<hT)?1:0;
   const fs=(1+Math.cos(MB))/2-0.04, dir=cs.dni*Math.max(0,ci)*V, dif=cs.dhi*fs, ref=0.2*cs.ghi*(1-Math.cos(MB))/2;
-  return {h,a,ci,V,hT,cs,dir,dif,ref,tot:dir+dif+ref,south};}
+  const ciN=Math.sin(h)*Math.cos(MB)+Math.cos(h)*Math.sin(MB)*Math.cos(a);
+  return {h,a,ci,ciN,V,hT,cs,dir,dif,ref,tot:dir+dif+ref,south};}
 function mthDraw(full=true){const r=mthAt(MTH.doy,MTH.min),sv=$('mthSvg');
   const hh=Math.floor(MTH.min/60),mm=Math.round(MTH.min%60);$('mthT').textContent=`${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;$('mthR').value=MTH.min;
   $('mth').querySelectorAll('.mth-days button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.d==='now'?MTH.doy===S.doy:+b.dataset.d===MTH.doy)));
@@ -3830,25 +3831,26 @@ function mthDraw(full=true){const r=mthAt(MTH.doy,MTH.min),sv=$('mthSvg');
   const hd=Math.max(-0.05,r.h), R=330, sx=P[0]-Math.cos(hd)*R*(r.south||Math.cos(r.a-Math.PI)>=0?1:-1), sy=P[1]-Math.sin(hd)*R;
   const lit=r.V&&r.ci>0, col=lit?'var(--sun)':'var(--muted)';
   /* where the ray meets the tree when blocked */
-  let ex=sx,ey=sy; if(r.h>0&&!r.V){const t=(P[0]-205)/(P[0]-sx);ex=P[0]-(P[0]-sx)*t;ey=P[1]-(P[1]-sy)*t;}
+  let ex=sx,ey=sy; if(r.h>0&&!r.V){const t=(P[0]-150)/(P[0]-sx);ex=P[0]-(P[0]-sx)*t;ey=P[1]-(P[1]-sy)*t;}
   const ang=(x,y)=>Math.atan2(y,x), aN=ang(nb[0],nb[1]), aS=ang(sx-P[0],sy-P[1]), arc=(a0,a1,rr)=>{let d=a1-a0;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;const x0=P[0]+rr*Math.cos(a0),y0=P[1]+rr*Math.sin(a0),x1=P[0]+rr*Math.cos(a0+d),y1=P[1]+rr*Math.sin(a0+d);return `M${x0.toFixed(1)} ${y0.toFixed(1)}A${rr} ${rr} 0 0 ${d>0?1:0} ${x1.toFixed(1)} ${y1.toFixed(1)}`;};
   sv.innerHTML=`
    <defs><marker id="mthA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--fg)"/></marker></defs>
-   <path d="${arc(Math.PI,2*Math.PI,R).replace(/A.*/,'')}" fill="none"/>
    <path d="M${P[0]-R} ${P[1]} A${R} ${R} 0 0 1 ${P[0]+R} ${P[1]}" fill="none" stroke="var(--line)" stroke-dasharray="3 6"/>
    <line x1="0" y1="${G}" x2="800" y2="${G}" stroke="var(--ink2)" stroke-width="1.5"/>
    <text x="12" y="${G+24}" class="mth-s">Sud</text><text x="788" y="${G+24}" class="mth-s" text-anchor="end">Nord</text>
-   <rect x="201" y="250" width="8" height="110" fill="var(--ink2)"/><circle cx="205" cy="${P[1]-20}" r="52" fill="var(--shade)" stroke="var(--ink2)" stroke-width="1"/>
-   <line x1="${P[0]}" y1="${P[1]}" x2="205" y2="${P[1]-52}" stroke="var(--ink2)" stroke-dasharray="2 4"/>
-   <text x="270" y="${P[1]-36}" class="mth-s">horizon ${deg(r.hT)}°</text>
+   <rect x="146" y="240" width="8" height="120" fill="var(--ink2)"/><circle cx="150" cy="214" r="44" fill="var(--shade)" stroke="var(--ink2)" stroke-width="1"/>
+   <line x1="${P[0]}" y1="${P[1]}" x2="150" y2="170" stroke="var(--ink2)" stroke-dasharray="2 4"/>
+   <text x="150" y="156" class="mth-s" text-anchor="middle">horizon ${deg(r.hT)}°</text>
+   <line x1="${P[0]}" y1="${P[1]}" x2="${P[0]-130}" y2="${P[1]}" stroke="var(--line)"/>
    <polygon points="332,${G} 332,260 532,260 532,${G}" fill="var(--raised)" stroke="var(--ink2)"/>
-   <polygon points="324,266 432,190 540,266" fill="${lit?'var(--sun)':'var(--shade)'}" fill-opacity=".9" stroke="var(--fg)" stroke-width="1.5"/>
+   <polygon points="324,266 432,190 432,266" fill="${lit?'var(--sun)':'var(--shade)'}" stroke="var(--fg)" stroke-width="1.5" stroke-linejoin="round"/>
+   <polygon points="432,190 540,266 432,266" fill="${r.h>0&&r.ciN>0?'var(--sun)':'var(--shade)'}" fill-opacity="${r.h>0&&r.ciN>0?'.55':'1'}" stroke="var(--fg)" stroke-width="1.5" stroke-linejoin="round"/>
    <text x="${352}" y="${280}" class="mth-s">β = 35°</text>
    ${r.h>0?`<line x1="${ex.toFixed(1)}" y1="${ey.toFixed(1)}" x2="${P[0]}" y2="${P[1]}" stroke="${r.V?'var(--sun)':'var(--muted)'}" stroke-width="2" ${r.V?'':'stroke-dasharray="6 5"'}/>`:''}
    <line x1="${P[0]}" y1="${P[1]}" x2="${(P[0]+nb[0]*90).toFixed(1)}" y2="${(P[1]+nb[1]*90).toFixed(1)}" stroke="var(--fg)" stroke-width="1.6" marker-end="url(#mthA)"/>
-   <text x="${(P[0]+nb[0]*98-8).toFixed(1)}" y="${(P[1]+nb[1]*98-4).toFixed(1)}" class="mth-s">normale</text>
-   ${r.h>0?`<path d="${arc(aN,aS,48)}" fill="none" stroke="var(--accent-ink)" stroke-width="1.6"/><text x="${(P[0]+58*Math.cos((aN+aS)/2)).toFixed(1)}" y="${(P[1]+58*Math.sin((aN+aS)/2)+4).toFixed(1)}" class="mth-k">θ</text>`:''}
-   ${r.h>0?`<path d="M${P[0]-110} ${P[1]} ${arc(Math.PI,aS,110).replace('M','L')}" fill="none" stroke="var(--ink2)" stroke-width="1"/><text x="${P[0]-128}" y="${P[1]-8}" class="mth-s" text-anchor="end">h = ${deg(r.h)}°</text>`:''}
+   <text x="${(P[0]+nb[0]*90+10).toFixed(1)}" y="${(P[1]+nb[1]*90+4).toFixed(1)}" class="mth-s">normale</text>
+   ${r.h>0?`<path d="${arc(aN,aS,44)}" fill="none" stroke="var(--accent-ink)" stroke-width="1.6"/><text x="${(P[0]+60*Math.cos((aN+aS)/2)).toFixed(1)}" y="${(P[1]+60*Math.sin((aN+aS)/2)+6).toFixed(1)}" class="mth-k" text-anchor="middle">θ</text>`:''}
+   ${r.h>0?`<path d="M${P[0]-110} ${P[1]} ${arc(Math.PI,aS,110).replace('M','L')}" fill="none" stroke="var(--ink2)" stroke-width="1"/><text x="${P[0]-118}" y="${P[1]+18}" class="mth-s">h = ${deg(r.h)}°</text>`:''}
    <circle cx="${P[0]}" cy="${P[1]}" r="5" fill="#d33"/>
    ${r.h>0?`<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="16" fill="var(--sun)"/>`:`<text x="400" y="80" class="mth-k" text-anchor="middle">Soleil couché</text>`}`;
   const W=v=>`${fmt(v)} W/m²`;
