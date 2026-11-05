@@ -3686,7 +3686,8 @@ function roofModelV4(R,opt){opt=opt||{};
   const lsq=(rows,np)=>{const Mx=[...Array(np)].map(()=>Array(np).fill(0)),bb=Array(np).fill(0);rows.forEach(([f,z])=>{for(let a=0;a<np;a++){bb[a]+=f[a]*z;for(let c=0;c<np;c++)Mx[a][c]+=f[a]*f[c];}});for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
   const CL=0.6,costOf=(P,pr)=>{let s=0;P.forEach(p=>{s+=Math.min(Math.abs(p[2]-pr(p[0],p[1])),CL);});return s;};
   const fitM=(P,feat,np)=>{const rows=P.map(p=>[feat(p[0],p[1]),p[2]]);let x=lsq(rows,np);for(let it=0;it<2;it++){const r2=rows.filter(([f,z])=>Math.abs(z-f.reduce((s,v,i)=>s+v*x[i],0))<0.5);if(r2.length>np+3)x=lsq(r2,np);}return x;};
-  const leafFit=Rc=>{const P=ptsIn(Rc),none={type:'none',pred:()=>0,cost:0,R:Rc,np:0};if(!P.length)return none;const occ=P.filter(p=>p[2]>2).length/P.length;const cands=[{type:'none',pred:()=>0,np:0}];
+  const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){r=leafFit0(Rc);LFC.set(key,r);}return r;};
+  const leafFit0=Rc=>{const P=ptsIn(Rc),none={type:'none',pred:()=>0,cost:0,R:Rc,np:0};if(!P.length)return none;const occ=P.filter(p=>p[2]>2).length/P.length;const cands=[{type:'none',pred:()=>0,np:0}];
     if(occ>0.3){const a=P.filter(p=>p[2]>1).map(p=>p[2]).sort((x,y)=>x-y),md=a.length?a[a.length>>1]:0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
       const su=fitM(P,u=>[1,u-Rc[0]],2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
       const sv=fitM(P,(u,v)=>[1,v-Rc[2]],2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
@@ -3763,7 +3764,7 @@ function roofModelV4(R,opt){opt=opt||{};
       const quads=[];for(let k=0;k<prof.length-1;k++){const p=prof[k],q=prof[k+1];if(p[2]-zm<0.02&&q[2]-zm<0.02)continue;quads.push([[p[0],p[1],zm],[q[0],q[1],zm],[q[0],q[1],q[2]],[p[0],p[1],p[2]]]);}
       let ar=0,mx=0,my=0,mz=0;quads.forEach(q=>{const w=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1])*((q[2][2]-q[1][2])+(q[3][2]-q[0][2]))/2;ar+=w;mx+=(q[0][0]+q[1][0])/2*w;my+=(q[0][1]+q[1][1])/2*w;mz+=(q[0][2]+q[3][2]+q[1][2]+q[2][2])/4*w;});
       if(ar<1)continue;const nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;verts.push({quads,a:ar,x:mx/ar+nx*0.3,y:my/ar+ny*0.3,z:mz/ar,n:[nx,ny,0],tilt:Math.PI/2,az:((Math.atan2(nx,ny)/RAD)+360)%360});}});
-  return {pieces,pans,cells,verts,rms,v4:{leaves:leaves.map(l=>[l.type,...l.R.map(v=>+v.toFixed(2))]),CU:CUr.map(v=>+v.toFixed(2)),CV:CVr.map(v=>+v.toFixed(2)),big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
+  return {pieces,pans,cells,verts,rms,v4:{nFit:LFC.size,leaves:leaves.map(l=>[l.type,...l.R.map(v=>+v.toFixed(2))]),CU:CUr.map(v=>+v.toFixed(2)),CV:CVr.map(v=>+v.toFixed(2)),big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
 
 window.__roofV4=roofModelV4;
 
