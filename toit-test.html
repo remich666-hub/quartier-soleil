@@ -3142,7 +3142,7 @@ let roofRaf=0; function roofRenderSoon(){if(roofRaf)return;roofRaf=requestAnimat
 /* the address leads straight to its roof */
 function roofFrame(obj,now){const u=obj.userData,bb=obj.geometry.boundingBox||(obj.geometry.computeBoundingBox(),obj.geometry.boundingBox);
   const cx=(bb.min.x+bb.max.x)/2,cy=(bb.min.y+bb.max.y)/2,diag=Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y);
-  camTw={t0:performance.now(),dur:1400,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(cx,cy,u.zBase+(u.ridge||u.h)),th:cam.theta,ph:0.95,d:Math.max(isPhone()?34:26,diag*(isPhone()?2:1.5))}};
+  camTw={t0:performance.now(),dur:1400,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(cx,cy,u.zBase+(u.ridge||u.h)),th:cam.theta,ph:0.95,d:Math.max(isPhone()?34:36,diag*(isPhone()?2:2.1))}};
   if(now){const b=camTw.b;camTw=null;cam.target.copy(b.t);cam.theta=b.th;cam.phi=b.ph;cam.dist=b.d;applyCam();}}
 async function roofAuto(){ /* waits for the laser rebuild of the buildings (it replaces them) before picking the address's one */
   const T0=S.T; for(let i=0;i<300&&!(S.T.scene&&S.lidarBuilt&&!S.loading);i++){await new Promise(r=>setTimeout(r,100));if(S.T!==T0)return;}
