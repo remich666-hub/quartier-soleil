@@ -626,7 +626,6 @@ function setFov(){ // keep a wide horizontal field even on a portrait phone
 
 /* ---------- state ---------- */
 const S={lat:48.9042,lon:2.3055,label:'',alt0:0,meshes:[],obstacles:[],target:null,year:new Date().getFullYear(),doy:1,minute:720,wx:null,win:null,playing:false,building:null};
-window.__S=S;setTimeout(()=>{window.__sun=sun;window.__cam=cam;},0);
 (function initTime(){const p=tzParts(new Date());S.year=p.y;S.doy=Math.round((Date.UTC(p.y,p.m-1,p.d)-Date.UTC(p.y,0,1))/86400000)+1;S.minute=p.h*60+p.mi;$('day').value=S.doy;$('time').value=Math.round(S.minute/5)*5;})();
 function currentInstant(){const md=dayOfYearToMD(S.year,S.doy);return localToInstant(S.year,md.m,md.d,Math.floor(S.minute/60),S.minute%60);}
 function proj(lon,lat){const kx=111320*Math.cos(S.lat*RAD),ky=110574;return [(lon-S.lon)*kx,(lat-S.lat)*ky];}
@@ -2961,7 +2960,7 @@ update(); if(!S.startPending)load($('addr').value); // an address handed over by
      E = Σ_h [ DNI·max(0, cos θ)·V + DHI·F_ciel + ρ·GHI·(1 − cos β)/2 ] · 1 h
    DNI, DHI, GHI : rayonnement direct normal, diffus horizontal, global horizontal (Open-Meteo, année réelle),
    ou un ciel clair théorique (Meinel + masse d'air de Kasten-Young, diffus = 10 % du direct). */
-var RF={sel:null,mesh:null,cells:null,mode:'real',wx:new Map(),tok:0}; window.__RF=RF;window.__dbg={v4:(...a)=>roofModelV4(...a),family:(...a)=>family(...a),cells:(...a)=>roofCells(...a),shot:()=>{applyCam();shadowFit();renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.85);}};
+var RF={sel:null,mesh:null,cells:null,mode:'real',wx:new Map(),tok:0}; window.__RF=RF;
 const RAMP=[[0,[43,26,79]],[0.25,[106,44,112]],[0.5,[193,64,74]],[0.75,[240,138,36]],[1,[253,225,90]]];
 function rampCol(t){t=Math.max(0,Math.min(1,t));for(let i=1;i<RAMP.length;i++){if(t<=RAMP[i][0]){const [a,ca]=RAMP[i-1],[b,cb]=RAMP[i];const u=(t-a)/(b-a);return ca.map((v,k)=>(v+(cb[k]-v)*u)/255);}}return RAMP[RAMP.length-1][1].map(v=>v/255);}
 const SCALE={real:[700,1700],clear:[1200,2800],instant:[0,1000]};

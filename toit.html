@@ -696,8 +696,7 @@ function orthoLayer(mesh,mat,lat,lon,z,R,fallback,segs,onDone){
   const st={ok:0,fail:0,total,z}; (S.orthoState=S.orthoState||[]).push(st);
   const done=()=>{st.ok=ok;st.fail=fail;if(ok+fail===total&&onDone){console.log('ortho layer done',z,ok,fail);try{onDone(ok?raw:null,west,east,north,south);}catch(err){console.error('onDone',err);}}};
   const loadTiles=()=>{mesh.userData.loadTiles=null; for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
-    gpf(`https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/jpeg`)
-      .then(r=>{if(!r.ok)throw new Error('tile');return r.blob();}).then(b=>createImageBitmap(b)).then(img=>{const px=(x-x0)*256,py=(y-y0)*256;if(raw)raw.getContext('2d').drawImage(img,px,py);try{g.filter='saturate(0.25) brightness(1.1) contrast(0.9)';}catch(_){}g.drawImage(img,px,py);try{g.filter='none';}catch(_){}g.fillStyle='rgba(243,240,233,0.42)';g.fillRect(px,py,256,256);tex.needsUpdate=true;ok++;done();})
+    orthoTile(z,x,y).then(b=>createImageBitmap(b)).then(img=>{const px=(x-x0)*256,py=(y-y0)*256;if(raw)raw.getContext('2d').drawImage(img,px,py);try{g.filter='saturate(0.25) brightness(1.1) contrast(0.9)';}catch(_){}g.drawImage(img,px,py);try{g.filter='none';}catch(_){}g.fillStyle='rgba(243,240,233,0.42)';g.fillRect(px,py,256,256);tex.needsUpdate=true;ok++;done();})
       .catch(()=>{fail++;if(fail>8&&ok===0){mesh.userData.photoTex=null;applyGroundMode();}done();});
   }};
   if(onDone||photoMode)loadTiles(); else mesh.userData.loadTiles=loadTiles; // the wide photo layer is only for display: fetched when the photo is asked for
@@ -2435,7 +2434,7 @@ async function load(q,at){
     S.T={start:performance.now()}; S.recentered=!!(at&&at.recenter&&!at.keepAddr); let g=at||await geocode(q); S.T.geo=performance.now();
     /* the address point is often on the road, far from the house (countryside): centre the model on the building the number belongs to */
     if(!(at&&at.recenter)){S.addrBats=null; const lk=await Promise.race([addrLink(g),new Promise(r=>setTimeout(()=>r(null),2500))]).catch(()=>null);
-      if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar(); try{roofWeather(S.lat,S.lon).catch(()=>{});}catch(e){} /* the year of weather, fetched while the model builds */
+      if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar(); try{roofWeather(S.lat,S.lon).catch(()=>{});}catch(e){} /* the year of weather, fetched while the model builds */ try{orthoPrefetch(S.lat,S.lon);}catch(e){}
     S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; /* the wide photo only paints the far gardens: 80 cm/px is plenty (25 tiles instead of 49 at 40 cm); none on a phone (plain far lots) */
     S.rgbFarP=null; S.ircP=null; {const myLat=g.lat,myLon=g.lon; // the infrared photo (deciduous trees) is only fetched once the model is up: it never competes with it
       S.startIRC=()=>null; const _ircUnused=()=>{if(S.ircP||S.lat!==myLat)return S.ircP;S.ircP=fetchIRC(myLat,myLon).then(I=>{if(!I||S.lat!==myLat)return null;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();return I;}).catch(()=>null);return S.ircP;};
@@ -2949,7 +2948,7 @@ function frame(now){
    const k=Math.min(1,(now-vOff.t0)/420),e=k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,c=vOff.from+(vOff.to-vOff.from)*e;
    if(Math.abs(c-vOff.cur)>0.1||vOff.W!==W||vOff.H!==H){vOff.cur=c;vOff.W=W;vOff.H=H;if(c>0.5){const cov=2*c,z=1-0.45*cov/H,fW=W*z,fH=H*z;camera.setViewOffset(fW,fH,fW/2-W/2,fH/2-(H-cov)/2,W,H);}else camera.clearViewOffset();camera.updateProjectionMatrix();}}
   sky.position.copy(camera.position); sunPath.position.copy(camera.position); if(S.sunDir)sunDisc.position.copy(camera.position).addScaledVector(S.sunDir,2000);
-  renderer.render(scene,camera); requestAnimationFrame(frame);
+  shadowFit(); renderer.render(scene,camera); requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 window.QS={terrainZ,floorBase,facEave,facGround,storeyH,nFloors,S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown},get treesD(){return treeCrownD},LEAF,LEAFU,classifyTrees};
@@ -3064,7 +3063,7 @@ function roofYear(R,W){
   let flat=0; for(const s of sun)flat+=(W.ghi[s.h]||0); R.flat=flat/1000;}
 function roofInstantVals(R){
   const inst=currentInstant(), sp=sunPos(inst,S.lat,S.lon), cs=clearSky(sp.alt), ce=Math.cos(sp.alt), v=[ce*Math.sin(sp.az),ce*Math.cos(sp.az),Math.sin(sp.alt)];
-  R.cells.forEach(c=>{const ci=v[0]*c.n[0]+v[1]*c.n[1]+v[2]*c.n[2];const vis=sp.alt>0&&ci>0&&sp.alt>horAt(c.hor,sp.az);c.inst=(vis?cs.dni*ci:0)+cs.dhi*c.svf+cs.ghi*(1-Math.cos(c.tilt))/2*0.2;c.ci=ci;c.vis=vis;});
+  R.cells.forEach(c=>{const ci=v[0]*c.n[0]+v[1]*c.n[1]+v[2]*c.n[2];const vis=sp.alt>0&&ci>0&&sp.alt>horAt(c.hor,sp.az);const dif=cs.dhi*c.svf+cs.ghi*(1-Math.cos(c.tilt))/2*0.2;c.inst=(vis?cs.dni*ci:0)+dif;c.iLit=(sp.alt>0&&ci>0?cs.dni*ci:0)+dif;c.iShd=dif;c.iM=sp.alt-horAt(c.hor,sp.az);c.ci=ci;c.vis=vis;});
   return {sp,cs};}
 function roofLegend(){const mode=RF.mode,[lo,hi]=SCALE[mode];const st=RAMP.map(([t,c])=>`rgb(${c.join(',')}) ${t*100}%`).join(',');
   $('rLegend').innerHTML=`<div class="rbar" style="background:linear-gradient(90deg,${st})"></div><div class="axis"><span>${lo===0?'0':'≤ '+fmt(lo)}</span><span>${fmt((lo+hi)/2)}</span><span>${fmt(hi)} ${UNIT[mode]}</span></div>`;}
@@ -3106,9 +3105,12 @@ async function roofSelect(obj){
   const R=roofCells(obj); if(tok!==RF.tok)return;
   if(!R||R.cells.length<4){veil(false);$('rBig').textContent='—';$('rBigC').textContent=(S.lidarR&&S.lidarR.mnh)?'Pas de relevé laser exploitable sur ce toit (bâtiment trop loin de l\'adresse).':'Le relevé laser de l\'IGN (LiDAR HD) n\'est pas encore publié pour ce secteur : le toit ne peut pas être mesuré ici. Essayez une autre adresse.';return;}
   /* the v4 roof (straight volumes) first; the laser-traced one only if it does not fit the laser */
-  try{let M=null;try{M=roofModelV4(R);if(!M||(!M.v4.big&&M.rms>0.12)){let M2=null;try{M2=roofModelV4(R,{noShift:true});}catch(e){} if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}}catch(e){console.error('v4',e);M=null;}
-    /* a roof no simple model explains (Paris mansards, courtyards…) keeps the laser-traced pans */
-    if(M&&M.cells.length&&M.rms<=0.35){R.M=M; R.lcells=R.cells; R.cells=M.cells; R.F={regs:M.pans,lab:Int32Array.from(M.cells,c=>c.pan),verts:M.verts}; {const ds=[];R.lcells.forEach(c=>{let z=null;M.pieces.forEach(p=>{if(pointInPoly(c.x,c.y,p.P.map(([x,y])=>({x,y})))){const v=p.roofZ(c.x,c.y);z=z==null?v:Math.max(z,v);}});if(z!=null)ds.push(Math.abs(c.z-z));});ds.sort((a,b)=>a-b);M.gap=ds.length?ds[ds.length>>1]:0;}}}catch(e){console.error('model',e);R.M=null;}
+  try{let M=null;try{M=roofModelV4(R);if(!M||(!M.v4.big&&M.rms>0.12)){let M2=null;try{M2=roofModelV4(R,{noShift:true});}catch(e){} if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
+      /* a composite building the first pass explains badly (a pitched house between flat extensions…): more volumes allowed,
+         and cut lines also where the laser changes slope without a step */
+      if(!M||M.rms>0.3){let M3=null;try{M3=roofModelV4(R,{big:false,lam:4,kinks:true});}catch(e){} if(M3&&M3.cells.length&&(!M||M3.rms<M.rms*0.9))M=M3;}}catch(e){console.error('v4',e);M=null;}
+    /* always straight volumes: the free laser-traced pans only when no model could be built at all */
+    if(M&&M.cells.length){R.M=M; R.lcells=R.cells; R.cells=M.cells; R.F={regs:M.pans,lab:Int32Array.from(M.cells,c=>c.pan),verts:M.verts}; {const ds=[];R.lcells.forEach(c=>{let z=null;M.pieces.forEach(p=>{if(pointInPoly(c.x,c.y,p.P.map(([x,y])=>({x,y})))){const v=p.roofZ(c.x,c.y);z=z==null?v:Math.max(z,v);}});if(z!=null)ds.push(Math.abs(c.z-z));});ds.sort((a,b)=>a-b);M.gap=ds.length?ds[ds.length>>1]:0;}}}catch(e){console.error('model',e);R.M=null;}
   if(!R.M){
   try{R.F=roofFacets(R);}catch(e){console.error('facets',e);veil(false);$('rBigC').textContent='Reconstruction du toit impossible ici.';return;}
   try{const VEC=roofVector(R); if(VEC.cells.length){R.VEC=VEC; R.lcells=R.cells; R.cells=VEC.cells; R.F.lab=Int32Array.from(VEC.cells,c=>c.reg); R.F.verts=VEC.verts;
@@ -3461,8 +3463,11 @@ function roofModelV4(R,opt){opt=opt||{};
       const prof=ax=>{const N1=ax=='u'?PU:PV,N2=ax=='u'?PV:PU,out=new Float64Array(N1);for(let i=2;i<N1-2;i++){let s=0,c=0;for(let j=0;j<N2;j+=2){const u=ax=='u'?u0+(i+.5)*pg:u0+(j+.5)*pg,v=ax=='u'?v0+(j+.5)*pg:v0+(i+.5)*pg;const gi=Math.min(NU-1,Math.floor((u-u0)/g)),gj=Math.min(NV-1,Math.floor((v-v0)/g));if(!maskD(gi,gj))continue;s+=ax=='u'?Math.abs(lumUV(u+0.15,v)-lumUV(u-0.15,v)):Math.abs(lumUV(u,v+0.15)-lumUV(u,v-0.15));c++;}out[i]=c?s:0;}return out;};
       const lprof=ax=>{const N1=ax=='u'?PU:PV,out=new Float64Array(N1);for(let i=0;i<N1;i++){const p=ax=='u'?u0+(i+.5)*pg:v0+(i+.5)*pg;let s=0;if(ax=='u'){const gi=Math.floor((p-u0)/g);if(gi<1||gi>=NU-1)continue;for(let j=0;j<NV;j++)s+=Math.abs(H[gi+1][j]-H[gi-1][j])>1?1:0;}else{const gj=Math.floor((p-v0)/g);if(gj<1||gj>=NV-1)continue;for(let k=0;k<NU;k++)s+=Math.abs(H[k][gj+1]-H[k][gj-1])>1?1:0;}out[i]=s;}return out;};
       const peaks=(arr,lo)=>{const N=arr.length,sv=new Float64Array(N);for(let i=2;i<N-2;i++)sv[i]=(arr[i-2]+2*arr[i-1]+3*arr[i]+2*arr[i+1]+arr[i+2])/9;let m=0,s=0,c=0;for(let i=0;i<N;i++)if(sv[i]>0){m+=sv[i];c++;}m/=c||1;for(let i=0;i<N;i++)if(sv[i]>0)s+=(sv[i]-m)**2;s=Math.sqrt(s/(c||1));const pk=[];for(let i=3;i<N-3;i++){if(sv[i]<m+0.6*s)continue;let ok=true;for(let d=-5;d<=5;d++)if(d&&sv[i+d]>sv[i])ok=false;if(ok)pk.push([lo+(i+.5)*pg,(sv[i]-m)/(s||1)]);}return pk;};
-      const nm=a=>{const mx=Math.max(...a)||1;return a.map(v=>v/mx);};const comb=ax=>{const p=nm(Array.from(prof(ax))),l=nm(Array.from(lprof(ax)));return p.map((v,i)=>v+0.8*l[i]);};
-      cu=peaks(comb('u'),u0).sort((a,b)=>b[1]-a[1]).slice(0,6).map(p=>p[0]);cv=peaks(comb('v'),v0).sort((a,b)=>b[1]-a[1]).slice(0,6).map(p=>p[0]);}}
+      /* slope breaks: where the laser changes slope without a step (eave of a pitched part against a flat one, a ridge, a lower pan) */
+      const kprof=ax=>{const N1=ax=='u'?PU:PV,out=new Float64Array(N1);const kink=(a,b,c)=>{if(a<=2||b<=2||c<=2)return 0;const d1=b-a,d2=c-b;return Math.abs(d1)<1.5&&Math.abs(d2)<1.5&&Math.abs(d2-d1)>0.35?1:0;};
+        for(let i=0;i<N1;i++){const p=ax=='u'?u0+(i+.5)*pg:v0+(i+.5)*pg;let s=0;if(ax=='u'){const gi=Math.floor((p-u0)/g);if(gi<2||gi>=NU-2)continue;for(let j=0;j<NV;j++)s+=kink(H[gi-2][j],H[gi][j],H[gi+2][j]);}else{const gj=Math.floor((p-v0)/g);if(gj<2||gj>=NV-2)continue;for(let k=0;k<NU;k++)s+=kink(H[k][gj-2],H[k][gj],H[k][gj+2]);}out[i]=s;}return out;};
+      const nm=a=>{const mx=Math.max(...a)||1;return a.map(v=>v/mx);};const comb=ax=>{const p=nm(Array.from(prof(ax))),l=nm(Array.from(lprof(ax)));const k=opt.kinks?nm(Array.from(kprof(ax))):null;return p.map((v,i)=>v+0.8*l[i]+(k?0.8*k[i]:0));};
+      const NK=opt.kinks?8:6;cu=peaks(comb('u'),u0).sort((a,b)=>b[1]-a[1]).slice(0,NK).map(p=>p[0]);cv=peaks(comb('v'),v0).sort((a,b)=>b[1]-a[1]).slice(0,NK).map(p=>p[0]);}}
   rUV.forEach(rg=>rg.forEach(p=>{cu.push(p[0]);cv.push(p[1]);}));
   const dedupe=(arr,lo,hi,gap)=>{arr=arr.filter(x=>x>lo+0.5&&x<hi-0.5).sort((a,b)=>a-b);const out=[];arr.forEach(x=>{if(!out.length||x-out[out.length-1]>gap)out.push(x);});return [lo,...out,hi];};
   let CU=dedupe(cu,u0,u1,0.7),CV=dedupe(cv,v0,v1,0.7);for(let gp=1;(CU.length>10||CV.length>10)&&gp<4;gp+=0.5){CU=dedupe(cu,u0,u1,gp);CV=dedupe(cv,v0,v1,gp);}
@@ -3576,9 +3581,10 @@ function rfMeshModel(R){
   ['mesh','vmesh','lines','wall','wlines'].forEach(k=>{const m=RF[k];if(m){scene.remove(m);m.geometry.dispose();if(m.material.map)m.material.map.dispose();RF[k]=null;}});
   const M=R.M, A0=S.alt0, LD=[-0.42,0.5,0.76], shade=n=>0.72+0.28*Math.max(0,n[0]*LD[0]+n[1]*LD[1]+n[2]*LD[2]);
   /* the pans: one vertex per triangle corner, coloured from the nodes */
-  const P=[],COL=[],IDS=[],WS=[],SHD=[]; M.pans.forEach(p=>{const k=shade(p.n);p.tris.forEach(v=>{P.push(v.x,v.y,v.z-A0+0.06);COL.push(0.5,0.5,0.5);IDS.push(...v.ids);WS.push(...v.ws);SHD.push(k);});});
-  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('color',new THREE.Float32BufferAttribute(COL,3));
-  const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));m.renderOrder=5;scene.add(m);RF.mesh=m;
+  const P=[],COL=[],IDS=[],WS=[],SHD=[],NRM=[]; M.pans.forEach(p=>{const k=shade(p.n);p.tris.forEach(v=>{P.push(v.x,v.y,v.z-A0+0.06);NRM.push(p.n[0],p.n[1],p.n[2]);COL.push(0.5,0.5,0.5);IDS.push(...v.ids);WS.push(...v.ws);SHD.push(k);});});
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(NRM,3));g.setAttribute('color',new THREE.Float32BufferAttribute(COL,3));
+  g.setAttribute('cLit',new THREE.Float32BufferAttribute(COL.length,3));g.setAttribute('cShd',new THREE.Float32BufferAttribute(COL.length,3));g.setAttribute('cM',new THREE.Float32BufferAttribute(COL.length/3,1));
+  const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4}));m.renderOrder=5;m.userData.basic=m.material;scene.add(m);RF.mesh=m;
   RF.model={ids:Int32Array.from(IDS),ws:Float32Array.from(WS),shd:Float32Array.from(SHD)}; RF.grid=null;
   /* walls: every piece, from the ground up to its roof edge; corner lines */
   const fam=family(RF.sel||S.building), zb=Math.min(...fam.map(o=>o.userData.zBase||0))-0.6;
@@ -3599,7 +3605,27 @@ function rfMeshModel(R){
   if(VP.length){const vg=new THREE.BufferGeometry();vg.setAttribute('position',new THREE.Float32BufferAttribute(VP,3));vg.setAttribute('color',new THREE.Float32BufferAttribute(VC,3));vg.setIndex(VI);
     const vm=new THREE.Mesh(vg,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));vm.renderOrder=5;scene.add(vm);RF.vmesh=vm;}}
 const srgbLin=v=>v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4);
-function roofPaintModel(R,val,lo,hi){const md=RF.model,col=RF.mesh.geometry.attributes.color;
+/* "instant" on a modelled roof: each point carries its colour in the sun, its colour in the shade, and how far the sun stands
+   above its horizon (laser). That margin is interpolated across the pan and the shadow edge drawn where it crosses zero:
+   a clean line through the 50 cm grid instead of a staircase of cells */
+let instMat=null;
+function roofInstMat(){ if(instMat)return instMat;
+  instMat=new THREE.ShaderMaterial({side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4,
+    vertexShader:`attribute vec3 cLit;attribute vec3 cShd;attribute float cM;varying vec3 vLit;varying vec3 vShd;varying float vM;
+void main(){vLit=cLit;vShd=cShd;vM=cM;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+    fragmentShader:`varying vec3 vLit;varying vec3 vShd;varying float vM;
+void main(){float w=max(fwidth(vM),1e-5);gl_FragColor=vec4(mix(vShd,vLit,smoothstep(-w,w,vM)),1.0);
+#include <tonemapping_fragment>
+#include <encodings_fragment>
+}`,extensions:{derivatives:true}});
+  return instMat;}
+function roofPaintModel(R,val,lo,hi){const md=RF.model,ge=RF.mesh.geometry,col=ge.attributes.color;
+  const inst=RF.mode==='instant'&&R.cells.length&&R.cells[0].iLit!=null;
+  RF.mesh.material=inst?roofInstMat():RF.mesh.userData.basic;
+  if(inst){const cl=ge.attributes.cLit,cd=ge.attributes.cShd,cm=ge.attributes.cM,f=(k,sh)=>[srgbLin(k[0])*sh,srgbLin(k[1])*sh,srgbLin(k[2])*sh];
+    for(let i=0;i<cl.count;i++){let a=0,b=0,mm=0;for(let u=0;u<4;u++){const c=R.cells[md.ids[i*4+u]],w=md.ws[i*4+u];a+=c.iLit*w;b+=c.iShd*w;mm+=c.iM*w;}cm.setX(i,mm);const sh=md.shd[i];
+      const A=f(rampCol((a-lo)/(hi-lo)),sh),B=f(rampCol((b-lo)/(hi-lo)),sh);cl.setXYZ(i,A[0],A[1],A[2]);cd.setXYZ(i,B[0],B[1],B[2]);}
+    cl.needsUpdate=cd.needsUpdate=cm.needsUpdate=true;return;}
   for(let i=0;i<col.count;i++){let v=0;for(let u=0;u<4;u++)v+=val(R.cells[md.ids[i*4+u]])*md.ws[i*4+u];const k=rampCol((v-lo)/(hi-lo)),sh=md.shd[i];col.setXYZ(i,srgbLin(k[0])*sh,srgbLin(k[1])*sh,srgbLin(k[2])*sh);}col.needsUpdate=true;}
 
 function rfMesh(R){
@@ -3688,6 +3714,24 @@ function thermalize(){ /* the surroundings in light greys (hue removed), so that
     const ca=o.geometry&&o.geometry.attributes&&o.geometry.attributes.color; if(ca&&!ca.__thermal&&ms.some(m=>m&&m.vertexColors)){ca.__thermal=true;const a=ca.array;for(let i=0;i<a.length;i+=3){const L=0.2126*a[i]+0.7152*a[i+1]+0.0722*a[i+2];a[i]=a[i+1]=a[i+2]=L;}ca.needsUpdate=true;}
     const ic=o.instanceColor; if(ic&&!ic.__thermal){ic.__thermal=true;const a=ic.array;for(let i=0;i<a.length;i+=3){const L=0.2126*a[i]+0.7152*a[i+1]+0.0722*a[i+2];a[i]=a[i+1]=a[i+2]=L;}ic.needsUpdate=true;}});}
 setInterval(thermalize,700);
+/* the 20 cm photo tiles, asked for as soon as the address is known (the laser rebuild of the buildings waits for the photo):
+   the photo layer picks them up here instead of starting its downloads only once the model is built */
+const ORT={key:'',m:new Map()};
+function orthoUrl(z,x,y){return `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/jpeg`;}
+function orthoGet(u){return gpf(u).then(r=>{if(!r.ok)throw new Error('tile');return r.blob();});}
+function orthoPrefetch(lat,lon){const z=19,R=2,n=2**z,cx=Math.floor((lon+180)/360*n),cy=Math.floor((1-Math.log(Math.tan(lat*RAD)+1/Math.cos(lat*RAD))/Math.PI)/2*n);
+  ORT.m=new Map(); for(let x=cx-R;x<=cx+R;x++)for(let y=cy-R;y<=cy+R;y++){const u=orthoUrl(z,x,y),p=orthoGet(u);p.catch(()=>{});ORT.m.set(u,p);}}
+function orthoTile(z,x,y){const u=orthoUrl(z,x,y),p=ORT.m.get(u);if(p){ORT.m.delete(u);return p.catch(()=>orthoGet(u));}return orthoGet(u);}
+/* sharp shadows where they are looked at: the sun's shadow square follows the camera and shrinks with it (from ±560 m to ±45 m),
+   with a little hysteresis so it is not re-projected every frame, and snapped to its texels so the edges do not crawl */
+const SFIT={h:0};
+function shadowFit(){ if(!S.sunDir)return;
+  const want=Math.min(560,Math.max(45,cam.dist*(isPhone()?1.9:1.5))); let h=SFIT.h;
+  if(!h||want>h||want<h*0.6)h=Math.min(560,want*1.2);
+  const sh=sun.shadow, sc=sh.camera, tx=2*h/sh.mapSize.x;
+  if(h!==SFIT.h){SFIT.h=h;sc.left=sc.bottom=-h;sc.right=sc.top=h;sc.updateProjectionMatrix();sh.normalBias=Math.max(0.03,tx*1.8);}
+  const t=cam.target, x=Math.round(t.x/tx)*tx, y=Math.round(t.y/tx)*tx;
+  sun.target.position.set(x,y,0); sun.position.set(x,y,0).addScaledVector(S.sunDir,1800);}
 
 {const c=wallTex.image,g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);wallTex.needsUpdate=true;} /* plain walls: no windows on this page */
 
