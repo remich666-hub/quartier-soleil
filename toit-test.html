@@ -3639,9 +3639,9 @@ function roofModel(R){
 /* ===== Toit v4 : volumes rectangulaires alignés sur l'axe de la maison (murs parallèles / perpendiculaires),
    lignes de découpe prises sur la photo, le laser et le contour IGN, un type de toit par volume, bords ajustés au laser.
    Immeubles (> 300 m²) : découpe en ailes depuis le seul contour IGN, toit mansardé possible. ===== */
-function roofModelV4(R){
+function roofModelV4(R,opt){opt=opt||{};
   const t0=performance.now(), raw=S.rawOrtho, MH=S.lidarR&&S.lidarR.mnh, Zl=R.Z; if(!MH||!Zl)return null;
-  const rings=R.rings.map(r=>r.map(p=>[p.x+R.sh.dx,p.y+R.sh.dy])); if(!rings.length)return null;
+  const rings=R.rings.map(r=>r.map(p=>[p.x+(opt.noShift?0:R.sh.dx),p.y+(opt.noShift?0:R.sh.dy)])); if(!rings.length)return null;
   const inPoly=(p,P)=>{let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const a=P[i],b=P[j];if((a[1]>p[1])!=(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;};
   const segD=(x,y,q,r2)=>{const dx=r2[0]-q[0],dy=r2[1]-q[1],L2=dx*dx+dy*dy||1;let t=((x-q[0])*dx+(y-q[1])*dy)/L2;t=Math.max(0,Math.min(1,t));return Math.hypot(x-q[0]-t*dx,y-q[1]-t*dy);};
   const nearRing=(x,y,dm)=>rings.some(rg=>inPoly([x,y],rg)||rg.some((q,i)=>segD(x,y,q,rg[(i+1)%rg.length])<dm));
@@ -3697,7 +3697,7 @@ function roofModelV4(R){
     const hmax=Math.max(...P.map(p=>p[2]))+0.5;let best=null;
     cands.forEach(c=>{if((c.type=='shedU'||c.type=='shedV')&&c.k>1)return;if(c.type!='none'){let bad=false;[[Rc[0],Rc[2]],[Rc[1],Rc[2]],[Rc[0],Rc[3]],[Rc[1],Rc[3]],[(Rc[0]+Rc[1])/2,(Rc[2]+Rc[3])/2]].forEach(([u,v])=>{const z=c.pred(u,v);if(z>hmax||z<-0.5)bad=true;});if(bad)return;}
       const co=costOf(P,c.pred)+0.15*c.np*Math.sqrt(P.length);if(!best||co<best.cost)best={...c,cost:co};});best.R=Rc;return best;};
-  const LAM=8*(g*g/0.25)**0.5, memo=new Map(), tS=performance.now();
+  const LAM=(opt.lam||8)*(g*g/0.25)**0.5, memo=new Map(), tS=performance.now();
   const solve=(a,b,c,d)=>{const key=a+','+b+','+c+','+d;if(memo.has(key))return memo.get(key);const lf=leafFit([CU[a],CU[b],CV[c],CV[d]]);let best={cost:lf.cost+(lf.type=='none'?0:LAM),leaves:[lf]};
     if(performance.now()-tS<6000){
       for(let k=a+1;k<b;k++){if(CU[k]-CU[a]<1.2||CU[b]-CU[k]<1.2)continue;const L=solve(a,k,c,d),Rr=solve(k,b,c,d);if(L.cost+Rr.cost<best.cost)best={cost:L.cost+Rr.cost,leaves:[...L.leaves,...Rr.leaves]};}
@@ -3762,7 +3762,9 @@ function roofModelV4(R){
       const quads=[];for(let k=0;k<prof.length-1;k++){const p=prof[k],q=prof[k+1];if(p[2]-zm<0.02&&q[2]-zm<0.02)continue;quads.push([[p[0],p[1],zm],[q[0],q[1],zm],[q[0],q[1],q[2]],[p[0],p[1],p[2]]]);}
       let ar=0,mx=0,my=0,mz=0;quads.forEach(q=>{const w=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1])*((q[2][2]-q[1][2])+(q[3][2]-q[0][2]))/2;ar+=w;mx+=(q[0][0]+q[1][0])/2*w;my+=(q[0][1]+q[1][1])/2*w;mz+=(q[0][2]+q[3][2]+q[1][2]+q[2][2])/4*w;});
       if(ar<1)continue;const nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;verts.push({quads,a:ar,x:mx/ar+nx*0.3,y:my/ar+ny*0.3,z:mz/ar,n:[nx,ny,0],tilt:Math.PI/2,az:((Math.atan2(nx,ny)/RAD)+360)%360});}});
-  return {pieces,pans,cells,verts,rms,v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
+  return {pieces,pans,cells,verts,rms,v4:{leaves:leaves.map(l=>[l.type,...l.R.map(v=>+v.toFixed(2))]),CU:CUr.map(v=>+v.toFixed(2)),CV:CVr.map(v=>+v.toFixed(2)),big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
+
+window.__roofV4=roofModelV4;
 
 function rfMeshModel(R){
   ['mesh','vmesh','lines','wall','wlines'].forEach(k=>{const m=RF[k];if(m){scene.remove(m);m.geometry.dispose();if(m.material.map)m.material.map.dispose();RF[k]=null;}});
