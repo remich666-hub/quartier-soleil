@@ -3101,7 +3101,7 @@ async function roofSelect(obj){
   const R=roofCells(obj); if(tok!==RF.tok)return;
   if(!R||R.cells.length<4){veil(false);$('rBig').textContent='—';$('rBigC').textContent=(S.lidarR&&S.lidarR.mnh)?'Pas de relevé laser exploitable sur ce toit (bâtiment trop loin de l\'adresse).':'Le relevé laser de l\'IGN (LiDAR HD) n\'est pas encore publié pour ce secteur : le toit ne peut pas être mesuré ici. Essayez une autre adresse.';return;}
   /* the schematic roof first; the laser-traced one only if it cannot be built */
-  try{let M=null;try{M=roofModelV4(R);{let M2=null;try{M2=roofModelV4(R,{noShift:true});}catch(e){} if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}if(M)console.log('[v4]',JSON.stringify(M.v4),'rms',M.rms.toFixed(2));}catch(e){console.error('v4',e);M=null;}
+  try{let M=null;try{M=roofModelV4(R);if(!M||!M.v4.big){let M2=null;try{M2=roofModelV4(R,{noShift:true});}catch(e){} if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}if(M)console.log('[v4]',JSON.stringify(M.v4),'rms',M.rms.toFixed(2));}catch(e){console.error('v4',e);M=null;}
     if(!M||M.rms>0.35){M=roofModel(R); let wr=0,wn=0; if(M)M.pieces.forEach(p=>{if(p.F.best.score<9){wr+=p.F.best.rms*p.F.np;wn+=p.F.np;}}); if(M)M.rms=wn?wr/wn:9;}
     /* a roof no simple model explains (Paris mansards, courtyards…) keeps the laser-traced pans */
     if(M&&M.cells.length&&M.rms<=0.35){R.M=M; R.lcells=R.cells; R.cells=M.cells; R.F={regs:M.pans,lab:Int32Array.from(M.cells,c=>c.pan),verts:M.verts}; {const ds=[];R.lcells.forEach(c=>{let z=null;M.pieces.forEach(p=>{if(pointInPoly(c.x,c.y,p.P.map(([x,y])=>({x,y})))){const v=p.roofZ(c.x,c.y);z=z==null?v:Math.max(z,v);}});if(z!=null)ds.push(Math.abs(c.z-z));});ds.sort((a,b)=>a-b);M.gap=ds.length?ds[ds.length>>1]:0;}}}catch(e){console.error('model',e);R.M=null;}
@@ -3709,9 +3709,9 @@ function roofModelV4(R,opt){opt=opt||{};
   const inside=(Rc,u,v)=>u>=Rc[0]&&u<Rc[1]&&v>=Rc[2]&&v<Rc[3];
   const total=(A,B)=>{const ls=IX.map(ix=>leafFit([A[ix[0]],A[ix[1]],B[ix[2]],B[ix[3]]]));let s=0;pts.forEach(p=>{let m=0;for(const l of ls)if(l.type!='none'&&inside(l.R,p[0],p[1])){m=l.pred(p[0],p[1]);break;}s+=Math.min(Math.abs(p[2]-m),CL);});return {s,ls};};
   const CUr=CU.slice(),CVr=CV.slice();let cur=total(CUr,CVr);
-  const refine=(onlyU,onlyV)=>{for(let pass=0;pass<3;pass++){let imp=false;const uU=[...new Set(IX.flatMap(ix=>[ix[0],ix[1]]))],uV=[...new Set(IX.flatMap(ix=>[ix[2],ix[3]]))];
+  const refine=(onlyU,onlyV)=>{for(let pass=0;pass<(big?1:3);pass++){let imp=false;const uU=[...new Set(IX.flatMap(ix=>[ix[0],ix[1]]))],uV=[...new Set(IX.flatMap(ix=>[ix[2],ix[3]]))];
     for(const [arr,used,only] of [[CUr,uU,onlyU],[CVr,uV,onlyV]])for(const k of used){if(only&&!only.includes(k))continue;const base=arr[k];let bv=base,bs=cur.s;const us=used.slice().sort((p,q)=>p-q),pi=us.indexOf(k);
-      for(let d=-0.8;d<=0.801;d+=0.1){const v=base+d;if(pi>0&&v<arr[us[pi-1]]+1)continue;if(pi<us.length-1&&v>arr[us[pi+1]]-1)continue;arr[k]=v;const c=total(CUr,CVr);if(c.s<bs-1e-6){bs=c.s;bv=v;}}
+      for(let d=-0.8;d<=0.801;d+=(big?0.2:0.1)){const v=base+d;if(pi>0&&v<arr[us[pi-1]]+1)continue;if(pi<us.length-1&&v>arr[us[pi+1]]-1)continue;arr[k]=v;const c=total(CUr,CVr);if(c.s<bs-1e-6){bs=c.s;bv=v;}}
       arr[k]=bv;if(bv!==base){imp=true;cur=total(CUr,CVr);}}if(!imp)break;}};
   refine();
   /* merge neighbours whose union is a rectangle when the simpler roof explains the laser as well */
