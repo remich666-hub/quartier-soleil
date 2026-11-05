@@ -626,6 +626,7 @@ function setFov(){ // keep a wide horizontal field even on a portrait phone
 
 /* ---------- state ---------- */
 const S={lat:48.9042,lon:2.3055,label:'',alt0:0,meshes:[],obstacles:[],target:null,year:new Date().getFullYear(),doy:1,minute:720,wx:null,win:null,playing:false,building:null};
+window.__S=S;
 (function initTime(){const p=tzParts(new Date());S.year=p.y;S.doy=Math.round((Date.UTC(p.y,p.m-1,p.d)-Date.UTC(p.y,0,1))/86400000)+1;S.minute=p.h*60+p.mi;$('day').value=S.doy;$('time').value=Math.round(S.minute/5)*5;})();
 function currentInstant(){const md=dayOfYearToMD(S.year,S.doy);return localToInstant(S.year,md.m,md.d,Math.floor(S.minute/60),S.minute%60);}
 function proj(lon,lat){const kx=111320*Math.cos(S.lat*RAD),ky=110574;return [(lon-S.lon)*kx,(lat-S.lat)*ky];}
@@ -696,8 +697,7 @@ function orthoLayer(mesh,mat,lat,lon,z,R,fallback,segs,onDone){
   const st={ok:0,fail:0,total,z}; (S.orthoState=S.orthoState||[]).push(st);
   const done=()=>{st.ok=ok;st.fail=fail;if(ok+fail===total&&onDone){console.log('ortho layer done',z,ok,fail);try{onDone(ok?raw:null,west,east,north,south);}catch(err){console.error('onDone',err);}}};
   const loadTiles=()=>{mesh.userData.loadTiles=null; for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
-    gpf(`https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/jpeg`)
-      .then(r=>{if(!r.ok)throw new Error('tile');return r.blob();}).then(b=>createImageBitmap(b)).then(img=>{const px=(x-x0)*256,py=(y-y0)*256;if(raw)raw.getContext('2d').drawImage(img,px,py);try{g.filter='saturate(0.25) brightness(1.1) contrast(0.9)';}catch(_){}g.drawImage(img,px,py);try{g.filter='none';}catch(_){}g.fillStyle='rgba(243,240,233,0.42)';g.fillRect(px,py,256,256);tex.needsUpdate=true;ok++;done();})
+    orthoTile(z,x,y).then(b=>createImageBitmap(b)).then(img=>{const px=(x-x0)*256,py=(y-y0)*256;if(raw)raw.getContext('2d').drawImage(img,px,py);try{g.filter='saturate(0.25) brightness(1.1) contrast(0.9)';}catch(_){}g.drawImage(img,px,py);try{g.filter='none';}catch(_){}g.fillStyle='rgba(243,240,233,0.42)';g.fillRect(px,py,256,256);tex.needsUpdate=true;ok++;done();})
       .catch(()=>{fail++;if(fail>8&&ok===0){mesh.userData.photoTex=null;applyGroundMode();}done();});
   }};
   if(onDone||photoMode)loadTiles(); else mesh.userData.loadTiles=loadTiles; // the wide photo layer is only for display: fetched when the photo is asked for
@@ -2435,7 +2435,7 @@ async function load(q,at){
     S.T={start:performance.now()}; S.recentered=!!(at&&at.recenter&&!at.keepAddr); let g=at||await geocode(q); S.T.geo=performance.now();
     /* the address point is often on the road, far from the house (countryside): centre the model on the building the number belongs to */
     if(!(at&&at.recenter)){S.addrBats=null; const lk=await Promise.race([addrLink(g),new Promise(r=>setTimeout(()=>r(null),2500))]).catch(()=>null);
-      if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar(); try{roofWeather(S.lat,S.lon).catch(()=>{});}catch(e){} /* the year of weather, fetched while the model builds */
+      if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar(); try{roofWeather(S.lat,S.lon).catch(()=>{});}catch(e){} /* the year of weather, fetched while the model builds */ try{orthoPrefetch(S.lat,S.lon);}catch(e){}
     S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; /* the wide photo only paints the far gardens: 80 cm/px is plenty (25 tiles instead of 49 at 40 cm); none on a phone (plain far lots) */
     S.rgbFarP=null; S.ircP=null; {const myLat=g.lat,myLon=g.lon; // the infrared photo (deciduous trees) is only fetched once the model is up: it never competes with it
       S.startIRC=()=>null; const _ircUnused=()=>{if(S.ircP||S.lat!==myLat)return S.ircP;S.ircP=fetchIRC(myLat,myLon).then(I=>{if(!I||S.lat!==myLat)return null;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();return I;}).catch(()=>null);return S.ircP;};
@@ -2949,7 +2949,7 @@ function frame(now){
    const k=Math.min(1,(now-vOff.t0)/420),e=k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,c=vOff.from+(vOff.to-vOff.from)*e;
    if(Math.abs(c-vOff.cur)>0.1||vOff.W!==W||vOff.H!==H){vOff.cur=c;vOff.W=W;vOff.H=H;if(c>0.5){const cov=2*c,z=1-0.45*cov/H,fW=W*z,fH=H*z;camera.setViewOffset(fW,fH,fW/2-W/2,fH/2-(H-cov)/2,W,H);}else camera.clearViewOffset();camera.updateProjectionMatrix();}}
   sky.position.copy(camera.position); sunPath.position.copy(camera.position); if(S.sunDir)sunDisc.position.copy(camera.position).addScaledVector(S.sunDir,2000);
-  renderer.render(scene,camera); requestAnimationFrame(frame);
+  shadowFit(); renderer.render(scene,camera); requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 window.QS={terrainZ,floorBase,facEave,facGround,storeyH,nFloors,S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown},get treesD(){return treeCrownD},LEAF,LEAFU,classifyTrees};
@@ -3688,6 +3688,24 @@ function thermalize(){ /* the surroundings in light greys (hue removed), so that
     const ca=o.geometry&&o.geometry.attributes&&o.geometry.attributes.color; if(ca&&!ca.__thermal&&ms.some(m=>m&&m.vertexColors)){ca.__thermal=true;const a=ca.array;for(let i=0;i<a.length;i+=3){const L=0.2126*a[i]+0.7152*a[i+1]+0.0722*a[i+2];a[i]=a[i+1]=a[i+2]=L;}ca.needsUpdate=true;}
     const ic=o.instanceColor; if(ic&&!ic.__thermal){ic.__thermal=true;const a=ic.array;for(let i=0;i<a.length;i+=3){const L=0.2126*a[i]+0.7152*a[i+1]+0.0722*a[i+2];a[i]=a[i+1]=a[i+2]=L;}ic.needsUpdate=true;}});}
 setInterval(thermalize,700);
+/* the 20 cm photo tiles, asked for as soon as the address is known (the laser rebuild of the buildings waits for the photo):
+   the photo layer picks them up here instead of starting its downloads only once the model is built */
+const ORT={key:'',m:new Map()};
+function orthoUrl(z,x,y){return `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/jpeg`;}
+function orthoGet(u){return gpf(u).then(r=>{if(!r.ok)throw new Error('tile');return r.blob();});}
+function orthoPrefetch(lat,lon){const z=19,R=3,n=2**z,cx=Math.floor((lon+180)/360*n),cy=Math.floor((1-Math.log(Math.tan(lat*RAD)+1/Math.cos(lat*RAD))/Math.PI)/2*n);
+  ORT.m=new Map(); for(let x=cx-R;x<=cx+R;x++)for(let y=cy-R;y<=cy+R;y++){const u=orthoUrl(z,x,y),p=orthoGet(u);p.catch(()=>{});ORT.m.set(u,p);}}
+function orthoTile(z,x,y){const u=orthoUrl(z,x,y),p=ORT.m.get(u);if(p){ORT.m.delete(u);return p.catch(()=>orthoGet(u));}return orthoGet(u);}
+/* sharp shadows where they are looked at: the sun's shadow square follows the camera and shrinks with it (from ±560 m to ±45 m),
+   with a little hysteresis so it is not re-projected every frame, and snapped to its texels so the edges do not crawl */
+const SFIT={h:0};
+function shadowFit(){ if(!S.sunDir)return;
+  const want=Math.min(560,Math.max(45,cam.dist*(isPhone()?1.9:1.5))); let h=SFIT.h;
+  if(!h||want>h||want<h*0.6)h=Math.min(560,want*1.2);
+  const sh=sun.shadow, sc=sh.camera, tx=2*h/sh.mapSize.x;
+  if(h!==SFIT.h){SFIT.h=h;sc.left=sc.bottom=-h;sc.right=sc.top=h;sc.updateProjectionMatrix();sh.normalBias=Math.max(0.03,tx*1.8);}
+  const t=cam.target, x=Math.round(t.x/tx)*tx, y=Math.round(t.y/tx)*tx;
+  sun.target.position.set(x,y,0); sun.position.set(x,y,0).addScaledVector(S.sunDir,1800);}
 
 {const c=wallTex.image,g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);wallTex.needsUpdate=true;} /* plain walls: no windows on this page */
 
