@@ -3672,7 +3672,7 @@ function roofVertRows(R){const F=R.F;if(!F)return[];const by=new Map();
 $('rMore').addEventListener('click',()=>$('sheet').classList.remove('collapsed'));
 
 /* "caméra thermique": the model is drawn dark so that only the studied roof glows; materials are darkened once, as they appear */
-
+function thermalSky(){try{skyUni.top.value.set(0x0b0a0c);skyUni.horizon.value.set(0x17141a);skyUni.ground.value.set(0x0b0a0c);}catch(e){}}
 function thermalize(){ /* the surroundings in light greys (hue removed), so that only the studied roof is in colour */
   const grey=(c,k)=>{const L=0.2126*c.r+0.7152*c.g+0.0722*c.b;c.setRGB(L*k,L*k,L*k);};
   scene.traverse(o=>{if(!(o.isMesh||o.isLine||o.isInstancedMesh||o.isPoints))return;if(o===RF.mesh||o===RF.vmesh||o===RF.lines||o===RF.wlines)return;
