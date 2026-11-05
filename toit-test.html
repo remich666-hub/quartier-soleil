@@ -170,6 +170,16 @@ button.link:hover{color:var(--fg);background:none}
 .rmath{font-size:12.5px;color:var(--ink2)}
 .rmath summary{cursor:pointer;color:var(--fg);font-weight:500}
 .rmath p{margin:8px 0}
+/* desktop: a wider, more readable panel (the phone layout is unchanged) */
+@media (min-width:761px){
+  #sheet{width:min(480px,max(400px,34vw),calc(100% - 32px))}
+  .rseg button{font-size:14px;padding:8px 6px}
+  .kd span{font-size:12.5px}.kd b{font-size:16px}.kd div{padding:10px 12px}
+  .rpans{font-size:13.5px}.rpans th,.rpans td{padding:7px 6px}
+  #roofBox .hint,#rNote{font-size:13.5px;line-height:1.5}
+  .rmath{font-size:14px;line-height:1.55}.rmath .mono{font-size:13.5px;overflow-wrap:anywhere;line-height:1.6}
+  #rLegend .axis{font-size:12px}
+}
 .rmath .mono{font-family:var(--mono);color:var(--fg);overflow-x:auto}
 
 :root:not(#_),:root[data-theme]:not(#_){
@@ -189,7 +199,7 @@ body{letter-spacing:.005em}
 #rVeil{position:absolute;inset:0;z-index:4;background:var(--bg);display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity .7s cubic-bezier(.45,0,.55,1)}
 #rVeil.out{opacity:0;pointer-events:none}
 #rVeil .rv-in{display:flex;flex-direction:column;align-items:center;gap:14px;transform:translateY(-12vh);padding:0 24px}
-@media (min-width:761px){#rVeil .rv-in{transform:translateX(-200px)}}
+@media (min-width:761px){#rVeil .rv-in{transform:translateX(min(-200px,-17vw))}}
 #rVeil .rv-bar{width:180px;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
 #rVeil .rv-bar i{display:block;height:100%;width:40%;border-radius:2px;background:linear-gradient(90deg,#6a2c70,#f08a24,#fde15a);animation:rvslide 1.6s cubic-bezier(.45,0,.55,1) infinite}
 @keyframes rvslide{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
@@ -242,7 +252,6 @@ body{letter-spacing:.005em}
       </div>
 
       <div class="step collapsible" id="stepPick" hidden>
-        <span class="n">02 · Toit</span>
         <div class="hintBox" id="winHint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3l10 7-5 1-2 5z" stroke-linejoin="round"/></svg><span id="winHintText">Touchez un toit dans la maquette : il se colore selon l'énergie solaire qu'il reçoit.</span></div>
       </div>
 
@@ -272,8 +281,7 @@ body{letter-spacing:.005em}
       </div>
 
       <div class="step" id="roofBox" hidden>
-        <span class="n">02 · Toit</span>
-        <div class="rseg" id="rSeg" role="group" aria-label="Mode de calcul"><button type="button" data-m="real" aria-pressed="true">Année réelle</button><button type="button" data-m="clear" aria-pressed="false">Ciel clair</button><button type="button" data-m="instant" aria-pressed="false">Instant</button></div>
+        <div class="rseg" id="rSeg" role="group" aria-label="Mode de calcul"><button type="button" data-m="instant" aria-pressed="false">Instant</button><button type="button" data-m="real" aria-pressed="true">Année réelle</button><button type="button" data-m="clear" aria-pressed="false">Ciel clair</button></div>
         <div class="big"><span class="v" id="rBig">—</span><span class="c" id="rBigC"></span></div>
         <button type="button" class="link" id="rMore">Détails ▴</button>
         <div class="kd"><div><span id="rK1l">Surface de toit</span><b id="rK1">—</b></div><div><span id="rK2l">Énergie reçue par an</span><b id="rK2">—</b></div><div><span id="rK3l">Soleil direct / jour</span><b id="rK3">—</b></div></div>
@@ -626,6 +634,7 @@ function setFov(){ // keep a wide horizontal field even on a portrait phone
 
 /* ---------- state ---------- */
 const S={lat:48.9042,lon:2.3055,label:'',alt0:0,meshes:[],obstacles:[],target:null,year:new Date().getFullYear(),doy:1,minute:720,wx:null,win:null,playing:false,building:null};
+window.__S=S;setTimeout(()=>{window.__sun=sun;window.__cam=cam;},0);
 (function initTime(){const p=tzParts(new Date());S.year=p.y;S.doy=Math.round((Date.UTC(p.y,p.m-1,p.d)-Date.UTC(p.y,0,1))/86400000)+1;S.minute=p.h*60+p.mi;$('day').value=S.doy;$('time').value=Math.round(S.minute/5)*5;})();
 function currentInstant(){const md=dayOfYearToMD(S.year,S.doy);return localToInstant(S.year,md.m,md.d,Math.floor(S.minute/60),S.minute%60);}
 function proj(lon,lat){const kx=111320*Math.cos(S.lat*RAD),ky=110574;return [(lon-S.lon)*kx,(lat-S.lat)*ky];}
@@ -2960,7 +2969,7 @@ update(); if(!S.startPending)load($('addr').value); // an address handed over by
      E = Σ_h [ DNI·max(0, cos θ)·V + DHI·F_ciel + ρ·GHI·(1 − cos β)/2 ] · 1 h
    DNI, DHI, GHI : rayonnement direct normal, diffus horizontal, global horizontal (Open-Meteo, année réelle),
    ou un ciel clair théorique (Meinel + masse d'air de Kasten-Young, diffus = 10 % du direct). */
-var RF={sel:null,mesh:null,cells:null,mode:'real',wx:new Map(),tok:0}; window.__RF=RF;
+var RF={sel:null,mesh:null,cells:null,mode:'real',wx:new Map(),tok:0}; window.__RF=RF;window.__dbg={v4:(...a)=>roofModelV4(...a),family:(...a)=>family(...a),cells:(...a)=>roofCells(...a),shot:()=>{applyCam();shadowFit();renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.85);}};
 const RAMP=[[0,[43,26,79]],[0.25,[106,44,112]],[0.5,[193,64,74]],[0.75,[240,138,36]],[1,[253,225,90]]];
 function rampCol(t){t=Math.max(0,Math.min(1,t));for(let i=1;i<RAMP.length;i++){if(t<=RAMP[i][0]){const [a,ca]=RAMP[i-1],[b,cb]=RAMP[i];const u=(t-a)/(b-a);return ca.map((v,k)=>(v+(cb[k]-v)*u)/255);}}return RAMP[RAMP.length-1][1].map(v=>v/255);}
 const SCALE={real:[700,1700],clear:[1200,2800],instant:[0,1000]};
@@ -3139,7 +3148,7 @@ async function roofAuto(){ /* waits for the laser rebuild of the buildings (it r
   const T0=S.T; for(let i=0;i<300&&!(S.T.scene&&S.lidarBuilt&&!S.loading);i++){await new Promise(r=>setTimeout(r,100));if(S.T!==T0)return;}
   if(S.T!==T0)return; const t=S.addrTarget; if(S.building)return; if(!t||t.userData.monu||S.meshes.indexOf(t)<0){veil(false);return;}
   /* the veil hides the establishing shot here: skip it (time set to now) and land straight on the roof */
-  if(camTw&&camTw.tl)stopTw(); selectBuilding(t); roofFrame(t,true);}
+  if(camTw&&camTw.tl)stopTw(); try{RF.mode=sunPos(currentInstant(),S.lat,S.lon).alt>0.03?'instant':'real';}catch(e){} /* the sun now when it is up, the year otherwise */ selectBuilding(t); roofFrame(t,true);}
 /* the loading veil: the model shows once its roof is coloured, already framed (no buildings popping in one by one) */
 let veilT=0;
 function veil(on){const v=$('rVeil'); if(!v)return; clearInterval(veilT); clearTimeout(veil.to);
