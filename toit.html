@@ -2435,7 +2435,7 @@ async function load(q,at){
     S.T={start:performance.now()}; S.recentered=!!(at&&at.recenter&&!at.keepAddr); let g=at||await geocode(q); S.T.geo=performance.now();
     /* the address point is often on the road, far from the house (countryside): centre the model on the building the number belongs to */
     if(!(at&&at.recenter)){S.addrBats=null; const lk=await Promise.race([addrLink(g),new Promise(r=>setTimeout(()=>r(null),2500))]).catch(()=>null);
-      if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
+      if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar(); try{roofWeather(S.lat,S.lon).catch(()=>{});}catch(e){} /* the year of weather, fetched while the model builds */
     S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; /* the wide photo only paints the far gardens: 80 cm/px is plenty (25 tiles instead of 49 at 40 cm); none on a phone (plain far lots) */
     S.rgbFarP=null; S.ircP=null; {const myLat=g.lat,myLon=g.lon; // the infrared photo (deciduous trees) is only fetched once the model is up: it never competes with it
       S.startIRC=()=>null; const _ircUnused=()=>{if(S.ircP||S.lat!==myLat)return S.ircP;S.ircP=fetchIRC(myLat,myLon).then(I=>{if(!I||S.lat!==myLat)return null;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();return I;}).catch(()=>null);return S.ircP;};
@@ -2982,8 +2982,13 @@ function roofHide(obj,on){ /* while it is studied, the building is redrawn from 
 function roofClear(){RF.tok++;roofHide(null,false);['mesh','vmesh','lines','wall','wlines'].forEach(k=>{const m=RF[k];if(m){scene.remove(m);m.geometry.dispose();RF[k]=null;}});RF.sel=null;RF.cells=null;$('roofBox').hidden=true;}
 async function roofWeather(lat,lon){
   const Y=new Date().getFullYear()-1, k=lat.toFixed(2)+','+lon.toFixed(2)+','+Y; if(RF.wx.has(k))return RF.wx.get(k);
+  const LK='qs-wx:'+k, hrs=n=>{const t0=Date.UTC(Y,0,1),t=new Array(n);for(let i=0;i<n;i++)t[i]=t0+i*3600000;return t;};
+  try{const c=JSON.parse(localStorage.getItem(LK)||'null');if(c&&c.dni&&c.dni.length>8000){const v={Y,t:hrs(c.dni.length),dni:c.dni,dhi:c.dhi,ghi:c.ghi};const p=Promise.resolve(v);RF.wx.set(k,p);return p;}}catch(e){}
   const p=fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&start_date=${Y}-01-01&end_date=${Y}-12-31&hourly=direct_normal_irradiance,diffuse_radiation,shortwave_radiation&timezone=UTC`)
-    .then(r=>{if(!r.ok)throw new Error('Open-Meteo '+r.status);return r.json();}).then(j=>{const h=j.hourly;return {Y,t:h.time.map(s=>Date.parse(s+':00Z')),dni:h.direct_normal_irradiance,dhi:h.diffuse_radiation,ghi:h.shortwave_radiation};});
+    .then(r=>{if(!r.ok)throw new Error('Open-Meteo '+r.status);return r.json();}).then(j=>{const h=j.hourly;return {Y,t:h.time.map(s=>Date.parse(s+':00Z')),dni:h.direct_normal_irradiance,dhi:h.diffuse_radiation,ghi:h.shortwave_radiation};}).then(v=>{
+      try{for(let i=localStorage.length-1;i>=0;i--){const kk=localStorage.key(i);if(kk&&kk.startsWith('qs-wx:')&&kk!==LK)localStorage.removeItem(kk);} // one area kept: the last one
+        localStorage.setItem(LK,JSON.stringify({dni:v.dni,dhi:v.dhi,ghi:v.ghi}));}catch(e){}
+      return v;});
   RF.wx.set(k,p); p.catch(()=>RF.wx.delete(k)); return p;}
 /* clear sky: Meinel on the Kasten-Young air mass; diffuse = 10 % of the direct beam (ASHRAE order of magnitude) */
 function clearSky(alt){if(alt<=0)return {dni:0,dhi:0,ghi:0};const e=alt/RAD;const am=1/(Math.sin(alt)+0.50572*Math.pow(e+6.07995,-1.6364));const dni=1361*Math.pow(0.7,Math.pow(am,0.678));const dhi=0.1*dni;return {dni,dhi,ghi:dni*Math.sin(alt)+dhi};}
@@ -3124,13 +3129,15 @@ $('rClear').addEventListener('click',()=>{const b=S.building;roofClear();if(b)se
 let roofRaf=0; function roofRenderSoon(){if(roofRaf)return;roofRaf=requestAnimationFrame(()=>{roofRaf=0;roofRender();});}
 
 /* the address leads straight to its roof */
-function roofFrame(obj){const u=obj.userData,bb=obj.geometry.boundingBox||(obj.geometry.computeBoundingBox(),obj.geometry.boundingBox);
+function roofFrame(obj,now){const u=obj.userData,bb=obj.geometry.boundingBox||(obj.geometry.computeBoundingBox(),obj.geometry.boundingBox);
   const cx=(bb.min.x+bb.max.x)/2,cy=(bb.min.y+bb.max.y)/2,diag=Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y);
-  camTw={t0:performance.now(),dur:1400,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(cx,cy,u.zBase+(u.ridge||u.h)),th:cam.theta,ph:0.95,d:Math.max(isPhone()?34:26,diag*(isPhone()?2:1.5))}};}
+  camTw={t0:performance.now(),dur:1400,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(cx,cy,u.zBase+(u.ridge||u.h)),th:cam.theta,ph:0.95,d:Math.max(isPhone()?34:26,diag*(isPhone()?2:1.5))}};
+  if(now){const b=camTw.b;camTw=null;cam.target.copy(b.t);cam.theta=b.th;cam.phi=b.ph;cam.dist=b.d;applyCam();}}
 async function roofAuto(){ /* waits for the laser rebuild of the buildings (it replaces them) before picking the address's one */
-  const T0=S.T; for(let i=0;i<150&&!(S.T.scene&&S.lidarBuilt&&!S.loading);i++){await new Promise(r=>setTimeout(r,200));if(S.T!==T0)return;}
-  for(let i=0;i<40&&camTw;i++){await new Promise(r=>setTimeout(r,150));if(S.T!==T0)return;} /* let the establishing shot land first */
-  if(S.T!==T0)return; const t=S.addrTarget; if(S.building)return; if(!t||t.userData.monu||S.meshes.indexOf(t)<0){veil(false);return;} selectBuilding(t); roofFrame(t);}
+  const T0=S.T; for(let i=0;i<300&&!(S.T.scene&&S.lidarBuilt&&!S.loading);i++){await new Promise(r=>setTimeout(r,100));if(S.T!==T0)return;}
+  if(S.T!==T0)return; const t=S.addrTarget; if(S.building)return; if(!t||t.userData.monu||S.meshes.indexOf(t)<0){veil(false);return;}
+  /* the veil hides the establishing shot here: skip it (time set to now) and land straight on the roof */
+  if(camTw&&camTw.tl)stopTw(); selectBuilding(t); roofFrame(t,true);}
 /* the loading veil: the model shows once its roof is coloured, already framed (no buildings popping in one by one) */
 let veilT=0;
 function veil(on){const v=$('rVeil'); if(!v)return; clearInterval(veilT); clearTimeout(veil.to);
