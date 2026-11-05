@@ -3106,9 +3106,12 @@ async function roofSelect(obj){
   const R=roofCells(obj); if(tok!==RF.tok)return;
   if(!R||R.cells.length<4){veil(false);$('rBig').textContent='—';$('rBigC').textContent=(S.lidarR&&S.lidarR.mnh)?'Pas de relevé laser exploitable sur ce toit (bâtiment trop loin de l\'adresse).':'Le relevé laser de l\'IGN (LiDAR HD) n\'est pas encore publié pour ce secteur : le toit ne peut pas être mesuré ici. Essayez une autre adresse.';return;}
   /* the v4 roof (straight volumes) first; the laser-traced one only if it does not fit the laser */
-  try{let M=null;try{M=roofModelV4(R);if(!M||(!M.v4.big&&M.rms>0.12)){let M2=null;try{M2=roofModelV4(R,{noShift:true});}catch(e){} if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}}catch(e){console.error('v4',e);M=null;}
-    /* a roof no simple model explains (Paris mansards, courtyards…) keeps the laser-traced pans */
-    if(M&&M.cells.length&&M.rms<=0.35){R.M=M; R.lcells=R.cells; R.cells=M.cells; R.F={regs:M.pans,lab:Int32Array.from(M.cells,c=>c.pan),verts:M.verts}; {const ds=[];R.lcells.forEach(c=>{let z=null;M.pieces.forEach(p=>{if(pointInPoly(c.x,c.y,p.P.map(([x,y])=>({x,y})))){const v=p.roofZ(c.x,c.y);z=z==null?v:Math.max(z,v);}});if(z!=null)ds.push(Math.abs(c.z-z));});ds.sort((a,b)=>a-b);M.gap=ds.length?ds[ds.length>>1]:0;}}}catch(e){console.error('model',e);R.M=null;}
+  try{let M=null;try{M=roofModelV4(R);if(!M||(!M.v4.big&&M.rms>0.12)){let M2=null;try{M2=roofModelV4(R,{noShift:true});}catch(e){} if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
+      /* a composite building the first pass explains badly (a pitched house between flat extensions…): more volumes allowed,
+         and cut lines also where the laser changes slope without a step */
+      if(!M||M.rms>0.3){let M3=null;try{M3=roofModelV4(R,{big:false,lam:4,kinks:true});}catch(e){} if(M3&&M3.cells.length&&(!M||M3.rms<M.rms*0.9))M=M3;}}catch(e){console.error('v4',e);M=null;}
+    /* always straight volumes: the free laser-traced pans only when no model could be built at all */
+    if(M&&M.cells.length){R.M=M; R.lcells=R.cells; R.cells=M.cells; R.F={regs:M.pans,lab:Int32Array.from(M.cells,c=>c.pan),verts:M.verts}; {const ds=[];R.lcells.forEach(c=>{let z=null;M.pieces.forEach(p=>{if(pointInPoly(c.x,c.y,p.P.map(([x,y])=>({x,y})))){const v=p.roofZ(c.x,c.y);z=z==null?v:Math.max(z,v);}});if(z!=null)ds.push(Math.abs(c.z-z));});ds.sort((a,b)=>a-b);M.gap=ds.length?ds[ds.length>>1]:0;}}}catch(e){console.error('model',e);R.M=null;}
   if(!R.M){
   try{R.F=roofFacets(R);}catch(e){console.error('facets',e);veil(false);$('rBigC').textContent='Reconstruction du toit impossible ici.';return;}
   try{const VEC=roofVector(R); if(VEC.cells.length){R.VEC=VEC; R.lcells=R.cells; R.cells=VEC.cells; R.F.lab=Int32Array.from(VEC.cells,c=>c.reg); R.F.verts=VEC.verts;
