@@ -3670,7 +3670,11 @@ function roofModelV4(R,opt){opt=opt||{};
       /* photo / laser offset: laser edges against photo edges (centred weights) */
       const Gl=[];for(let i=1;i<NU-1;i++)for(let j=1;j<NV-1;j++){if(!maskD(i,j))continue;Gl.push([u0+(i+.5)*g,v0+(j+.5)*g,Math.min(Math.abs(H[i+1][j]-H[i-1][j])+Math.abs(H[i][j+1]-H[i][j-1]),4)]);}
       const mE=Gl.reduce((s,p)=>s+p[2],0)/(Gl.length||1);Gl.forEach(p=>p[2]-=mE);
-      let bo=-1e18;for(let du=-4;du<=4.01;du+=0.25)for(let dv=-4;dv<=4.01;dv+=0.25){let s=0;Gl.forEach(([u,v,e])=>{s+=e*pgrad(u+du,v+dv);});if(s>bo){bo=s;off=[du,dv];}}
+      const sc=(du,dv,G)=>{let s=0;G.forEach(([u,v,e])=>{s+=e*pgrad(u+du,v+dv);});return s;};
+      if(R._v4off&&R._v4off.ad===Ad)off=R._v4off.off.slice();else{
+        const Gs=Gl.filter((_,k)=>k%3===0);let bo=-1e18;for(let du=-4;du<=4.01;du+=0.5)for(let dv=-4;dv<=4.01;dv+=0.5){const s=sc(du,dv,Gs);if(s>bo){bo=s;off=[du,dv];}}
+        for(const stp of [0.25,0.1]){const c0=off.slice();bo=-1e18;for(let a=-2;a<=2;a++)for(let b=-2;b<=2;b++){const du=c0[0]+a*stp,dv=c0[1]+b*stp,s=sc(du,dv,Gl);if(s>bo){bo=s;off=[du,dv];}}}
+        R._v4off={ad:Ad,off:off.slice()};}
       const lumUV=(u,v)=>{const [x,y]=XY(u+off[0],v+off[1]);return lum(x,y);};const pg=0.1,PU=Math.round((u1-u0)/pg),PV=Math.round((v1-v0)/pg);
       const prof=ax=>{const N1=ax=='u'?PU:PV,N2=ax=='u'?PV:PU,out=new Float64Array(N1);for(let i=2;i<N1-2;i++){let s=0,c=0;for(let j=0;j<N2;j+=2){const u=ax=='u'?u0+(i+.5)*pg:u0+(j+.5)*pg,v=ax=='u'?v0+(j+.5)*pg:v0+(i+.5)*pg;const gi=Math.min(NU-1,Math.floor((u-u0)/g)),gj=Math.min(NV-1,Math.floor((v-v0)/g));if(!maskD(gi,gj))continue;s+=ax=='u'?Math.abs(lumUV(u+0.15,v)-lumUV(u-0.15,v)):Math.abs(lumUV(u,v+0.15)-lumUV(u,v-0.15));c++;}out[i]=c?s:0;}return out;};
       const lprof=ax=>{const N1=ax=='u'?PU:PV,out=new Float64Array(N1);for(let i=0;i<N1;i++){const p=ax=='u'?u0+(i+.5)*pg:v0+(i+.5)*pg;let s=0;if(ax=='u'){const gi=Math.floor((p-u0)/g);if(gi<1||gi>=NU-1)continue;for(let j=0;j<NV;j++)s+=Math.abs(H[gi+1][j]-H[gi-1][j])>1?1:0;}else{const gj=Math.floor((p-v0)/g);if(gj<1||gj>=NV-1)continue;for(let k=0;k<NU;k++)s+=Math.abs(H[k][gj+1]-H[k][gj-1])>1?1:0;}out[i]=s;}return out;};
