@@ -3705,8 +3705,18 @@ function roofModelV4(R,opt){opt=opt||{};
       for(let k=a+1;k<b;k++){if(CU[k]-CU[a]<1.2||CU[b]-CU[k]<1.2)continue;const L=solve(a,k,c,d),Rr=solve(k,b,c,d);if(L.cost+Rr.cost<best.cost)best={cost:L.cost+Rr.cost,leaves:[...L.leaves,...Rr.leaves]};}
       for(let k=c+1;k<d;k++){if(CV[k]-CV[c]<1.2||CV[d]-CV[k]<1.2)continue;const L=solve(a,b,c,k),Rr=solve(a,b,k,d);if(L.cost+Rr.cost<best.cost)best={cost:L.cost+Rr.cost,leaves:[...L.leaves,...Rr.leaves]};}}
     memo.set(key,best);return best;};
-  const sol=solve(0,CU.length-1,0,CV.length-1);
-  const IX=sol.leaves.filter(l=>l.type!='none').map(l=>[CU.indexOf(l.R[0]),CU.indexOf(l.R[1]),CV.indexOf(l.R[2]),CV.indexOf(l.R[3])]);if(!IX.length)return null;
+  let IX;
+  if(big){ /* wings: greedy largest rectangles of the IGN outline, no search */
+    const st=0.5,NU2=Math.ceil((u1-u0)/st),NV2=Math.ceil((v1-v0)/st),occ=[],used=[];let tot=0;
+    for(let i=0;i<NU2;i++){occ.push(new Uint8Array(NV2));used.push(new Uint8Array(NV2));for(let j=0;j<NV2;j++){const o=rUV.some(rg=>inPoly([u0+(i+.5)*st,v0+(j+.5)*st],rg))?1:0;occ[i][j]=o;tot+=o;}}
+    const rects=[];for(let it=0;it<6;it++){const hg=new Array(NV2).fill(0);let best=null;for(let i=0;i<NU2;i++){for(let j=0;j<NV2;j++)hg[j]=(occ[i][j]&&!used[i][j])?hg[j]+1:0;const stk=[];for(let j=0;j<=NV2;j++){const h=j<NV2?hg[j]:0;let start=j;while(stk.length&&stk[stk.length-1][1]>=h){const [sj,sh]=stk.pop();const ar=sh*(j-sj);if(!best||ar>best.ar)best={ar,i1:i,i0:i-sh+1,j0:sj,j1:j-1};start=sj;}stk.push([start,h]);}}
+      if(!best||best.ar*st*st<12||(it>0&&best.ar<0.06*tot))break;for(let i=best.i0;i<=best.i1;i++)for(let j=best.j0;j<=best.j1;j++)used[i][j]=1;rects.push([u0+best.i0*st,u0+(best.i1+1)*st,v0+best.j0*st,v0+(best.j1+1)*st]);}
+    if(!rects.length)return null;
+    const eu=[...new Set(rects.flatMap(r=>[r[0],r[1]]).map(v=>+v.toFixed(3)))].sort((a,b)=>a-b),ev=[...new Set(rects.flatMap(r=>[r[2],r[3]]).map(v=>+v.toFixed(3)))].sort((a,b)=>a-b);
+    CU=[u0,...eu.filter(v=>v>u0&&v<u1),u1];CV=[v0,...ev.filter(v=>v>v0&&v<v1),v1];
+    IX=rects.map(r=>[CU.indexOf(+r[0].toFixed(3)),CU.indexOf(+r[1].toFixed(3)),CV.indexOf(+r[2].toFixed(3)),CV.indexOf(+r[3].toFixed(3))]);
+  }else{const sol=solve(0,CU.length-1,0,CV.length-1);IX=sol.leaves.filter(l=>l.type!='none').map(l=>[CU.indexOf(l.R[0]),CU.indexOf(l.R[1]),CV.indexOf(l.R[2]),CV.indexOf(l.R[3])]);}
+  if(!IX.length||IX.some(ix=>ix.some(k=>k<0)))return null;
   const inside=(Rc,u,v)=>u>=Rc[0]&&u<Rc[1]&&v>=Rc[2]&&v<Rc[3];
   const total=(A,B)=>{const ls=IX.map(ix=>leafFit([A[ix[0]],A[ix[1]],B[ix[2]],B[ix[3]]]));let s=0;pts.forEach(p=>{let m=0;for(const l of ls)if(l.type!='none'&&inside(l.R,p[0],p[1])){m=l.pred(p[0],p[1]);break;}s+=Math.min(Math.abs(p[2]-m),CL);});return {s,ls};};
   const CUr=CU.slice(),CVr=CV.slice();let cur=total(CUr,CVr);
