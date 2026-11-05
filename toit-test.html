@@ -3615,7 +3615,7 @@ function roofInstMat(){ if(instMat)return instMat;
     vertexShader:`attribute vec3 cLit;attribute vec3 cShd;attribute float cM;varying vec3 vLit;varying vec3 vShd;varying float vM;
 void main(){vLit=cLit;vShd=cShd;vM=cM;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
     fragmentShader:`varying vec3 vLit;varying vec3 vShd;varying float vM;
-void main(){float w=max(1.5*fwidth(vM),0.014); /* a soft edge, about the width the sun's disc gives a real shadow a few metres from its caster */gl_FragColor=vec4(mix(vShd,vLit,smoothstep(-w,w,vM)),1.0);
+void main(){float w=max(2.0*fwidth(vM),0.035); /* a soft edge, about the width the sun's disc gives a real shadow a few metres from its caster */gl_FragColor=vec4(mix(vShd,vLit,smoothstep(-w,w,vM)),1.0);
 #include <tonemapping_fragment>
 #include <encodings_fragment>
 }`,extensions:{derivatives:true}});
