@@ -155,10 +155,20 @@ button.link:hover{color:var(--fg);background:none}
 .rpans th{text-align:left;font-weight:500;color:var(--ink2);padding:4px 4px;border-bottom:1px solid var(--line)}
 .rpans td{padding:5px 4px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
 .rpans tr.rv td{color:var(--ink2)}
-#rMore{display:none}
+#rMore{justify-self:end;color:var(--accent-ink);text-decoration:none;font-size:13px;margin-top:-4px}
+.rsum{margin:-2px 0 0;font-size:13px;color:var(--ink2)}
+@media (min-width:761px){#roofBox:not(.det)>.kd,#roofBox:not(.det)>#rPans,#roofBox:not(.det)>#rNote,#roofBox:not(.det)>.rmath{display:none!important}}
+/* the time bar: two compact rows, icon buttons */
+#bottom{box-sizing:border-box;grid-template-columns:auto 1fr auto;padding:10px 12px;gap:6px 12px}
+#bottom .slider label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#bottom .btns{grid-column:auto;display:flex;gap:6px}
+#bottom .btns button{width:38px;height:32px;padding:0;display:grid;place-items:center}
+#bottom .btns svg{width:16px;height:16px}
 @media (max-width:760px){
   #sheet.collapsed #left>#roofBox:not([hidden]){display:grid!important;gap:8px}
-  #sheet.collapsed #roofBox>*:not(.rseg):not(.big):not(#rLegend):not(#rMore){display:none!important}
+  #sheet.collapsed #roofBox>*:not(.rseg):not(.big):not(#rLegend):not(#rMore):not(.rsum){display:none!important}
+  #bottom{left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto}
+  #sheet:not(.collapsed) #rMore{display:none}
   #sheet.collapsed #roofBox .big{display:flex;align-items:baseline;gap:8px}
   #sheet.collapsed #roofBox .big .v{font-size:34px}
   #sheet.collapsed #roofBox .big .c{font-size:12px}
@@ -170,6 +180,46 @@ button.link:hover{color:var(--fg);background:none}
 .rmath{font-size:12.5px;color:var(--ink2)}
 .rmath summary{cursor:pointer;color:var(--fg);font-weight:500}
 .rmath p{margin:8px 0}
+#mth{position:fixed;inset:0;z-index:30;background:var(--bg);color:var(--fg);overflow:auto;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(24px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+#mth .mth-in{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+#mth .mth-h{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#mth h2{margin:0;font-family:"Instrument Serif",ui-serif,Georgia,serif;font-weight:400;font-size:34px;line-height:1.05;text-wrap:balance}
+#mth h3{margin:22px 0 6px;font-size:15px}
+#mth .mth-x{background:var(--btn);color:var(--btn-fg);border:0;border-radius:999px;padding:9px 16px;font-size:14px;cursor:pointer}
+#mth .mth-g{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:28px;align-items:start}
+@media (max-width:900px){#mth .mth-g{grid-template-columns:1fr}}
+#mth .mth-fig{display:flex;flex-direction:column;gap:12px;min-width:0}
+#mth .mth-fig>svg{width:100%;height:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px}
+#mth .mth-ctl{display:flex;flex-direction:column;gap:10px}
+#mth .mth-days{display:flex;flex-wrap:wrap;gap:6px}
+#mth .mth-days button{border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+#mth .mth-days button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+#mth .mth-time{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+#mth .mth-time .mono{font-family:var(--mono);font-size:15px}
+#mth .mth-time button{width:38px;height:32px;display:grid;place-items:center;border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:8px;cursor:pointer}
+#mth .mth-time button svg{width:16px;height:16px}
+#mth #mthDay{width:100%;height:auto}
+#mth .mth-s{font-size:13px;fill:var(--ink2);font-family:var(--mono)}
+#mth .mth-k{font-size:20px;fill:var(--accent-ink);font-style:italic}
+@media (max-width:600px){#mth .mth-s{font-size:22px}#mth .mth-k{font-size:30px}#mth h2{font-size:28px}}
+#mth .mth-txt{font-size:15px;line-height:1.6;min-width:0;max-width:62ch}
+#mth .mth-lead{margin:0 0 8px;color:var(--ink2)}
+#mth .mth-v{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+#mth .mth-v th{text-align:left;font-weight:400;color:var(--ink2);padding:6px 8px 6px 0;border-bottom:1px solid var(--line)}
+#mth .mth-v td{text-align:right;padding:6px 0;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:13.5px}
+#mth .mth-v tr.tot th,#mth .mth-v tr.tot td{color:var(--fg);font-weight:600;border-bottom:0}
+#mth #mthF p{margin:10px 0}
+#mth #mthF .mono{font-family:var(--mono);font-size:14px;overflow-wrap:anywhere;background:var(--raised);padding:8px 10px;border-radius:8px}
+/* desktop: a wider, more readable panel (the phone layout is unchanged) */
+@media (min-width:761px){
+  #sheet{width:min(480px,max(400px,34vw),calc(100% - 32px))}
+  .rseg button{font-size:14px;padding:8px 6px}
+  .kd span{font-size:12.5px}.kd b{font-size:16px}.kd div{padding:10px 12px}
+  .rpans{font-size:13.5px}.rpans th,.rpans td{padding:7px 6px}.rpans td{white-space:nowrap}
+  #roofBox .hint,#rNote{font-size:13.5px;line-height:1.5}
+  .rmath{font-size:14px;line-height:1.55}.rmath .mono{font-size:13.5px;overflow-wrap:anywhere;line-height:1.6}
+  #rLegend .axis{font-size:12px}
+}
 .rmath .mono{font-family:var(--mono);color:var(--fg);overflow-x:auto}
 
 :root:not(#_),:root[data-theme]:not(#_){
@@ -189,7 +239,7 @@ body{letter-spacing:.005em}
 #rVeil{position:absolute;inset:0;z-index:4;background:var(--bg);display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity .7s cubic-bezier(.45,0,.55,1)}
 #rVeil.out{opacity:0;pointer-events:none}
 #rVeil .rv-in{display:flex;flex-direction:column;align-items:center;gap:14px;transform:translateY(-12vh);padding:0 24px}
-@media (min-width:761px){#rVeil .rv-in{transform:translateX(-200px)}}
+@media (min-width:761px){#rVeil .rv-in{transform:translateX(min(-200px,-17vw))}}
 #rVeil .rv-bar{width:180px;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
 #rVeil .rv-bar i{display:block;height:100%;width:40%;border-radius:2px;background:linear-gradient(90deg,#6a2c70,#f08a24,#fde15a);animation:rvslide 1.6s cubic-bezier(.45,0,.55,1) infinite}
 @keyframes rvslide{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
@@ -207,9 +257,10 @@ body{letter-spacing:.005em}
   <section class="panel" id="bottom" hidden>
     <span class="val" id="dateVal">—</span>
     <div class="slider"><label for="day">Date</label><input type="range" id="day" min="1" max="365" value="1"></div>
+    <span></span>
     <span class="val" id="timeVal">—</span>
     <div class="slider"><label for="time">Heure</label><input type="range" id="time" min="0" max="1439" step="5" value="720"></div>
-    <div class="btns"><button id="now" type="button">Maintenant</button><button id="play" type="button">Journée ▶</button></div>
+    <div class="btns"><button id="now" type="button" aria-label="Maintenant" title="Maintenant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg></button><button id="play" type="button" aria-label="Faire défiler la journée" title="Faire défiler la journée"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10-6.5z"/></svg></button></div>
   </section>
 
   <div id="sheet">
@@ -242,7 +293,6 @@ body{letter-spacing:.005em}
       </div>
 
       <div class="step collapsible" id="stepPick" hidden>
-        <span class="n">02 · Toit</span>
         <div class="hintBox" id="winHint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3l10 7-5 1-2 5z" stroke-linejoin="round"/></svg><span id="winHintText">Touchez un toit dans la maquette : il se colore selon l'énergie solaire qu'il reçoit.</span></div>
       </div>
 
@@ -272,12 +322,12 @@ body{letter-spacing:.005em}
       </div>
 
       <div class="step" id="roofBox" hidden>
-        <span class="n">02 · Toit</span>
-        <div class="rseg" id="rSeg" role="group" aria-label="Mode de calcul"><button type="button" data-m="real" aria-pressed="true">Année réelle</button><button type="button" data-m="clear" aria-pressed="false">Ciel clair</button><button type="button" data-m="instant" aria-pressed="false">Instant</button></div>
+        <div class="rseg" id="rSeg" role="group" aria-label="Mode de calcul"><button type="button" data-m="instant" aria-pressed="false">Instant</button><button type="button" data-m="real" aria-pressed="true">Année réelle</button><button type="button" data-m="clear" aria-pressed="false">Ciel clair</button></div>
         <div class="big"><span class="v" id="rBig">—</span><span class="c" id="rBigC"></span></div>
-        <button type="button" class="link" id="rMore">Détails ▴</button>
-        <div class="kd"><div><span id="rK1l">Surface de toit</span><b id="rK1">—</b></div><div><span id="rK2l">Énergie reçue par an</span><b id="rK2">—</b></div><div><span id="rK3l">Soleil direct / jour</span><b id="rK3">—</b></div></div>
+        <p class="rsum" id="rSum"></p>
         <div id="rLegend"></div>
+        <button type="button" class="link" id="rMore">Détails ▾</button>
+        <div class="kd"><div><span id="rK1l">Surface de toit</span><b id="rK1">—</b></div><div><span id="rK2l">Énergie reçue par an</span><b id="rK2">—</b></div><div><span id="rK3l">Soleil direct / jour</span><b id="rK3">—</b></div></div>
         <table class="rpans" id="rPans"></table>
         <p class="hint" id="rNote"></p>
         <details class="rmath"><summary>Méthode et formules</summary>
@@ -1789,7 +1839,7 @@ function update(){
 $('day').addEventListener('input',e=>{S.doy=+e.target.value;update();});
 $('time').addEventListener('input',e=>{S.minute=+e.target.value;update();});
 $('now').addEventListener('click',()=>{const p=tzParts(new Date());S.year=p.y;S.doy=Math.round((Date.UTC(p.y,p.m-1,p.d)-Date.UTC(p.y,0,1))/86400000)+1;S.minute=p.h*60+p.mi;$('day').value=S.doy;$('time').value=Math.round(S.minute/5)*5;update();});
-$('play').addEventListener('click',()=>{S.playing=!S.playing;$('play').textContent=S.playing?'Pause ■':'Journée ▶';});
+$('play').addEventListener('click',()=>{S.playing=!S.playing;$('play').innerHTML=S.playing?'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5.5" width="3.5" height="13" rx="1"/><rect x="13.5" y="5.5" width="3.5" height="13" rx="1"/></svg>':'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10-6.5z"/></svg>';});
 
 /* ---------- picking a building and a façade ---------- */
 const ray=new THREE.Raycaster();
@@ -2919,7 +2969,7 @@ $('mini').addEventListener('click',()=>$('sheet').classList.remove('collapsed'))
   L.addEventListener('touchend',e=>{if(y0==null)return;const dy=e.changedTouches[0].clientY-y0;y0=null;if(dy>40)$('sheet').classList.add('collapsed');else if(dy<-40)$('sheet').classList.remove('collapsed');},{passive:true});}
 renderer.domElement.addEventListener('pointerdown',()=>{if(isPhone()&&S.meshes.length)$('sheet').classList.add('collapsed');});
 $('timePill').addEventListener('click',()=>{const b=$('bottom');b.hidden=!b.hidden;$('timePill').setAttribute('aria-expanded',String(!b.hidden));});
-$('infoBtn').addEventListener('click',()=>{const b=$('info');b.hidden=!b.hidden;$('infoBtn').setAttribute('aria-expanded',String(!b.hidden));});
+$('infoBtn').addEventListener('click',()=>mthShow(true));$('infoBtn').setAttribute('aria-label','Méthode de calcul et sources');
 $('photoBtn').addEventListener('click',()=>{photoMode=!photoMode;try{localStorage.setItem('qs-photo',photoMode?'1':'0');}catch(_){}applyGroundMode();toast(photoMode?'Photo aérienne affichée':'Plan épuré');});
 $('themeBtn').addEventListener('click',()=>{const r=document.documentElement;const cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');const nx=cur==='dark'?'light':'dark';r.dataset.theme=nx;try{localStorage.setItem('qs-theme',nx);}catch(e){}});
 $('wipe').addEventListener('click',()=>{try{['qs-addr','qs-report','qs-pending'].forEach(k=>{localStorage.removeItem(k);sessionStorage.removeItem(k);});}catch(e){}$('addr').value='';toast('Données effacées de cet appareil');});
@@ -2943,10 +2993,10 @@ function frame(now){
     if(k>=1){scene.remove(introRing);introRing.geometry.dispose();introRing.material.dispose();introRing=null;}}
   if(marker.visible){const ph=(now%1600)/1600,sc=(isPhone()?1.6:1.1)*(1+0.35*(0.5-0.5*Math.cos(ph*2*Math.PI)));marker.scale.setScalar(sc);}
   // keep the scene centred in the part of the screen the panel leaves visible (phone)
-  {const H=view.clientHeight,W=view.clientWidth;let want=0;if(isPhone()&&H){const sr=$('sheet').getBoundingClientRect(),vr=view.getBoundingClientRect();want=Math.max(0,Math.min(H*0.6,vr.bottom-sr.top))/2;}
+  {const H=view.clientHeight,W=view.clientWidth;let want=0;if(isPhone()&&H){const sr=$('sheet').getBoundingClientRect(),vr=view.getBoundingClientRect();want=Math.max(0,Math.min(H*0.6,vr.bottom-sr.top))/2;} else if(W>900&&$('sheet').offsetParent){want=Math.min(W*0.22,($('sheet').getBoundingClientRect().width+16)/2);}
    if(Math.abs(want-vOff.to)>2)vOff={from:vOff.cur,to:want,t0:now,cur:vOff.cur};
    const k=Math.min(1,(now-vOff.t0)/420),e=k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2,c=vOff.from+(vOff.to-vOff.from)*e;
-   if(Math.abs(c-vOff.cur)>0.1||vOff.W!==W||vOff.H!==H){vOff.cur=c;vOff.W=W;vOff.H=H;if(c>0.5){const cov=2*c,z=1-0.45*cov/H,fW=W*z,fH=H*z;camera.setViewOffset(fW,fH,fW/2-W/2,fH/2-(H-cov)/2,W,H);}else camera.clearViewOffset();camera.updateProjectionMatrix();}}
+   if(Math.abs(c-vOff.cur)>0.1||vOff.W!==W||vOff.H!==H){vOff.cur=c;vOff.W=W;vOff.H=H;if(c>0.5){const cov=2*c,z=1-0.45*cov/H,fW=W*z,fH=H*z;if(isPhone())camera.setViewOffset(fW,fH,fW/2-W/2,fH/2-(H-cov)/2,W,H);else camera.setViewOffset(W,H,c,0,W,H);}else camera.clearViewOffset();camera.updateProjectionMatrix();}}
   sky.position.copy(camera.position); sunPath.position.copy(camera.position); if(S.sunDir)sunDisc.position.copy(camera.position).addScaledVector(S.sunDir,2000);
   shadowFit(); renderer.render(scene,camera); requestAnimationFrame(frame);
 }
@@ -3082,6 +3132,7 @@ function roofRender(){
     $('rK2').textContent=`${fmt(I.cs.dni)} W/m²`; $('rK2l').textContent='Direct (rayons ⟂)';
     $('rK3').textContent=`${fmt(lit*100)} %`; $('rK3l').textContent='Toit au soleil';
     $('rNote').textContent=(I.sp.alt<=0?'Le soleil est couché à cette heure : seul un peu de diffus subsiste avant le lever et après le coucher, compté nul ici. ':'')+th+' Faites varier la date et l\'heure en bas à gauche.';
+    $('rSum').textContent=I.sp.alt<=0?'Soleil couché à cette heure':`${fmt(lit*100)} % du toit au soleil · soleil à ${fmt(I.sp.alt/RAD)}°`;
     $('rPans').innerHTML=''; $('bottom').hidden=false; return;}
   const val=mode==='real'?E:EC;
   $('rBig').textContent=fmt(val/A); $('rBigC').textContent=`kWh par m² et par an, en moyenne sur le toit (${mode==='real'?'météo réelle '+(W?W.Y:''):'ciel toujours clair'})`;
@@ -3096,6 +3147,7 @@ function roofRender(){
     ? `Sur l'année ${W?W.Y:''}, une surface horizontale dégagée a reçu ${fmt(R.flat)} kWh/m², et un pan idéal (plein sud, 35°, sans ombre) en aurait reçu ${fmt(R.ref)}. Ce toit reçoit en moyenne ${fmt(E/A/R.ref*100)} % de cet optimum ; les ombres (voisins, arbres, cheminées, relief) lui retirent ${fmt(loss*100)} %.`
     : `Par ciel toujours clair, ce toit recevrait ${fmt(EC/A)} kWh/m² par an, soit ${fmt(EC/Math.max(1,E))} fois la météo réelle : l'écart, c'est l'effet des nuages.`;
   if(R.M&&R.M.gap>0.3)$('rNote').textContent+=' Attention : ici le contour du bâtiment (IGN) et le relevé laser ne concordent pas bien ; la forme du toit est approximative.';
+  $('rSum').textContent=`${fmt(A)} m² de toit · ${fmt(val/1000,1)} MWh par an · ${fmt(H,1)} h de soleil direct par jour`;
   $('bottom').hidden=true;}
 async function roofSelect(obj){
   if(isPhone())$('sheet').classList.add('collapsed'); /* on a phone the roof gets the screen; the details slide up */
@@ -3133,13 +3185,13 @@ let roofRaf=0; function roofRenderSoon(){if(roofRaf)return;roofRaf=requestAnimat
 /* the address leads straight to its roof */
 function roofFrame(obj,now){const u=obj.userData,bb=obj.geometry.boundingBox||(obj.geometry.computeBoundingBox(),obj.geometry.boundingBox);
   const cx=(bb.min.x+bb.max.x)/2,cy=(bb.min.y+bb.max.y)/2,diag=Math.hypot(bb.max.x-bb.min.x,bb.max.y-bb.min.y);
-  camTw={t0:performance.now(),dur:1400,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(cx,cy,u.zBase+(u.ridge||u.h)),th:cam.theta,ph:0.95,d:Math.max(isPhone()?34:26,diag*(isPhone()?2:1.5))}};
+  camTw={t0:performance.now(),dur:1400,a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:new THREE.Vector3(cx,cy,u.zBase+(u.ridge||u.h)),th:cam.theta,ph:0.95,d:Math.max(isPhone()?34:36,diag*(isPhone()?2:2.1))}};
   if(now){const b=camTw.b;camTw=null;cam.target.copy(b.t);cam.theta=b.th;cam.phi=b.ph;cam.dist=b.d;applyCam();}}
 async function roofAuto(){ /* waits for the laser rebuild of the buildings (it replaces them) before picking the address's one */
   const T0=S.T; for(let i=0;i<300&&!(S.T.scene&&S.lidarBuilt&&!S.loading);i++){await new Promise(r=>setTimeout(r,100));if(S.T!==T0)return;}
   if(S.T!==T0)return; const t=S.addrTarget; if(S.building)return; if(!t||t.userData.monu||S.meshes.indexOf(t)<0){veil(false);return;}
   /* the veil hides the establishing shot here: skip it (time set to now) and land straight on the roof */
-  if(camTw&&camTw.tl)stopTw(); selectBuilding(t); roofFrame(t,true);}
+  if(camTw&&camTw.tl)stopTw(); try{RF.mode=sunPos(currentInstant(),S.lat,S.lon).alt>0.03?'instant':'real';}catch(e){} /* the sun now when it is up, the year otherwise */ selectBuilding(t); roofFrame(t,true);}
 /* the loading veil: the model shows once its roof is coloured, already framed (no buildings popping in one by one) */
 let veilT=0;
 function veil(on){const v=$('rVeil'); if(!v)return; clearInterval(veilT); clearTimeout(veil.to);
@@ -3702,7 +3754,7 @@ function roofVertRows(R){const F=R.F;if(!F)return[];const by=new Map();
   F.verts.forEach(v=>{if(v.real==null)return;const k=DIRS[Math.round(v.az/45)%8];let o=by.get(k);if(!o){o={k:'Vertical '+k,a:0,real:0,clear:0,bare:0,vert:true};by.set(k,o);}o.a+=v.a;o.real+=v.real*v.a;o.clear+=v.clear*v.a;o.bare+=v.bare*v.a;});
   return [...by.values()].filter(o=>o.a>=2).sort((a,b)=>b.a-a.a);}
 
-$('rMore').addEventListener('click',()=>$('sheet').classList.remove('collapsed'));
+$('rMore').addEventListener('click',()=>{if(isPhone()){$('sheet').classList.remove('collapsed');return;}const b=$('roofBox'),on=b.classList.toggle('det');$('rMore').textContent=on?'Masquer les détails ▴':'Détails ▾';});
 
 /* "caméra thermique": the model is drawn dark so that only the studied roof glows; materials are darkened once, as they appear */
 function thermalSky(){try{skyUni.top.value.set(0x0b0a0c);skyUni.horizon.value.set(0x17141a);skyUni.ground.value.set(0x0b0a0c);}catch(e){}}
@@ -3732,6 +3784,87 @@ function shadowFit(){ if(!S.sunDir)return;
   if(h!==SFIT.h){SFIT.h=h;sc.left=sc.bottom=-h;sc.right=sc.top=h;sc.updateProjectionMatrix();sh.normalBias=Math.max(0.03,tx*1.8);}
   const t=cam.target, x=Math.round(t.x/tx)*tx, y=Math.round(t.y/tx)*tx;
   sun.target.position.set(x,y,0); sun.position.set(x,y,0).addScaledVector(S.sunDir,1800);}
+/* ===== "Méthode" view: the calculation on a simple roof, in a south–north section (not the real map) ===== */
+const MTH={on:false,doy:null,min:null,play:0};
+function mthBuild(){ if($('mth'))return;
+  const d=document.createElement('section'); d.id='mth'; d.hidden=true; d.setAttribute('aria-label','Méthode de calcul');
+  d.innerHTML=`<div class="mth-in">
+  <header class="mth-h"><h2>Comment le calcul est fait</h2><button type="button" class="mth-x" id="mthX">Retour à mon toit</button></header>
+  <div class="mth-g">
+   <div class="mth-fig">
+    <svg id="mthSvg" viewBox="0 -52 800 482" role="img" aria-label="Coupe sud-nord d'une maison : le soleil, son rayon, la normale au pan et un arbre au sud"></svg>
+    <div class="mth-ctl">
+      <div class="mth-days" role="group" aria-label="Jour"><button type="button" data-d="355">21 déc.</button><button type="button" data-d="80">21 mars</button><button type="button" data-d="172">21 juin</button><button type="button" data-d="now">Aujourd'hui</button></div>
+      <div class="mth-time"><span class="mono" id="mthT">—</span><input type="range" id="mthR" min="240" max="1320" step="5" aria-label="Heure"><button type="button" id="mthP" aria-label="Faire défiler la journée"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10-6.5z"/></svg></button></div>
+      <svg id="mthDay" viewBox="0 0 800 128" aria-label="Rayonnement reçu par le pan sud au fil de la journée"></svg>
+    </div>
+   </div>
+   <div class="mth-txt">
+    <p class="mth-lead">Une maison simple, toit à deux pans de 35°, vue en coupe du sud (à gauche) au nord. Un arbre se dresse au sud. Faites varier le jour et l'heure : le point rouge du pan sud reçoit</p>
+    <table class="mth-v" id="mthV"></table>
+    <div id="mthF"></div>
+   </div>
+  </div></div>`;
+  document.body.appendChild(d);
+  const old=$('roofBox').querySelector('.rmath'); if(old){old.querySelectorAll('p').forEach(p=>$('mthF').appendChild(p));old.remove();}
+  const inf=$('info'); if(inf){const h=document.createElement('h3');h.textContent='Données et confidentialité';$('mthF').appendChild(h);[...inf.children].forEach(c=>{if(c.id!=='site'&&c.id!=='wxBox')$('mthF').appendChild(c);});}
+  $('mthX').addEventListener('click',()=>mthShow(false));
+  d.querySelector('.mth-days').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;MTH.doy=b.dataset.d==='now'?S.doy:+b.dataset.d;mthDraw();});
+  $('mthR').addEventListener('input',e=>{MTH.min=+e.target.value;mthDraw(false);});
+  $('mthP').addEventListener('click',()=>{if(MTH.play){cancelAnimationFrame(MTH.play);MTH.play=0;mthPlayIcon();return;}let last=performance.now();const step=t=>{const dt=Math.min(0.1,(t-last)/1000);last=t;MTH.min+=dt*90;if(MTH.min>1320)MTH.min=240;mthDraw(false);MTH.play=requestAnimationFrame(step);};MTH.play=requestAnimationFrame(step);mthPlayIcon();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&MTH.on)mthShow(false);});}
+function mthPlayIcon(){$('mthP').innerHTML=MTH.play?'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5.5" width="3.5" height="13" rx="1"/><rect x="13.5" y="5.5" width="3.5" height="13" rx="1"/></svg>':'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10-6.5z"/></svg>';}
+function mthShow(on){mthBuild();MTH.on=on;$('mth').hidden=!on;if(on){if(MTH.doy==null){MTH.doy=S.doy;MTH.min=Math.max(240,Math.min(1320,S.minute));}mthDraw();$('mth').scrollTop=0;$('mthX').focus();}else if(MTH.play){cancelAnimationFrame(MTH.play);MTH.play=0;mthPlayIcon();}}
+/* the physics of one instant on the south pan of the schematic house */
+const MB=35*RAD;
+function mthAt(doy,min){const lat=S.lat||46.5,lon=S.lon||2.5,y=S.year||new Date().getFullYear(),md=dayOfYearToMD(y,doy);
+  const sp=sunPos(localToInstant(y,md.m,md.d,Math.floor(min/60),Math.round(min%60)),lat,lon),h=sp.alt,a=sp.az,cs=clearSky(h);
+  const ci=Math.sin(h)*Math.cos(MB)+Math.cos(h)*Math.sin(MB)*Math.cos(a-Math.PI);
+  const hT=Math.atan2(54,232), south=Math.cos(a-Math.PI)>0, /* the section shows every sun of the southern half in front of the tree */ V=h>0&&!(south&&h<hT)?1:0;
+  const fs=(1+Math.cos(MB))/2-0.04, dir=cs.dni*Math.max(0,ci)*V, dif=cs.dhi*fs, ref=0.2*cs.ghi*(1-Math.cos(MB))/2;
+  const ciN=Math.sin(h)*Math.cos(MB)+Math.cos(h)*Math.sin(MB)*Math.cos(a);
+  return {h,a,ci,ciN,V,hT,cs,dir,dif,ref,tot:dir+dif+ref,south};}
+function mthDraw(full=true){const r=mthAt(MTH.doy,MTH.min),sv=$('mthSvg');
+  const hh=Math.floor(MTH.min/60),mm=Math.round(MTH.min%60);$('mthT').textContent=`${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;$('mthR').value=MTH.min;
+  $('mth').querySelectorAll('.mth-days button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.d==='now'?MTH.doy===S.doy:+b.dataset.d===MTH.doy)));
+  const G=360,P=[382,224],nb=[-Math.sin(MB),-Math.cos(MB)],deg=v=>fmt(v/RAD);
+  const hd=Math.max(-0.05,r.h), R=285, sx=P[0]-Math.cos(hd)*R*(r.south||Math.cos(r.a-Math.PI)>=0?1:-1), sy=P[1]-Math.sin(hd)*R;
+  const lit=r.V&&r.ci>0, col=lit?'var(--sun)':'var(--muted)';
+  /* where the ray meets the tree when blocked */
+  let ex=sx,ey=sy; if(r.h>0&&!r.V){const t=(P[0]-150)/(P[0]-sx);ex=P[0]-(P[0]-sx)*t;ey=P[1]-(P[1]-sy)*t;}
+  const ang=(x,y)=>Math.atan2(y,x), aN=ang(nb[0],nb[1]), aS=ang(sx-P[0],sy-P[1]), arc=(a0,a1,rr)=>{let d=a1-a0;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;const x0=P[0]+rr*Math.cos(a0),y0=P[1]+rr*Math.sin(a0),x1=P[0]+rr*Math.cos(a0+d),y1=P[1]+rr*Math.sin(a0+d);return `M${x0.toFixed(1)} ${y0.toFixed(1)}A${rr} ${rr} 0 0 ${d>0?1:0} ${x1.toFixed(1)} ${y1.toFixed(1)}`;};
+  sv.innerHTML=`<g transform="translate(88,26)">
+   <defs><marker id="mthA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--fg)"/></marker></defs>
+   <path d="M${P[0]-R} ${P[1]} A${R} ${R} 0 0 1 ${P[0]+R} ${P[1]}" fill="none" stroke="var(--line)" stroke-dasharray="3 6"/>
+   <line x1="-88" y1="${G}" x2="712" y2="${G}" stroke="var(--ink2)" stroke-width="1.5"/>
+   <text x="-76" y="${G+26}" class="mth-s">Sud</text><text x="700" y="${G+26}" class="mth-s" text-anchor="end">Nord</text>
+   <rect x="146" y="240" width="8" height="120" fill="var(--ink2)"/><circle cx="150" cy="214" r="44" fill="var(--shade)" stroke="var(--ink2)" stroke-width="1"/>
+   <line x1="${P[0]}" y1="${P[1]}" x2="150" y2="170" stroke="var(--ink2)" stroke-dasharray="2 4"/>
+   <text x="150" y="156" class="mth-s" text-anchor="middle">horizon ${deg(r.hT)}°</text>
+   <line x1="${P[0]}" y1="${P[1]}" x2="${P[0]-130}" y2="${P[1]}" stroke="var(--line)"/>
+   <polygon points="332,${G} 332,260 532,260 532,${G}" fill="var(--raised)" stroke="var(--ink2)"/>
+   <polygon points="324,266 432,190 432,266" fill="${lit?'var(--sun)':'var(--shade)'}" stroke="var(--fg)" stroke-width="1.5" stroke-linejoin="round"/>
+   <polygon points="432,190 540,266 432,266" fill="${r.h>0&&r.ciN>0?'var(--sun)':'var(--shade)'}" fill-opacity="${r.h>0&&r.ciN>0?'.55':'1'}" stroke="var(--fg)" stroke-width="1.5" stroke-linejoin="round"/>
+   <text x="${352}" y="${280}" class="mth-s">β = 35°</text>
+   ${r.h>0?`<line x1="${ex.toFixed(1)}" y1="${ey.toFixed(1)}" x2="${P[0]}" y2="${P[1]}" stroke="${r.V?'var(--sun)':'var(--muted)'}" stroke-width="2" ${r.V?'':'stroke-dasharray="6 5"'}/>`:''}
+   <line x1="${P[0]}" y1="${P[1]}" x2="${(P[0]+nb[0]*90).toFixed(1)}" y2="${(P[1]+nb[1]*90).toFixed(1)}" stroke="var(--fg)" stroke-width="1.6" marker-end="url(#mthA)"/>
+   <text x="${(P[0]+nb[0]*90+10).toFixed(1)}" y="${(P[1]+nb[1]*90+4).toFixed(1)}" class="mth-s">normale</text>
+   ${r.h>0?`<path d="${arc(aN,aS,44)}" fill="none" stroke="var(--accent-ink)" stroke-width="1.6"/><text x="${(P[0]+60*Math.cos((aN+aS)/2)).toFixed(1)}" y="${(P[1]+60*Math.sin((aN+aS)/2)+6).toFixed(1)}" class="mth-k" text-anchor="middle">θ</text>`:''}
+   ${r.h>0?`<path d="M${P[0]-110} ${P[1]} ${arc(Math.PI,aS,110).replace('M','L')}" fill="none" stroke="var(--ink2)" stroke-width="1"/><text x="${P[0]-126}" y="${P[1]+30}" class="mth-s">h = ${deg(r.h)}°</text>`:''}
+   <circle cx="${P[0]}" cy="${P[1]}" r="5" fill="#d33"/>
+   ${r.h>0?`<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="16" fill="var(--sun)"/>`:`<text x="312" y="60" class="mth-k" text-anchor="middle">Soleil couché</text>`}</g>`;
+  const W=v=>`${fmt(v)} W/m²`;
+  $('mthV').innerHTML=`<tr><th>Hauteur du soleil h</th><td>${deg(r.h)}°</td></tr><tr><th>Azimut a (sud = 180°)</th><td>${fmt(r.a/RAD)}°</td></tr>
+   <tr><th>cos θ (incidence sur le pan)</th><td>${fmt(Math.max(0,r.ci),2)}</td></tr><tr><th>Soleil visible V</th><td>${r.h<=0?'0 (couché)':r.V?'1':'0 (derrière l\'arbre)'}</td></tr>
+   <tr><th>Direct DNI × cos θ × V</th><td>${fmt(r.cs.dni)} × ${fmt(Math.max(0,r.ci),2)} × ${r.V} = ${W(r.dir)}</td></tr>
+   <tr><th>Diffus du ciel</th><td>${W(r.dif)}</td></tr><tr><th>Réfléchi par le sol</th><td>${W(r.ref)}</td></tr>
+   <tr class="tot"><th>Total reçu (ciel clair)</th><td>${W(r.tot)}</td></tr>`;
+  if(full||!MTH.curve||MTH.curve.d!==MTH.doy){const pts=[];for(let m=240;m<=1320;m+=10)pts.push([m,mthAt(MTH.doy,m).tot]);MTH.curve={d:MTH.doy,pts};}
+  const X=m=>(m-240)/1080*780+10,Y=v=>100-v/1000*70,pts=MTH.curve.pts;
+  $('mthDay').innerHTML=`<line x1="10" y1="100" x2="790" y2="100" stroke="var(--line)"/>
+   <path d="M${X(240)} 100 ${pts.map(([m,v])=>`L${X(m).toFixed(1)} ${Y(v).toFixed(1)}`).join(' ')} L${X(1320)} 100Z" fill="var(--sun)" fill-opacity=".22" stroke="var(--sun)" stroke-width="1.5"/>
+   ${[360,720,1080].map(m=>`<text x="${X(m)}" y="${122}" class="mth-s" text-anchor="middle">${m/60} h</text>`).join('')}
+   <line x1="${X(MTH.min)}" y1="28" x2="${X(MTH.min)}" y2="100" stroke="var(--fg)" stroke-width="1.2"/><text x="790" y="22" class="mth-s" text-anchor="end">W/m² reçus par le pan sud, ${fmt(pts.reduce((s,p)=>s+p[1],0)*10/60/1000,1)} kWh/m² ce jour</text>`;}
 
 {const c=wallTex.image,g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);wallTex.needsUpdate=true;} /* plain walls: no windows on this page */
 
