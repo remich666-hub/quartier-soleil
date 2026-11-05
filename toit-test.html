@@ -3797,7 +3797,7 @@ function mthBuild(){ if($('mth'))return;
     <div class="mth-ctl">
       <div class="mth-days" role="group" aria-label="Jour"><button type="button" data-d="355">21 déc.</button><button type="button" data-d="80">21 mars</button><button type="button" data-d="172">21 juin</button><button type="button" data-d="now">Aujourd'hui</button></div>
       <div class="mth-time"><span class="mono" id="mthT">—</span><input type="range" id="mthR" min="240" max="1320" step="5" aria-label="Heure"><button type="button" id="mthP" aria-label="Faire défiler la journée"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10-6.5z"/></svg></button></div>
-      <svg id="mthDay" viewBox="0 0 800 110" aria-label="Rayonnement reçu par le pan sud au fil de la journée"></svg>
+      <svg id="mthDay" viewBox="0 0 800 128" aria-label="Rayonnement reçu par le pan sud au fil de la journée"></svg>
     </div>
    </div>
    <div class="mth-txt">
@@ -3851,7 +3851,7 @@ function mthDraw(full=true){const r=mthAt(MTH.doy,MTH.min),sv=$('mthSvg');
    <line x1="${P[0]}" y1="${P[1]}" x2="${(P[0]+nb[0]*90).toFixed(1)}" y2="${(P[1]+nb[1]*90).toFixed(1)}" stroke="var(--fg)" stroke-width="1.6" marker-end="url(#mthA)"/>
    <text x="${(P[0]+nb[0]*90+10).toFixed(1)}" y="${(P[1]+nb[1]*90+4).toFixed(1)}" class="mth-s">normale</text>
    ${r.h>0?`<path d="${arc(aN,aS,44)}" fill="none" stroke="var(--accent-ink)" stroke-width="1.6"/><text x="${(P[0]+60*Math.cos((aN+aS)/2)).toFixed(1)}" y="${(P[1]+60*Math.sin((aN+aS)/2)+6).toFixed(1)}" class="mth-k" text-anchor="middle">θ</text>`:''}
-   ${r.h>0?`<path d="M${P[0]-110} ${P[1]} ${arc(Math.PI,aS,110).replace('M','L')}" fill="none" stroke="var(--ink2)" stroke-width="1"/><text x="${P[0]-118}" y="${P[1]+18}" class="mth-s">h = ${deg(r.h)}°</text>`:''}
+   ${r.h>0?`<path d="M${P[0]-110} ${P[1]} ${arc(Math.PI,aS,110).replace('M','L')}" fill="none" stroke="var(--ink2)" stroke-width="1"/><text x="${P[0]-126}" y="${P[1]+30}" class="mth-s">h = ${deg(r.h)}°</text>`:''}
    <circle cx="${P[0]}" cy="${P[1]}" r="5" fill="#d33"/>
    ${r.h>0?`<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="16" fill="var(--sun)"/>`:`<text x="312" y="60" class="mth-k" text-anchor="middle">Soleil couché</text>`}</g>`;
   const W=v=>`${fmt(v)} W/m²`;
@@ -3861,11 +3861,11 @@ function mthDraw(full=true){const r=mthAt(MTH.doy,MTH.min),sv=$('mthSvg');
    <tr><th>Diffus du ciel</th><td>${W(r.dif)}</td></tr><tr><th>Réfléchi par le sol</th><td>${W(r.ref)}</td></tr>
    <tr class="tot"><th>Total reçu (ciel clair)</th><td>${W(r.tot)}</td></tr>`;
   if(full||!MTH.curve||MTH.curve.d!==MTH.doy){const pts=[];for(let m=240;m<=1320;m+=10)pts.push([m,mthAt(MTH.doy,m).tot]);MTH.curve={d:MTH.doy,pts};}
-  const X=m=>(m-240)/1080*780+10,Y=v=>100-v/1000*88,pts=MTH.curve.pts;
+  const X=m=>(m-240)/1080*780+10,Y=v=>100-v/1000*70,pts=MTH.curve.pts;
   $('mthDay').innerHTML=`<line x1="10" y1="100" x2="790" y2="100" stroke="var(--line)"/>
    <path d="M${X(240)} 100 ${pts.map(([m,v])=>`L${X(m).toFixed(1)} ${Y(v).toFixed(1)}`).join(' ')} L${X(1320)} 100Z" fill="var(--sun)" fill-opacity=".22" stroke="var(--sun)" stroke-width="1.5"/>
-   ${[360,720,1080].map(m=>`<text x="${X(m)}" y="${108}" class="mth-s" text-anchor="middle">${m/60} h</text>`).join('')}
-   <line x1="${X(MTH.min)}" y1="6" x2="${X(MTH.min)}" y2="100" stroke="var(--fg)" stroke-width="1.2"/><text x="790" y="14" class="mth-s" text-anchor="end">W/m² reçus par le pan sud, ${fmt(pts.reduce((s,p)=>s+p[1],0)*10/60/1000,1)} kWh/m² ce jour</text>`;}
+   ${[360,720,1080].map(m=>`<text x="${X(m)}" y="${122}" class="mth-s" text-anchor="middle">${m/60} h</text>`).join('')}
+   <line x1="${X(MTH.min)}" y1="28" x2="${X(MTH.min)}" y2="100" stroke="var(--fg)" stroke-width="1.2"/><text x="790" y="22" class="mth-s" text-anchor="end">W/m² reçus par le pan sud, ${fmt(pts.reduce((s,p)=>s+p[1],0)*10/60/1000,1)} kWh/m² ce jour</text>`;}
 
 {const c=wallTex.image,g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);wallTex.needsUpdate=true;} /* plain walls: no windows on this page */
 
