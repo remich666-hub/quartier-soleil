@@ -3820,7 +3820,7 @@ const MB=35*RAD;
 function mthAt(doy,min){const lat=S.lat||46.5,lon=S.lon||2.5,y=S.year||new Date().getFullYear(),md=dayOfYearToMD(y,doy);
   const sp=sunPos(localToInstant(y,md.m,md.d,Math.floor(min/60),Math.round(min%60)),lat,lon),h=sp.alt,a=sp.az,cs=clearSky(h);
   const ci=Math.sin(h)*Math.cos(MB)+Math.cos(h)*Math.sin(MB)*Math.cos(a-Math.PI);
-  const hT=Math.atan2(54,232), south=Math.abs(((a/RAD-180+540)%360)-180)<35, V=h>0&&!(south&&h<hT)?1:0;
+  const hT=Math.atan2(54,232), south=Math.cos(a-Math.PI)>0, /* the section shows every sun of the southern half in front of the tree */ V=h>0&&!(south&&h<hT)?1:0;
   const fs=(1+Math.cos(MB))/2-0.04, dir=cs.dni*Math.max(0,ci)*V, dif=cs.dhi*fs, ref=0.2*cs.ghi*(1-Math.cos(MB))/2;
   const ciN=Math.sin(h)*Math.cos(MB)+Math.cos(h)*Math.sin(MB)*Math.cos(a);
   return {h,a,ci,ciN,V,hT,cs,dir,dif,ref,tot:dir+dif+ref,south};}
