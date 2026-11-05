@@ -201,6 +201,7 @@ button.link:hover{color:var(--fg);background:none}
 #mth #mthDay{width:100%;height:auto}
 #mth .mth-s{font-size:13px;fill:var(--ink2);font-family:var(--mono)}
 #mth .mth-k{font-size:20px;fill:var(--accent-ink);font-style:italic}
+@media (max-width:600px){#mth .mth-s{font-size:22px}#mth .mth-k{font-size:30px}#mth h2{font-size:28px}}
 #mth .mth-txt{font-size:15px;line-height:1.6;min-width:0;max-width:62ch}
 #mth .mth-lead{margin:0 0 8px;color:var(--ink2)}
 #mth .mth-v{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
@@ -3792,7 +3793,7 @@ function mthBuild(){ if($('mth'))return;
   <header class="mth-h"><h2>Comment le calcul est fait</h2><button type="button" class="mth-x" id="mthX">Retour à mon toit</button></header>
   <div class="mth-g">
    <div class="mth-fig">
-    <svg id="mthSvg" viewBox="0 0 800 430" role="img" aria-label="Coupe sud-nord d'une maison : le soleil, son rayon, la normale au pan et un arbre au sud"></svg>
+    <svg id="mthSvg" viewBox="0 -24 800 454" role="img" aria-label="Coupe sud-nord d'une maison : le soleil, son rayon, la normale au pan et un arbre au sud"></svg>
     <div class="mth-ctl">
       <div class="mth-days" role="group" aria-label="Jour"><button type="button" data-d="355">21 déc.</button><button type="button" data-d="80">21 mars</button><button type="button" data-d="172">21 juin</button><button type="button" data-d="now">Aujourd'hui</button></div>
       <div class="mth-time"><span class="mono" id="mthT">—</span><input type="range" id="mthR" min="240" max="1320" step="5" aria-label="Heure"><button type="button" id="mthP" aria-label="Faire défiler la journée"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10-6.5z"/></svg></button></div>
@@ -3828,16 +3829,16 @@ function mthDraw(full=true){const r=mthAt(MTH.doy,MTH.min),sv=$('mthSvg');
   const hh=Math.floor(MTH.min/60),mm=Math.round(MTH.min%60);$('mthT').textContent=`${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;$('mthR').value=MTH.min;
   $('mth').querySelectorAll('.mth-days button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.d==='now'?MTH.doy===S.doy:+b.dataset.d===MTH.doy)));
   const G=360,P=[382,224],nb=[-Math.sin(MB),-Math.cos(MB)],deg=v=>fmt(v/RAD);
-  const hd=Math.max(-0.05,r.h), R=330, sx=P[0]-Math.cos(hd)*R*(r.south||Math.cos(r.a-Math.PI)>=0?1:-1), sy=P[1]-Math.sin(hd)*R;
+  const hd=Math.max(-0.05,r.h), R=285, sx=P[0]-Math.cos(hd)*R*(r.south||Math.cos(r.a-Math.PI)>=0?1:-1), sy=P[1]-Math.sin(hd)*R;
   const lit=r.V&&r.ci>0, col=lit?'var(--sun)':'var(--muted)';
   /* where the ray meets the tree when blocked */
   let ex=sx,ey=sy; if(r.h>0&&!r.V){const t=(P[0]-150)/(P[0]-sx);ex=P[0]-(P[0]-sx)*t;ey=P[1]-(P[1]-sy)*t;}
   const ang=(x,y)=>Math.atan2(y,x), aN=ang(nb[0],nb[1]), aS=ang(sx-P[0],sy-P[1]), arc=(a0,a1,rr)=>{let d=a1-a0;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;const x0=P[0]+rr*Math.cos(a0),y0=P[1]+rr*Math.sin(a0),x1=P[0]+rr*Math.cos(a0+d),y1=P[1]+rr*Math.sin(a0+d);return `M${x0.toFixed(1)} ${y0.toFixed(1)}A${rr} ${rr} 0 0 ${d>0?1:0} ${x1.toFixed(1)} ${y1.toFixed(1)}`;};
-  sv.innerHTML=`
+  sv.innerHTML=`<g transform="translate(88,26)">
    <defs><marker id="mthA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--fg)"/></marker></defs>
    <path d="M${P[0]-R} ${P[1]} A${R} ${R} 0 0 1 ${P[0]+R} ${P[1]}" fill="none" stroke="var(--line)" stroke-dasharray="3 6"/>
-   <line x1="0" y1="${G}" x2="800" y2="${G}" stroke="var(--ink2)" stroke-width="1.5"/>
-   <text x="12" y="${G+24}" class="mth-s">Sud</text><text x="788" y="${G+24}" class="mth-s" text-anchor="end">Nord</text>
+   <line x1="-88" y1="${G}" x2="712" y2="${G}" stroke="var(--ink2)" stroke-width="1.5"/>
+   <text x="-76" y="${G+26}" class="mth-s">Sud</text><text x="700" y="${G+26}" class="mth-s" text-anchor="end">Nord</text>
    <rect x="146" y="240" width="8" height="120" fill="var(--ink2)"/><circle cx="150" cy="214" r="44" fill="var(--shade)" stroke="var(--ink2)" stroke-width="1"/>
    <line x1="${P[0]}" y1="${P[1]}" x2="150" y2="170" stroke="var(--ink2)" stroke-dasharray="2 4"/>
    <text x="150" y="156" class="mth-s" text-anchor="middle">horizon ${deg(r.hT)}°</text>
@@ -3852,7 +3853,7 @@ function mthDraw(full=true){const r=mthAt(MTH.doy,MTH.min),sv=$('mthSvg');
    ${r.h>0?`<path d="${arc(aN,aS,44)}" fill="none" stroke="var(--accent-ink)" stroke-width="1.6"/><text x="${(P[0]+60*Math.cos((aN+aS)/2)).toFixed(1)}" y="${(P[1]+60*Math.sin((aN+aS)/2)+6).toFixed(1)}" class="mth-k" text-anchor="middle">θ</text>`:''}
    ${r.h>0?`<path d="M${P[0]-110} ${P[1]} ${arc(Math.PI,aS,110).replace('M','L')}" fill="none" stroke="var(--ink2)" stroke-width="1"/><text x="${P[0]-118}" y="${P[1]+18}" class="mth-s">h = ${deg(r.h)}°</text>`:''}
    <circle cx="${P[0]}" cy="${P[1]}" r="5" fill="#d33"/>
-   ${r.h>0?`<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="16" fill="var(--sun)"/>`:`<text x="400" y="80" class="mth-k" text-anchor="middle">Soleil couché</text>`}`;
+   ${r.h>0?`<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="16" fill="var(--sun)"/>`:`<text x="312" y="60" class="mth-k" text-anchor="middle">Soleil couché</text>`}</g>`;
   const W=v=>`${fmt(v)} W/m²`;
   $('mthV').innerHTML=`<tr><th>Hauteur du soleil h</th><td>${deg(r.h)}°</td></tr><tr><th>Azimut a (sud = 180°)</th><td>${fmt(r.a/RAD)}°</td></tr>
    <tr><th>cos θ (incidence sur le pan)</th><td>${fmt(Math.max(0,r.ci),2)}</td></tr><tr><th>Soleil visible V</th><td>${r.h<=0?'0 (couché)':r.V?'1':'0 (derrière l\'arbre)'}</td></tr>
