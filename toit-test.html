@@ -2969,6 +2969,14 @@ const UNIT={real:'kWh/m²/an',clear:'kWh/m²/an',instant:'W/m²'};
 function roofHide(obj,on){ /* while it is studied, the building is redrawn from its IGN outline up to the measured roof: the generic block and its lines go */
   const had=(RF.hidden||[]).length; (RF.hidden||[]).forEach(o=>o.visible=true); RF.hidden=[]; (RF.edgeKeep||[]).forEach(([m,a])=>m.userData.edgeArr=a); const hadE=(RF.edgeKeep||[]).length; RF.edgeKeep=[];
   if(on&&obj){family(obj).forEach(m=>{if(m.visible){m.visible=false;RF.hidden.push(m);}const rm=m.userData.roofMesh;if(rm&&rm.visible){rm.visible=false;RF.hidden.push(rm);}if(m.userData.edgeArr){RF.edgeKeep.push([m,m.userData.edgeArr]);m.userData.edgeArr=null;}});}
+  /* the generic roofs of the neighbourhood are merged meshes: the triangles over the studied building are folded away (restored on leave) */
+  (RF.rsBak||[]).forEach(([m,arr])=>{m.geometry.attributes.position.array.set(arr);m.geometry.attributes.position.needsUpdate=true;}); RF.rsBak=[];
+  if(on&&obj&&S.roofSetMeshes){const rg=family(obj).flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]);
+    const inB=(x,y)=>rg.some(r=>pointInPoly(x,y,r)||r.some((p,i)=>{const q=r[(i+1)%r.length],dx=q.x-p.x,dy=q.y-p.y,L2=dx*dx+dy*dy||1;let tt=((x-p.x)*dx+(y-p.y)*dy)/L2;tt=Math.max(0,Math.min(1,tt));return Math.hypot(x-p.x-tt*dx,y-p.y-tt*dy)<0.8;}));
+    S.roofSetMeshes.forEach(m=>{const pa=m.geometry.attributes.position,A=pa.array,ix=m.geometry.index?m.geometry.index.array:null,nt=(ix?ix.length:pa.count)/3;let bak=null;
+      for(let t=0;t<nt;t++){const v=[0,1,2].map(k=>ix?ix[t*3+k]:t*3+k);const cxp=(A[v[0]*3]+A[v[1]*3]+A[v[2]*3])/3,cyp=(A[v[0]*3+1]+A[v[1]*3+1]+A[v[2]*3+1])/3;
+        if(inB(cxp,cyp)){if(!bak)bak=Float32Array.from(A);v.forEach(q=>{A[q*3+2]=-200;});}}
+      if(bak){RF.rsBak.push([m,bak]);pa.needsUpdate=true;m.geometry.computeBoundingSphere();}});}
   if(hadE||RF.edgeKeep.length){try{rebuildEdges();}catch(e){}}}
 function roofClear(){RF.tok++;roofHide(null,false);['mesh','vmesh','lines','wall','wlines'].forEach(k=>{const m=RF[k];if(m){scene.remove(m);m.geometry.dispose();RF[k]=null;}});RF.sel=null;RF.cells=null;$('roofBox').hidden=true;}
 async function roofWeather(lat,lon){
@@ -3700,8 +3708,8 @@ function roofModelV4(R){
   const inside=(Rc,u,v)=>u>=Rc[0]&&u<Rc[1]&&v>=Rc[2]&&v<Rc[3];
   const total=(A,B)=>{const ls=IX.map(ix=>leafFit([A[ix[0]],A[ix[1]],B[ix[2]],B[ix[3]]]));let s=0;pts.forEach(p=>{let m=0;for(const l of ls)if(l.type!='none'&&inside(l.R,p[0],p[1])){m=l.pred(p[0],p[1]);break;}s+=Math.min(Math.abs(p[2]-m),CL);});return {s,ls};};
   const CUr=CU.slice(),CVr=CV.slice();let cur=total(CUr,CVr);
-  const refine=()=>{for(let pass=0;pass<3;pass++){let imp=false;const uU=[...new Set(IX.flatMap(ix=>[ix[0],ix[1]]))],uV=[...new Set(IX.flatMap(ix=>[ix[2],ix[3]]))];
-    for(const [arr,used] of [[CUr,uU],[CVr,uV]])for(const k of used){const base=arr[k];let bv=base,bs=cur.s;const us=used.slice().sort((p,q)=>p-q),pi=us.indexOf(k);
+  const refine=(onlyU,onlyV)=>{for(let pass=0;pass<3;pass++){let imp=false;const uU=[...new Set(IX.flatMap(ix=>[ix[0],ix[1]]))],uV=[...new Set(IX.flatMap(ix=>[ix[2],ix[3]]))];
+    for(const [arr,used,only] of [[CUr,uU,onlyU],[CVr,uV,onlyV]])for(const k of used){if(only&&!only.includes(k))continue;const base=arr[k];let bv=base,bs=cur.s;const us=used.slice().sort((p,q)=>p-q),pi=us.indexOf(k);
       for(let d=-0.8;d<=0.801;d+=0.1){const v=base+d;if(pi>0&&v<arr[us[pi-1]]+1)continue;if(pi<us.length-1&&v>arr[us[pi+1]]-1)continue;arr[k]=v;const c=total(CUr,CVr);if(c.s<bs-1e-6){bs=c.s;bv=v;}}
       arr[k]=bv;if(bv!==base){imp=true;cur=total(CUr,CVr);}}if(!imp)break;}};
   refine();
@@ -3709,8 +3717,10 @@ function roofModelV4(R){
   for(let it=0;it<6;it++){const base=cur.s+LAM*IX.length;let bm=null;
     for(let i=0;i<IX.length;i++)for(let j=i+1;j<IX.length;j++){const A=IX[i],B=IX[j];let Mx=null;
       if(A[0]==B[0]&&A[1]==B[1]&&(A[3]==B[2]||B[3]==A[2]))Mx=[A[0],A[1],Math.min(A[2],B[2]),Math.max(A[3],B[3])];else if(A[2]==B[2]&&A[3]==B[3]&&(A[1]==B[0]||B[1]==A[0]))Mx=[Math.min(A[0],B[0]),Math.max(A[1],B[1]),A[2],A[3]];if(!Mx)continue;
-      const save=IX.slice();IX.splice(j,1);IX[i]=Mx;const c=total(CUr,CVr),cc=c.s+LAM*IX.length;if(cc<=base+0.5&&(!bm||cc<bm.cc))bm={cc,IX:IX.slice(),c};IX.length=0;save.forEach(x=>IX.push(x));}
-    if(!bm)break;IX.length=0;bm.IX.forEach(x=>IX.push(x));cur=bm.c;refine();}
+      const save=IX.slice(),sU=CUr.slice(),sV=CVr.slice(),sc=cur;IX.splice(j,1);IX[i]=Mx;cur=total(CUr,CVr);refine([Mx[0],Mx[1]],[Mx[2],Mx[3]]);const cc=cur.s+LAM*IX.length;
+      if(cc<=base+0.5&&(!bm||cc<bm.cc))bm={cc,IX:IX.slice(),c:cur,U:CUr.slice(),V:CVr.slice()};
+      IX.length=0;save.forEach(x=>IX.push(x));sU.forEach((v,q)=>CUr[q]=v);sV.forEach((v,q)=>CVr[q]=v);cur=sc;}
+    if(!bm)break;IX.length=0;bm.IX.forEach(x=>IX.push(x));bm.U.forEach((v,q)=>CUr[q]=v);bm.V.forEach((v,q)=>CVr[q]=v);cur=bm.c;refine();}
   const leaves=cur.ls.filter(l=>l.type!='none'&&(l.R[1]-l.R[0])>=1&&(l.R[3]-l.R[2])>=1);if(!leaves.length)return null;
   /* quality: median |laser - model| over the building */
   const ds=[];pts.forEach(p=>{const lf=leaves.find(l=>inside(l.R,p[0],p[1]));const m=lf?lf.pred(p[0],p[1]):0;const [x,y]=XY(p[0],p[1]);if((p[2]>2||m>2)&&nearRing(x,y,1))ds.push(Math.abs(p[2]-m));});ds.sort((a,b)=>a-b);
