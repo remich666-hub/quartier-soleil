@@ -626,7 +626,7 @@ function setFov(){ // keep a wide horizontal field even on a portrait phone
 
 /* ---------- state ---------- */
 const S={lat:48.9042,lon:2.3055,label:'',alt0:0,meshes:[],obstacles:[],target:null,year:new Date().getFullYear(),doy:1,minute:720,wx:null,win:null,playing:false,building:null};
-window.__S=S;setTimeout(()=>{window.__sun=sun;window.__cam=cam;window.__R=renderer;window.__upd=update;},0);
+window.__S=S;setTimeout(()=>{window.__sun=sun;window.__cam=cam;},0);
 (function initTime(){const p=tzParts(new Date());S.year=p.y;S.doy=Math.round((Date.UTC(p.y,p.m-1,p.d)-Date.UTC(p.y,0,1))/86400000)+1;S.minute=p.h*60+p.mi;$('day').value=S.doy;$('time').value=Math.round(S.minute/5)*5;})();
 function currentInstant(){const md=dayOfYearToMD(S.year,S.doy);return localToInstant(S.year,md.m,md.d,Math.floor(S.minute/60),S.minute%60);}
 function proj(lon,lat){const kx=111320*Math.cos(S.lat*RAD),ky=110574;return [(lon-S.lon)*kx,(lat-S.lat)*ky];}
@@ -2353,7 +2353,7 @@ async function refineWithLidar(){ // real heights for trees and hedges; drops fa
 }
 /* LiDAR HD vegetation grid around the address: MNH every 2 m, crossed with the orthophoto colour → exact hedges and trees */
 async function lidarVegGrid(){
-  const tok=refineToken; const MH=S.lidarP&&await S.lidarP.mnh; if(tok!==refineToken)return; CORE=MH?105:70; const step=2, R=CORE; treeSets.lidar=[]; const n=Math.round(2*R/step)+1; const pts=[];
+  const tok=refineToken; const MH=S.lidarP&&await S.lidarP.mnh; if(tok!==refineToken)return; CORE=MH?150:70; const step=2, R=CORE; treeSets.lidar=[]; const n=Math.round(2*R/step)+1; const pts=[];
   for(let j=0;j<n;j++)for(let i=0;i<n;i++)pts.push({x:-R+i*step,y:R-j*step});
   if(!MH&&!S.loading)status('Végétation LiDAR HD autour de l\'adresse (10–15 s)…');
   const hs=MH?pts.map(p=>MH.max(p.x,p.y,0.5)):await lidarHeights(pts); if(tok!==refineToken)return; if(hs.filter(v=>v!=null).length<n*n*0.5)return; // no LiDAR HD here
