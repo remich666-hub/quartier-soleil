@@ -2967,16 +2967,17 @@ function rampCol(t){t=Math.max(0,Math.min(1,t));for(let i=1;i<RAMP.length;i++){i
 const SCALE={real:[700,1700],clear:[1200,2800],instant:[0,1000]};
 const UNIT={real:'kWh/m²/an',clear:'kWh/m²/an',instant:'W/m²'};
 function roofHide(obj,on){ /* while it is studied, the building is redrawn from its IGN outline up to the measured roof: the generic block and its lines go */
-  const had=(RF.hidden||[]).length; (RF.hidden||[]).forEach(o=>o.visible=true); RF.hidden=[]; (RF.edgeKeep||[]).forEach(([m,a])=>m.userData.edgeArr=a); const hadE=(RF.edgeKeep||[]).length; RF.edgeKeep=[];
+  const had=(RF.hidden||[]).length; (RF.hidden||[]).forEach(o=>o.visible=true); RF.hidden=[]; (RF.edgeKeep||[]).forEach(([m,a])=>m.userData.edgeArr=a); const hadE0=(RF.edgeKeep||[]).length; RF.edgeKeep=[];
   if(on&&obj){family(obj).forEach(m=>{if(m.visible){m.visible=false;RF.hidden.push(m);}const rm=m.userData.roofMesh;if(rm&&rm.visible){rm.visible=false;RF.hidden.push(rm);}if(m.userData.edgeArr){RF.edgeKeep.push([m,m.userData.edgeArr]);m.userData.edgeArr=null;}});}
   /* the generic roofs of the neighbourhood are merged meshes: the triangles over the studied building are folded away (restored on leave) */
-  (RF.rsBak||[]).forEach(([m,arr])=>{m.geometry.attributes.position.array.set(arr);m.geometry.attributes.position.needsUpdate=true;}); RF.rsBak=[];
+  let hadE=hadE0; (RF.rsBak||[]).forEach(([m,arr])=>{if(m.edge){m.edge.set(arr);hadE=1;return;}m.geometry.attributes.position.array.set(arr);m.geometry.attributes.position.needsUpdate=true;}); RF.rsBak=[];
   if(on&&obj&&S.roofSetMeshes){const rg=family(obj).flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]);
     const inB=(x,y)=>rg.some(r=>pointInPoly(x,y,r)||r.some((p,i)=>{const q=r[(i+1)%r.length],dx=q.x-p.x,dy=q.y-p.y,L2=dx*dx+dy*dy||1;let tt=((x-p.x)*dx+(y-p.y)*dy)/L2;tt=Math.max(0,Math.min(1,tt));return Math.hypot(x-p.x-tt*dx,y-p.y-tt*dy)<0.8;}));
     S.roofSetMeshes.forEach(m=>{const pa=m.geometry.attributes.position,A=pa.array,ix=m.geometry.index?m.geometry.index.array:null,nt=(ix?ix.length:pa.count)/3;let bak=null;
       for(let t=0;t<nt;t++){const v=[0,1,2].map(k=>ix?ix[t*3+k]:t*3+k);const cxp=(A[v[0]*3]+A[v[1]*3]+A[v[2]*3])/3,cyp=(A[v[0]*3+1]+A[v[1]*3+1]+A[v[2]*3+1])/3;
         if(inB(cxp,cyp)){if(!bak)bak=Float32Array.from(A);v.forEach(q=>{A[q*3+2]=-200;});}}
-      if(bak){RF.rsBak.push([m,bak]);pa.needsUpdate=true;m.geometry.computeBoundingSphere();}});}
+      if(bak){RF.rsBak.push([m,bak]);pa.needsUpdate=true;m.geometry.computeBoundingSphere();}});
+    (S.roofEdgeParts||[]).forEach(A=>{let bak=null;for(let q=0;q+5<A.length;q+=6){if(inB((A[q]+A[q+3])/2,(A[q+1]+A[q+4])/2)){if(!bak)bak=Float32Array.from(A);A[q+2]=-200;A[q+5]=-200;}}if(bak){RF.rsBak.push([{edge:A},bak]);hadE=1;}});}
   if(hadE||RF.edgeKeep.length){try{rebuildEdges();}catch(e){}}}
 function roofClear(){RF.tok++;roofHide(null,false);['mesh','vmesh','lines','wall','wlines'].forEach(k=>{const m=RF[k];if(m){scene.remove(m);m.geometry.dispose();RF[k]=null;}});RF.sel=null;RF.cells=null;$('roofBox').hidden=true;}
 async function roofWeather(lat,lon){
