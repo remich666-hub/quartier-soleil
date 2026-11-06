@@ -2955,7 +2955,7 @@ function qsV4One(fam){
   fam.forEach(o=>{[...o.children].forEach(c=>{if(c.userData.hiRoof)return;o.remove(c);goneObs.add(c);c.geometry.dispose();});
     if(o.userData.roofMesh){scene.remove(o.userData.roofMesh);goneObs.add(o.userData.roofMesh);o.userData.roofMesh=null;}
     const ud=o.userData,h=top.get(o),outer=ud.rings[0],holes=ud.rings.slice(1),shape=new THREE.Shape(outer);holes.forEach(hr=>shape.holes.push(new THREE.Path(hr)));
-    const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});fitWallUVs(geo,h,ud.floors||Math.max(1,Math.round(h/3)));geo.computeBoundingBox();geo.computeBoundingSphere();
+    const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});fitWallUVs(geo,h,Math.max(ud.floors||1,Math.round(h/2.9))); /* a tower drawn taller than its IGN count keeps ~3 m storeys of windows */geo.computeBoundingBox();geo.computeBoundingSphere();
     o.geometry.dispose();o.geometry=geo;
     const eg=new THREE.EdgesGeometry(geo,25),arr=eg.attributes.position.array,off=new Float32Array(arr.length);for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+ud.zBase-SINK;}eg.dispose();ud.edgeArr=off;
     QV4.rings.push(...ud.rings.slice(0,1));});
