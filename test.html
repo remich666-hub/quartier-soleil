@@ -3509,9 +3509,9 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
   setInterval(flatten,1200);
   /* the parcel of the selected building, draped on the ground */
   let lotMesh=null,lotKey=null;
-  const showLot=m=>{try{const L=S.lot;if(!L||!L.PL)return;const ids=family(m).map(o=>o.userData.bid).filter(Boolean);let pid=null;for(const b of ids){const P=L.par.get(b);if(P&&P.size){pid=[...P][0];break;}}
+  const showLot=m=>{try{const L=S.lot;if(!L||!L.PL)return;const ids=family(m).map(o=>o.userData.bid).filter(Boolean),set=new Set();ids.forEach(b=>{const P=L.par.get(b);if(P)P.forEach(x=>set.add(x));});const pid=set.size?[...set].sort().join('|'):null;
       if(pid===lotKey)return;if(lotMesh){scene.remove(lotMesh);lotMesh.geometry.dispose();lotMesh=null;}lotKey=pid;if(!pid)return;
-      const P=[],N=[];L.PL.filter(p=>p.id===pid).forEach(p=>{const r=p.r.map(q=>new THREE.Vector2(q.x,q.y));let tr;try{tr=THREE.ShapeUtils.triangulateShape(r,[]);}catch(e){return;}drapeTris(tr.map(t=>t.map(k=>[r[k].x,r[k].y])),0.12,P,N);});
+      const P=[],N=[];L.PL.filter(p=>set.has(p.id)).forEach(p=>{const r=p.r.map(q=>new THREE.Vector2(q.x,q.y));let tr;try{tr=THREE.ShapeUtils.triangulateShape(r,[]);}catch(e){return;}drapeTris(tr.map(t=>t.map(k=>[r[k].x,r[k].y])),0.32,P,N);});
       if(!P.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
       lotMesh=new THREE.Mesh(g,lotMat);lotMesh.receiveShadow=true;lotMesh.renderOrder=1;lotMesh.raycast=()=>{};scene.add(lotMesh);}catch(e){console.warn('lot',e);}};
   try{const _hi=setHi;setHi=function(m,on){_hi(m,on);if(on&&m)showLot(m);};}catch(e){}
