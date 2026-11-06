@@ -3785,6 +3785,50 @@ async function qsHouseFirst(){
   setInterval(()=>{try{const u=U();if(!u)return;const up=sun.position.z-sun.target.position.z>0;u.uScanC.value.set(up?0xff8a5c:0xff7a8a);}catch(e){}},1000);
 })();
 
+/* ===== Selection outline: a thick line around the outside of the chosen building (and of the chosen window), traced on the screen
+   from a mask of their silhouette. Replaces the façade rectangle. ===== */
+(()=>{try{
+  const COL=new THREE.Color(0xfbe3c4), LH=7, LW=8;
+  try{facadeLine.layers.set(31);}catch(e){} /* the old rectangle: never drawn */
+  const maskH=new THREE.MeshBasicMaterial({color:0xff0000,side:THREE.DoubleSide,fog:false,toneMapped:false});
+  const maskW=new THREE.MeshBasicMaterial({color:0x00ff00,side:THREE.DoubleSide,fog:false,toneMapped:false,depthTest:false,depthWrite:false,blending:THREE.AdditiveBlending,transparent:true});
+  const winQ=new THREE.Mesh(new THREE.PlaneGeometry(1.15,1.35),maskW);winQ.layers.set(LW);winQ.frustumCulled=false;scene.add(winQ);
+  const fsCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1),fsScene=new THREE.Scene();
+  const fsMat=new THREE.ShaderMaterial({uniforms:{tM:{value:null},px:{value:new THREE.Vector2(1,1)},col:{value:COL},aH:{value:1},aW:{value:1},rH:{value:3},rW:{value:2}},
+    transparent:true,depthTest:false,depthWrite:false,
+    vertexShader:'varying vec2 vU;void main(){vU=uv;gl_Position=vec4(position.xy,0.,1.);}',
+    fragmentShader:`uniform sampler2D tM;uniform vec2 px;uniform vec3 col;uniform float aH,aW,rH,rW;varying vec2 vU;
+      void main(){vec4 c=texture2D(tM,vU);float hH=0.,hW=0.;
+        for(int i=-6;i<=6;i++)for(int j=-6;j<=6;j++){vec2 o=vec2(float(i),float(j));float d=length(o);if(d>rH+1.&&d>rW+1.)continue;vec4 s=texture2D(tM,vU+o*px);
+          hH=max(hH,s.r*(1.-smoothstep(rH-0.5,rH+0.5,d)));hW=max(hW,s.g*(1.-smoothstep(rW-0.5,rW+0.5,d)));}
+        float a=max(hH*(1.-step(0.5,c.r))*aH,hW*(1.-step(0.5,c.g))*aW);if(a<0.01)discard;gl_FragColor=vec4(col,a);}`});
+  fsScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),fsMat));
+  let rt=null;const sz=new THREE.Vector2(),cc=new THREE.Color();let tagged=new Set(),aWin=0;
+  const R0=renderer.render.bind(renderer);
+  const tag=objs=>{const nx=new Set();objs.forEach(o=>{if(o.isMesh)nx.add(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal)nx.add(c);});});
+    tagged.forEach(o=>{if(!nx.has(o))o.layers.disable(LH);});nx.forEach(o=>o.layers.enable(LH));tagged=nx;};
+  const draw=c=>{
+    const w=S.win,b=(w&&w.obj)||S.building||S.addrTarget;if(!b||!b.parent||cam.mode==='window'){if(tagged.size)tag([]);return;}
+    tag(family(b));
+    /* the window: a pane on the wall where the window is, seen only from the side it faces */
+    let front=0;if(w&&w.pos&&w.normal){const n=w.normal;winQ.position.set(w.pos.x-n.x*0.4,w.pos.y-n.y*0.4,w.pos.z);winQ.lookAt(winQ.position.x+n.x,winQ.position.y+n.y,winQ.position.z);
+      front=n.x*(c.position.x-winQ.position.x)+n.y*(c.position.y-winQ.position.y)>0?1:0;}
+    aWin+=((w&&w.pos?front:0)-aWin)*0.15;winQ.visible=aWin>0.01;
+    renderer.getDrawingBufferSize(sz);const W=Math.max(1,sz.x>>1),H=Math.max(1,sz.y>>1);
+    if(!rt||rt.width!==W||rt.height!==H){if(rt)rt.dispose();rt=new THREE.WebGLRenderTarget(W,H,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});}
+    const bg=scene.background,ov=scene.overrideMaterial,lm=c.layers.mask,au=renderer.autoClear,su=renderer.shadowMap.autoUpdate,sn=renderer.shadowMap.needsUpdate,ca=renderer.getClearAlpha();renderer.getClearColor(cc);
+    scene.background=null;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=false;
+    renderer.setRenderTarget(rt);renderer.setClearColor(0x000000,1);renderer.clear(true,true,false);renderer.autoClear=false;
+    c.layers.set(LH);scene.overrideMaterial=maskH;R0(scene,c);
+    if(winQ.visible){c.layers.set(LW);scene.overrideMaterial=null;R0(scene,c);}
+    c.layers.mask=lm;scene.overrideMaterial=ov;scene.background=bg;renderer.setRenderTarget(null);renderer.setClearColor(cc,ca);
+    const dpr=renderer.getPixelRatio();fsMat.uniforms.tM.value=rt.texture;fsMat.uniforms.px.value.set(1/W,1/H);
+    fsMat.uniforms.rH.value=Math.min(5.5,Math.max(1.5,3*dpr/2));fsMat.uniforms.rW.value=Math.min(4.5,Math.max(1.2,2.2*dpr/2));
+    fsMat.uniforms.aH.value=w&&w.pos?0.55:1;fsMat.uniforms.aW.value=aWin;
+    R0(fsScene,fsCam);renderer.autoClear=au;renderer.shadowMap.autoUpdate=su;renderer.shadowMap.needsUpdate=sn;};
+  renderer.render=function(s,c){R0(s,c);if(s===scene&&c===camera&&!renderer.getRenderTarget()){try{draw(c);}catch(e){}}};
+}catch(e){console.warn('outline',e);}})();
+
 /* ===== the loading veil plays the home page's window (copy of home-hero.js, own ids) ===== */
 window.QS_SUN=window.QS_SUN||3;
 /* hero: a window and only the light through it, drawn entirely in fine grain like the reference —
