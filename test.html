@@ -4238,7 +4238,7 @@ function qsV5Build(M,fam,main){const L5=M.L5;if(!L5||!PCSYNC)return null;const P
   const L=L5.leaves.map(l=>{const c=Object.assign({},l);c.R=l.R.map(r3);c.x=l.x?l.x.slice():l.x;c.pred=qsV5Pred(c);return c;});
   qsV5Snap(L,fam,M,log);
   /* no roof under 2.2 m above the ground (a laser fit that took in the yard or a hedge): the low edge is lifted, the high one kept */
-  {const zmin=Math.min(...fam.map(o=>o.userData.zBase))+2.2+A0-L5.Z0;L.forEach((l,i)=>{if(l.pw)return;const x=l.x,[a,b,c,d]=l.R;let ch=false;
+  {const zmin=Math.min(...fam.map(o=>o.userData.zBase))+2.2+A0-L5.Z0;L.forEach((l,i)=>{if(l.pw||l.shared)return;const x=l.x,[a,b,c,d]=l.R;let ch=false;
     if(l.type=='flat'||l.type=='hip'||l.type=='mansard'){if(x[0]<zmin){x[0]=zmin;ch=true;}}
     else if(l.type=='shedU'||l.type=='shedV'){const w=l.type=='shedU'?b-a:d-c,z0=x[0],z1=x[0]+x[1]*w;if(Math.min(z0,z1)<zmin){ch=true;if(Math.max(z0,z1)<=zmin+0.05){l.type='flat';l.x=[zmin];}else if(z0<z1)l.x=[zmin,(z1-zmin)/w];else l.x=[z0,(zmin-z0)/w];}}
     else if(l.type=='gableU'||l.type=='gableV'){const lo=l.type=='gableU'?c:a,hi=l.type=='gableU'?d:b,e1=x[0]-x[1]*(l.r-lo),e2=x[0]-x[2]*(hi-l.r);
