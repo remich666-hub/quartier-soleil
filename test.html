@@ -3291,7 +3291,7 @@ function qsWeld(D,OUT,th){const tol=0.25,reps=[];let nid=0;
     /* pans meeting at this point are given one height only when they share an edge here (not across a corner), and are close in height */
     const nb=d=>{const s=new Set();d.rings.forEach(R=>{for(let k=0;k<R.length;k++)if(R[k].id===id){s.add(R[(k+1)%R.length].id);s.add(R[(k+R.length-1)%R.length].id);}});return s;};
     const P=L.map(x=>({x,nb:nb(x.d)})),par=P.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i]));
-    for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){const a=P[i],b=P[j];if(![...a.nb].some(v=>b.nb.has(v)))continue;if(Math.abs(a.x.z-b.x.z)<(same(a.x.d,b.x.d)?0.08:0.6))par[f(i)]=f(j);}
+    for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){const a=P[i],b=P[j];if(![...a.nb].some(v=>b.nb.has(v)))continue;if(Math.abs(a.x.z-b.x.z)<0.05)par[f(i)]=f(j);} /* only where their planes already meet: each pan stays a true plane, a larger gap gets its step wall */
     const G2=new Map();P.forEach((p,i)=>{const r=f(i);if(!G2.has(r))G2.set(r,[]);G2.get(r).push(p.x);});G2.forEach(gr=>{g=gr;flush();});});
   const byXY=new Map();reps.forEach(r=>byXY.set(r.x.toFixed(4)+','+r.y.toFixed(4),r));
   D.forEach(d=>{d.vzOf=q=>{const r=byXY.get(q[0].toFixed(4)+','+q[1].toFixed(4));return r&&d.vz.has(r.id)?d.vz.get(r.id):d.zf(q[0],q[1]);};});}
