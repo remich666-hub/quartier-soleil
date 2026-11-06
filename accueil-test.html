@@ -430,8 +430,8 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
     ctx.globalCompositeOperation='overlay';ctx.globalAlpha=dk?0.2:0.16;ctx.fillStyle=pat;ctx.fillRect(g.gx0,g.gy0,g.gw,g.gh);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
     ctx.restore();
     /* the frame's edge dissolving into grain, warmer on the sun's side */
-    const LX=lit>=nt?sunX:mx,LY=lit>=nt?sunY:my,LI=Math.max(lit,nt),LS=g.ww*0.42,cold=[200,208,255];
-    for(const [px,py,nx,r] of edge){const w=LI*Math.exp(-Math.hypot(px-LX,py-LY)/LS);if(r>w*1.4)continue;const t=Math.max(0,Math.min(1,(py-g.y0)/g.wh));
+    const LX=lit>=nt?sunX:mx,LY=lit>=nt?sunY:my,LI=Math.max(lit,nt),LS=g.ww*0.28,cold=[200,208,255];
+    for(const [px,py,nx,r] of edge){const w=LI*Math.exp(-Math.pow(Math.hypot(px-LX,py-LY)/LS,1.6));if(r>w)continue;const t=Math.max(0,Math.min(1,(py-g.y0)/g.wh));
       ctx.fillStyle=lit>=nt?(r<0.35*w?rgb(pink,0.75):rgb(mix(warm,mix(top,bot,t),0.25),0.85)):rgb(mix(cold,mix(top,bot,t),0.3),0.8);ctx.fillRect(px,py,(r<0.3?2:1.2)/DPR,(r<0.3?2:1.2)/DPR);}
     /* the clock */
     const hh=Math.floor(hour)%24,mm=Math.floor((hour%1)*60/10)*10;if(clockT)clockT.textContent=String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
