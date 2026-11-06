@@ -3286,14 +3286,17 @@ function qsRelax(D,reps,th){if(th==null)return;const fam=[0,1,2,3].map(k=>th+k*M
     if(a.out&&b.out)continue;let ang=Math.atan2(b.y-a.y,b.x-a.x),best=null,bd=0.21;fam.forEach(f=>{let dv=((ang-f)%Math.PI+Math.PI)%Math.PI;dv=Math.min(dv,Math.PI-dv);if(dv<bd){bd=dv;best=f;}});
     if(best!=null&&bd>1e-4)ed.push({a,b,f:best});}}));
   if(!ed.length)return;const o0=new Map();reps.forEach(r=>o0.set(r,[r.x,r.y]));
-  for(let it=0;it<40;it++){const acc=new Map();
-    ed.forEach(({a,b,f})=>{const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,h=Math.hypot(b.x-a.x,b.y-a.y)/2;let dx=Math.cos(f),dy=Math.sin(f);if(dx*(b.x-a.x)+dy*(b.y-a.y)<0){dx=-dx;dy=-dy;}
-      [[a,mx-dx*h,my-dy*h],[b,mx+dx*h,my+dy*h]].forEach(([r,x,y])=>{if(r.out)return;const q=acc.get(r)||[0,0,0];q[0]+=x;q[1]+=y;q[2]++;acc.set(r,q);});});
-    acc.forEach((q,r)=>{let x=q[0]/q[2],y=q[1]/q[2];if(r.seg){const [a,b]=r.seg,ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2>1e-6){const t=Math.max(0,Math.min(1,((x-a[0])*ex+(y-a[1])*ey)/L2));x=a[0]+ex*t;y=a[1]+ey*t;}}
-      const o=o0.get(r),dd=Math.hypot(x-o[0],y-o[1]);if(dd>0.6){x=o[0]+(x-o[0])*0.6/dd;y=o[1]+(y-o[1])*0.6/dd;}r.x=x;r.y=y;});}
+  const place=(r,x,y)=>{if(r.seg){const [a,b]=r.seg,ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2>1e-6){const t=Math.max(0,Math.min(1,((x-a[0])*ex+(y-a[1])*ey)/L2));x=a[0]+ex*t;y=a[1]+ey*t;}}
+    const o=o0.get(r),dd=Math.hypot(x-o[0],y-o[1]);if(dd>0.8){x=o[0]+(x-o[0])*0.8/dd;y=o[1]+(y-o[1])*0.8/dd;}r.x=x;r.y=y;};
+  /* one edge at a time, turned exactly onto its family (about its fixed end if it has one, else about its middle), many passes */
+  for(let it=0;it<300;it++){let mv=0;ed.forEach(({a,b,f})=>{let dx=Math.cos(f),dy=Math.sin(f);const vx=b.x-a.x,vy=b.y-a.y;if(dx*vx+dy*vy<0){dx=-dx;dy=-dy;}const l=dx*vx+dy*vy;
+      const ax=a.x,ay=a.y,bx=b.x,by=b.y;
+      if(a.out&&b.out)return;if(a.out)place(b,a.x+dx*l,a.y+dy*l);else if(b.out)place(a,b.x-dx*l,b.y-dy*l);
+      else{const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;place(a,mx-dx*l/2,my-dy*l/2);place(b,mx+dx*l/2,my+dy*l/2);}
+      mv=Math.max(mv,Math.hypot(a.x-ax,a.y-ay),Math.hypot(b.x-bx,b.y-by));});if(mv<1e-4)break;}
   /* the measure kept for the check: worst remaining deviation of a shared edge from its family */
   let worst=0;ed.forEach(({a,b,f})=>{let dv=((Math.atan2(b.y-a.y,b.x-a.x)-f)%Math.PI+Math.PI)%Math.PI;dv=Math.min(dv,Math.PI-dv);worst=Math.max(worst,dv);});
-  (QV4.relax=QV4.relax||[]).push({edges:ed.length,worstDeg:+(worst*180/Math.PI).toFixed(2)});}
+  (QV4.relax=QV4.relax||[]).push({edges:ed.length,worstDeg:+(worst*180/Math.PI).toFixed(2),list:ed.map(({a,b,f})=>{let dv=((Math.atan2(b.y-a.y,b.x-a.x)-f)%Math.PI+Math.PI)%Math.PI;dv=Math.min(dv,Math.PI-dv);return [+(dv*180/Math.PI).toFixed(1),+Math.hypot(b.x-a.x,b.y-a.y).toFixed(1),!!a.out,!!b.out,!!a.seg,!!b.seg];}).filter(x=>x[0]>0.3)});}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
