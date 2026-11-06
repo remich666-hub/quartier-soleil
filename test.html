@@ -385,7 +385,7 @@ async function loadLot(lat,lon){ const T0=S.T;
         for(const P of (GB.get(gk(Math.floor(x/20),Math.floor(y/20)))||[])){if(x<P.x0||x>P.x1||y<P.y0||y>P.y1||!pointInPoly(x,y,P.r))continue;votes.set(P.id,(votes.get(P.id)||0)+1);break;}}
       if(votes.size){const top=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0][0];par.set(u.bid,new Set([top]));}});
     const adrPt=new Map(); ab.forEach(f=>{const p=f.properties;if(!p.id_bat||!p.id_adr)return;(adr.get(p.id_bat)||adr.set(p.id_bat,new Set()).get(p.id_bat)).add(p.id_adr);const c=f.geometry&&f.geometry.coordinates;if(c&&c[0]&&!adrPt.has(p.id_adr))adrPt.set(p.id_adr,c[0]);});
-    if(!par.size)return; const adrPar=new Set(); const parBats=new Map(); adr.forEach((_,b)=>{const P=par.get(b);if(P)P.forEach(x=>{adrPar.add(x);(parBats.get(x)||parBats.set(x,[]).get(x)).push(b);});}); S.lot={par,adr,adrPar,adrPt,parBats,lab:new Map()}; S.T.lot=performance.now();
+    if(!par.size)return; const adrPar=new Set(); const parBats=new Map(); adr.forEach((_,b)=>{const P=par.get(b);if(P)P.forEach(x=>{adrPar.add(x);(parBats.get(x)||parBats.set(x,[]).get(x)).push(b);});}); S.lot={par,adr,adrPar,adrPt,parBats,lab:new Map(),PL}; S.T.lot=performance.now();
     if(S.target)setHi(S.target,false); linkAnnexes(); if(S.target)setHi(S.target,true);
   }catch(e){}}
 /* buildings touching a house that belong to the same lot (garage, shed, veranda: separate IGN footprints) are one selection, one colour.
@@ -3491,6 +3491,31 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
     hemi.color=day>0.05?top.clone().lerp(new THREE.Color(0xffffff),0.6):new THREE.Color(0x8f9bd0);hemi.groundColor=new THREE.Color(0xd9d6e6).multiplyScalar(0.55+0.45*day);
     scene.fog=new THREE.FogExp2(hor.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.00045);
     root.style.setProperty('--aura-a',hex(a));root.style.setProperty('--aura-b',hex(b));root.style.setProperty('--aura-c',hex(c));};}catch(e){console.warn('theme sky',e);}
+})();
+/* ===== the model kept pure: everything white and light grey (no green, no pool texture); only the studied house (night blue)
+   and its cadastral parcel (pale peach) are in colour. The aerial photo button still shows the real photo. ===== */
+(function(){
+  const PALE=new THREE.Color(0xe9ebf2).convertSRGBToLinear(),PALE2=new THREE.Color(0xdfe2ec).convertSRGBToLinear(),TRUNK=new THREE.Color(0xd2d5df).convertSRGBToLinear();
+  const vegMat=new THREE.MeshLambertMaterial({color:PALE}),vegMatD=new THREE.MeshLambertMaterial({color:PALE,side:THREE.DoubleSide}),trunkMat=new THREE.MeshLambertMaterial({color:TRUNK});
+  const lotMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xf6d2c0).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-20});
+  const plainMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xeef0f5).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
+  try{ROOF.tuile.color.set(0xdcdde6);ROOF.ardoise.color.set(0xc9ccd8);ROOF.zinc.color.set(0xd6d8e2);ROOF.autre.color.set(0xdfe1e9);}catch(e){}
+  const swap=(m,mat)=>{if(m&&m.material!==mat){m.material=mat;if(m.isInstancedMesh&&m.instanceColor)m.instanceColor=null;}};
+  function flatten(){if(typeof photoMode!=='undefined'&&photoMode)return;
+    try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
+    try{groundMat.color.copy(PALE2);if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}if(groundMat.map&&!photoMode){groundMat.map=null;groundMat.needsUpdate=true;}}catch(e){}
+    try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(o.material===poolMat||(o.isGroup||o.type==='Group'))o.visible=false;});}catch(e){}
+    try{scene.traverse(o=>{if(o.material===poolMat)o.visible=false;});}catch(e){}}
+  setInterval(flatten,1200);
+  /* the parcel of the selected building, draped on the ground */
+  let lotMesh=null,lotKey=null;
+  const showLot=m=>{try{const L=S.lot;if(!L||!L.PL)return;const ids=family(m).map(o=>o.userData.bid).filter(Boolean);let pid=null;for(const b of ids){const P=L.par.get(b);if(P&&P.size){pid=[...P][0];break;}}
+      if(pid===lotKey)return;if(lotMesh){scene.remove(lotMesh);lotMesh.geometry.dispose();lotMesh=null;}lotKey=pid;if(!pid)return;
+      const P=[],N=[];L.PL.filter(p=>p.id===pid).forEach(p=>{const r=p.r.map(q=>new THREE.Vector2(q.x,q.y));let tr;try{tr=THREE.ShapeUtils.triangulateShape(r,[]);}catch(e){return;}drapeTris(tr.map(t=>t.map(k=>[r[k].x,r[k].y])),0.12,P,N);});
+      if(!P.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+      lotMesh=new THREE.Mesh(g,lotMat);lotMesh.receiveShadow=true;lotMesh.renderOrder=1;lotMesh.raycast=()=>{};scene.add(lotMesh);}catch(e){console.warn('lot',e);}};
+  try{const _hi=setHi;setHi=function(m,on){_hi(m,on);if(on&&m)showLot(m);};}catch(e){}
+  setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent)showLot(m);else if(lotMesh&&!m){scene.remove(lotMesh);lotMesh=null;lotKey=null;}}catch(e){}},1500);
 })();
 
 /* ===== Quartier Soleil v5: the v4 roof model, own copy (Toit Soleil untouched), faster and returning its rectangles ===== */
