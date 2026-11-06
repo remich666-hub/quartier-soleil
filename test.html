@@ -3822,7 +3822,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
    window to move there, touch the roof or the button to go back to the model), and a hint only when nothing has been touched ===== */
 (()=>{try{
   const st=document.createElement('style');st.textContent=`
-  #qsFade{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:30;background:var(--qs-fade,#f3effa);transition:opacity .22s cubic-bezier(.65,0,.35,1)}
+  #qsFade{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:30;background:var(--qs-fade,#f3effa);transition:opacity .12s cubic-bezier(.65,0,.35,1)}
   #qsFade.on{opacity:1}
   #qsMiniBox{position:fixed;top:calc(env(safe-area-inset-top,0px) + 76px);left:max(12px,env(safe-area-inset-left,0px));width:min(36vw,190px);aspect-ratio:1;border-radius:18px;
     box-shadow:0 10px 30px rgba(40,40,90,.28),inset 0 0 0 1px rgba(255,255,255,.55);z-index:25;touch-action:none;cursor:grab;overflow:hidden}
@@ -3843,23 +3843,11 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   box.hidden=true;back.hidden=true;see.hidden=true;back.type='button';see.type='button';
   const isDay=()=>{try{return sun.position.z-sun.target.position.z>0;}catch(e){return true;}};
   const fade=(mid)=>new Promise(res=>{fadeEl.style.setProperty('--qs-fade',isDay()?'#f3effa':'#1d2048');fadeEl.classList.add('on');
-    setTimeout(()=>{try{mid&&mid();}catch(e){console.warn(e);}requestAnimationFrame(()=>{fadeEl.classList.remove('on');setTimeout(res,240);});},230);});
+    setTimeout(()=>{try{mid&&mid();}catch(e){console.warn(e);}requestAnimationFrame(()=>{fadeEl.classList.remove('on');setTimeout(res,130);});},125);});
   const wrap=(th,ref)=>{while(th-ref>Math.PI)th-=2*Math.PI;while(th-ref<-Math.PI)th+=2*Math.PI;return th;};
-  /* 1. the flight: the camera turns to face the façade, comes down to the window and stops just in front of it; a short veil, then the view from inside */
-  let busy=false,back0=null;const _set=setMode;
-  setMode=function(mode){
-    if(busy)return;
-    if(mode==='window'&&cam.mode==='orbit'&&S.win&&S.win.pos){
-      const n=S.win.normal;back0={t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist};busy=true;
-      camTw={t0:performance.now(),dur:1300,ease:'quint',a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:S.win.pos.clone(),th:wrap(Math.atan2(n.x,n.y),cam.theta),ph:0.08,d:3.2},
-        onEnd:()=>{fade(()=>{_set('window');}).then(()=>{busy=false;});}};
-      return;}
-    if(mode==='orbit'&&cam.mode==='window'){busy=true;
-      fade(()=>{_set('orbit');const w=S.win;if(w&&w.pos){const n=w.normal;cam.target.copy(w.pos);cam.theta=Math.atan2(n.x,n.y);cam.phi=0.08;cam.dist=3.2;applyCam();
-        const b=back0||{t:w.pos.clone(),th:cam.theta,ph:0.55,d:45};
-        camTw={t0:performance.now()+120,dur:1150,ease:'quint',a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:b.t.clone(),th:wrap(b.th,cam.theta),ph:b.ph,d:b.d}};}}).then(()=>{busy=false;});
-      return;}
-    return _set(mode);};
+  /* 1. model <-> window: a very short veil, no flight (the view changes behind it) */
+  let busy=false;const _set=setMode;
+  setMode=function(mode){if(busy)return;if((mode==='window')!==(cam.mode==='window')&&(mode!=='window'||(S.win&&S.win.pos))){busy=true;fade(()=>_set(mode)).then(()=>{busy=false;});return;}return _set(mode);};
   back.addEventListener('click',()=>setMode('orbit'));
   see.addEventListener('click',()=>{hint.classList.remove('on');setMode('window');});
   /* 2. the house in miniature: only the studied house (its own layer), turned by the finger, drawn in a corner of the same canvas */
