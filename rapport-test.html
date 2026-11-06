@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rapport d'ensoleillement · Quartier Soleil</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --desk:#e9ecf7; --sheet:#fdfdff; --raised:#f1f3fa;
+  --ink:#151a33; --ink2:#474e6d; --muted:#7a809b; --line:rgba(21,26,51,.09); --line2:rgba(21,26,51,.16);
+  --sun:#f0773a; --sun-ink:#c2521c; --sun-soft:#fbe3d8; --shade:#cfd5ea; --shade-ink:#8f97b8; --sky:#eef1fb;
+  --sans:"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"Instrument Serif",ui-serif,Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --ease:cubic-bezier(.22,1,.36,1);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--desk);color:var(--ink);font:400 14px/1.5 var(--sans);font-feature-settings:"tnum" 1;
+  padding:32px max(16px,env(safe-area-inset-right,0px)) 48px max(16px,env(safe-area-inset-left,0px))}
+img{max-width:100%;display:block}
+.toolbar{max-width:210mm;margin:0 auto 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.toolbar .note{color:var(--ink2);font-size:13px}
+.toolbar #tbNote{order:3;flex-basis:100%}
+.btn{font:500 14px/1 var(--sans);height:40px;padding:0 16px;border-radius:10px;border:1px solid var(--line2);background:var(--sheet);color:var(--ink);cursor:pointer;transition:background-color .15s var(--ease),border-color .15s var(--ease)}
+.btn:hover{background:var(--raised)}
+.btn.primary{background:linear-gradient(100deg,#f0773a,#e8678e);color:#fff;border-color:transparent}
+.btn.primary:hover{background:#2a3050}
+
+.page{width:210mm;min-height:297mm;margin:0 auto 24px;background:var(--sheet);border-radius:4px;box-shadow:0 1px 2px rgba(21,26,51,.06),0 12px 32px rgba(21,26,51,.08);
+  padding:16mm 16mm 14mm;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.page>main{flex:1;display:flex;flex-direction:column;gap:20px}
+.head{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:24px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;letter-spacing:-.005em}
+.brand svg{display:block}
+.meta,.mono{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.01em}
+.foot{display:flex;justify-content:space-between;padding-top:10px;margin-top:20px;border-top:1px solid var(--line)}
+h1,h2,h3{margin:0;font-weight:500;text-wrap:balance}
+h2{font-size:24px;line-height:1.15;letter-spacing:-.01em}
+h3{font-size:15px;line-height:1.3}
+.kicker{font-size:13px;color:var(--sun-ink);font-weight:500;margin-bottom:6px}
+p{margin:0;max-width:68ch}
+.lead{font-size:15px;color:var(--ink2);line-height:1.55}
+.small{font-size:12px;color:var(--ink2);line-height:1.5}
+
+/* cover */
+.cover h1{font-size:30px;line-height:1.12;letter-spacing:-.015em;max-width:24ch}
+.cover .win{margin-top:8px;color:var(--ink2);font-size:15px}
+.shot{border-radius:10px;overflow:hidden;background:var(--raised);aspect-ratio:1200/760;border:1px solid var(--line)}
+.shot img{width:100%;height:100%;object-fit:cover}
+.cover-page .shot{aspect-ratio:1200/700}
+.hero{display:grid;grid-template-columns:1.25fr 1fr;gap:24px;align-items:end;padding-top:4px}
+.big{font-family:var(--serif);font-size:88px;line-height:.9;letter-spacing:-.02em;color:var(--ink)}
+.big small{font-size:44px;margin-left:2px}
+.big-cap{margin-top:10px;font-size:15px;color:var(--ink2);max-width:30ch}
+.stats{display:grid;grid-template-columns:1fr;gap:0;border-top:1px solid var(--line)}
+.stat{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.stat .l{color:var(--ink2);font-size:13px}
+.stat .v{font-family:var(--mono);font-size:15px;font-weight:500;white-space:nowrap}
+.verdict{background:var(--raised);border-radius:10px;padding:16px 18px;display:flex;gap:14px;align-items:flex-start}
+.verdict p{font-size:14px;line-height:1.55}
+.verdict b{font-weight:600}
+
+/* key dates */
+.dates{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--line)}
+.date{display:grid;grid-template-columns:150px 92px 1fr;gap:16px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.date .n{font-weight:500}
+.date .d{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.date .h{font-family:var(--serif);font-size:34px;line-height:1}
+.date .h small{font-size:18px}
+.bar24{position:relative}
+.bar24 svg{display:block;width:100%;height:auto}
+.date .r{font-size:12px;color:var(--ink2);margin-top:4px;font-family:var(--mono)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.figure{display:flex;flex-direction:column;gap:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-weight:500;color:var(--muted);font-size:12px;text-align:left;padding:0 8px 8px 0;border-bottom:1px solid var(--line2);font-family:var(--sans)}
+.tablewrap{overflow-x:auto;margin:0 -2px}
+.tablewrap table{min-width:520px}
+td{padding:9px 8px 9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+td.n{text-align:right;font-family:var(--mono);white-space:nowrap}
+th.n{text-align:right;white-space:nowrap}
+.tag{display:inline-flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.views{display:grid;grid-template-columns:1fr;gap:16px}
+.pano svg{border-radius:10px;overflow:hidden}
+.views figure{margin:0}
+.views .shot{aspect-ratio:1200/520}
+.views figcaption{font-size:12px;color:var(--ink2);margin-top:6px}
+.views figcaption b{font-weight:500;color:var(--ink)}
+.method{columns:2;column-gap:28px}
+.method>div{break-inside:avoid;margin-bottom:16px}
+.method p{font-size:13px;color:var(--ink2);line-height:1.55}
+.method h3{margin-bottom:4px}
+.src{list-style:none;padding:0;margin:0;font-size:12.5px;color:var(--ink2)}
+.src li{padding:8px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:12px}
+.src li span:last-child{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+
+.loading{max-width:210mm;margin:80px auto;text-align:center;color:var(--ink2)}
+.feedback{max-width:210mm;margin:8px auto 24px;background:var(--sheet);border-radius:12px;padding:28px 32px;box-shadow:0 1px 2px rgba(21,26,51,.06);display:flex;flex-direction:column;gap:8px}
+.feedback a{color:var(--sun-ink)}
+@media print{.feedback{display:none!important}}
+@media (max-width:860px){.feedback{padding:24px 20px}}
+
+@media (max-width:860px){
+  body{padding-top:16px}
+  .page{width:100%;min-height:0;padding:24px 20px 20px;border-radius:12px}
+  .hero{grid-template-columns:1fr}
+  .big{font-size:72px}
+  .date{grid-template-columns:1fr auto;row-gap:8px}
+  .date .bar24{grid-column:1/-1}
+  .two{grid-template-columns:1fr}
+  .views{grid-template-columns:1fr}
+  .method{columns:1}
+  .cover h1{font-size:26px}
+}
+@media print{
+  @page{size:A4;margin:0}
+  body{background:none;padding:0}
+  .toolbar{display:none}
+  .page{margin:0;box-shadow:none;border-radius:0;width:210mm;height:297mm;min-height:0;page-break-after:always;break-after:page}
+}
+</style>
+</head>
+<body>
+<div class="toolbar" id="toolbar" hidden>
+  <a class="note" href="./" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#f0773a" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#f0773a"/><path d="M2 17h20" stroke="#151a33" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
+  <span class="note" id="tbNote"></span>
+  <span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="pdf" type="button">Télécharger en PDF</button><a class="btn primary" id="tbGo" href="explorer.html" style="display:inline-flex;align-items:center;text-decoration:none">Calculer pour mon adresse</a></span>
+</div>
+<div id="doc"><p class="loading">Préparation du rapport…</p></div>
+<section class="feedback" id="feedback" hidden>
+  <div class="kicker">Phase de test</div>
+  <h2>Ce rapport vous a-t-il été utile ?</h2>
+  <p class="lead">Deux minutes pour nous dire s'il correspond à la réalité et combien vous l'auriez payé.</p>
+  <iframe id="tally" title="Votre avis sur le rapport" loading="lazy" style="width:100%;border:0;min-height:900px;margin-top:8px"></iframe>
+  <p class="small">Le formulaire ne s'affiche pas ? <a id="tallyLink" target="_blank" rel="noopener">Ouvrez-le dans un nouvel onglet</a>.</p>
+</section>
+
+<script>
+const $=s=>document.querySelector(s);
+const MOIS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const MOIS_C=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+const DIRL={N:'nord',NE:'nord-est',E:'est',SE:'sud-est',S:'sud',SO:'sud-ouest',O:'ouest',NO:'nord-ouest'};
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fr=(v,d=1)=>Number(v).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
+function hm(h){const m=Math.round(h*60);const H=Math.floor(m/60),M=m%60;return H?`${H} h ${String(M).padStart(2,'0')}`:`${M} min`;}
+function hmBig(h){const m=Math.round(h*60);const H=Math.floor(m/60),M=m%60;return `${H}<small>h</small>${String(M).padStart(2,'0')}`;}
+function floorName(f){return f===-1?'rez-de-jardin':f===0?'rez-de-chaussée':f===1?'1er étage':`${f}e étage`;}
+function toMin(s){const [a,b]=s.split(':').map(Number);return a*60+b;}
+const sunMark=(s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="${'#f0773a'}" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#f0773a"/><path d="M2 17h20" stroke="#151a33" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+
+function verdict(R){
+  const a=R.annual.h, w=R.keyDates[0].h, s=R.keyDates[2].h, lost=R.annual.free-a;
+  if(R.blind)return `Attention : un mur plus haut que la fenêtre est collé à cette façade, qui est probablement <b>aveugle</b> (mur mitoyen). Vérifiez qu'il y a bien une fenêtre à cet endroit ; sinon, choisissez une autre façade.`;
+  let level=a>=5?'très ensoleillée':a>=3?'bien ensoleillée':a>=1.5?'moyennement ensoleillée':a>=0.5?'peu ensoleillée':'presque sans soleil direct';
+  const main=R.obstacles&&R.obstacles[0];
+  let t=`Cette fenêtre est <b>${level}</b> : ${hm(a)} de soleil direct par jour en moyenne, sur ${hm(R.annual.free)} possibles pour une façade ${DIRL[R.window.dir]||''} sans aucun obstacle.`;
+  t+= w<0.25?` En hiver, le soleil ne l'atteint pas directement.`:` Le 21 décembre, elle reçoit ${hm(w)} de soleil.`;
+  const bw=R.annual.bareWinter||0; if(bw>=0.1)t+=` De décembre à mars, quand les arbres à feuilles caduques sont nus, s'y ajoutent en moyenne ${hm(bw)} par jour de soleil filtré à travers les branches.`;
+  if(main&&lost>0.5)t+=` Le principal obstacle est ${main.type==='végétation'?(main.dec?'un arbre à feuilles caduques':'de la végétation'):main.type==='votre bâtiment'?'une autre partie de votre bâtiment':main.type==='bâtiment'?'un bâtiment voisin':'un mur ou le relief'} au ${DIRL[main.dir]}, qui retire environ ${main.lostH} h de soleil par an.`;
+  return t;
+}
+
+/* 24 h timeline for one day: night, daylight, sun facing the window, sun on the window */
+function bar24(k,R){
+  const W=520,H=30,x=m=>m/1440*W; const sr=toMin(k.sunrise),ss=toMin(k.sunset);
+  let s=`<svg viewBox="0 -2 ${W} ${H+16}" role="img" aria-label="Soleil sur la fenêtre le ${k.d} ${MOIS[k.m-1]}">`;
+  s+=`<rect x="0" y="0" width="${W}" height="${H}" rx="5" fill="${css('--raised')}"/>`;
+  s+=`<rect x="${x(sr)}" y="0" width="${x(ss)-x(sr)}" height="${H}" fill="${css('--sky')}" stroke="${css('--line2')}" stroke-width=".6"/>`;
+  (k.bareRanges||[]).forEach(([a,b])=>{s+=`<rect x="${x(toMin(a))}" y="0" width="${Math.max(1.5,x(toMin(b))-x(toMin(a)))}" height="${H}" fill="${css('--sun-soft')}"/>`;});
+  k.ranges.forEach(([a,b])=>{s+=`<rect x="${x(toMin(a))}" y="0" width="${Math.max(1.5,x(toMin(b))-x(toMin(a)))}" height="${H}" fill="${css('--sun')}"/>`;});
+  for(let h=0;h<=24;h+=3){s+=`<line x1="${x(h*60)}" x2="${x(h*60)}" y1="${H}" y2="${H+4}" stroke="${css('--line2')}"/><text x="${x(h*60)}" y="${H+13}" font-family="IBM Plex Mono" font-size="9" fill="${css('--muted')}" text-anchor="${h===0?'start':h===24?'end':'middle'}">${h}h</text>`;}
+  return s+'</svg>';
+}
+
+/* monthly bars: with obstacles (sun), without obstacles (outline), with real weather (dot) */
+function monthChart(R){
+  const W=640,H=200,pl=28,pb=22,pt=8; const max=Math.max(...R.months.map(m=>Math.max(m.free,m.h+(m.bare||0))))*1.08; const bw=(W-pl)/12;
+  const y=v=>pt+(H-pt-pb)*(1-v/max); let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Heures de soleil direct par jour, mois par mois">`;
+  for(let v=0;v<=max;v+=2){s+=`<line x1="${pl}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="${css('--line')}"/><text x="${pl-6}" y="${y(v)+3}" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="${css('--muted')}">${v}h</text>`;}
+  R.months.forEach((m,i)=>{const x0=pl+i*bw+bw*0.2,w=bw*0.6;
+    s+=`<rect x="${x0}" y="${y(m.free)}" width="${w}" height="${y(0)-y(m.free)}" rx="3" fill="none" stroke="${css('--shade-ink')}" stroke-width="1" stroke-dasharray="3 2"/>`;
+    if(m.bare>0.02)s+=`<rect x="${x0}" y="${y(m.h+m.bare)}" width="${w}" height="${y(0)-y(m.h+m.bare)}" rx="3" fill="${css('--sun-soft')}"/>`;
+    if(m.h>0)s+=`<rect x="${x0}" y="${y(m.h)}" width="${w}" height="${y(0)-y(m.h)}" rx="3" fill="${css('--sun')}"/>`;
+    const r=R.climate&&R.climate.realMonths&&R.climate.realMonths[i];
+    if(r!=null&&m.h>0)s+=`<line x1="${x0-2}" x2="${x0+w+2}" y1="${y(r)}" y2="${y(r)}" stroke="${css('--ink')}" stroke-width="1.6"/>`;
+    s+=`<text x="${x0+w/2}" y="${H-6}" text-anchor="middle" font-size="10" fill="${css('--ink2')}">${MOIS_C[i]}</text>`;});
+  return s+'</svg>';
+}
+
+/* the solar mask: sun paths over the measured skyline, seen from the window */
+function maskChart(R){
+  const W=640,H=300,pl=30,pr=8,pt=10,pb=26; const az0=R.window.az; const A0=az0-95,A1=az0+95, MAXA=75;
+  const x=a=>{let d=((a-az0+540)%360)-180;return pl+(d+95)/190*(W-pl-pr);}; const y=e=>pt+(H-pt-pb)*(1-Math.max(-2,e)/MAXA);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Masque solaire depuis la fenêtre">`;
+  s+=`<rect x="${pl}" y="${pt}" width="${W-pl-pr}" height="${H-pt-pb}" fill="${css('--sky')}"/>`;
+  for(let e=0;e<=MAXA;e+=15){s+=`<line x1="${pl}" x2="${W-pr}" y1="${y(e)}" y2="${y(e)}" stroke="${css('--line')}"/><text x="${pl-6}" y="${y(e)+3}" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="${css('--muted')}">${e}°</text>`;}
+  const card=[['N',0],['NE',45],['E',90],['SE',135],['S',180],['SO',225],['O',270],['NO',315]];
+  card.forEach(([n,a])=>{const d=((a-az0+540)%360)-180;if(Math.abs(d)>95)return;s+=`<line x1="${x(a)}" x2="${x(a)}" y1="${pt}" y2="${H-pb}" stroke="${css('--line')}"/><text x="${x(a)}" y="${H-8}" text-anchor="middle" font-size="11" font-weight="500" fill="${css('--ink2')}">${n}</text>`;});
+  // walls of the façade (beyond ±90° the window sees its own wall)
+  [[A0,az0-90],[az0+90,A1]].forEach(([a,b])=>{s+=`<rect x="${x(a)}" y="${pt}" width="${x(b)-x(a)}" height="${H-pt-pb}" fill="${css('--shade')}"/>`;});
+  // skyline silhouette
+  let horAt=a=>0;
+  if(R.sky){const pts=R.sky.az.map((a,i)=>[a,R.sky.deg[i]]).filter(([a])=>Math.abs(((a-az0+540)%360)-180)<=90).sort((p,q)=>(((p[0]-az0+540)%360)-180)-(((q[0]-az0+540)%360)-180));
+    if(pts.length){let d=`M${x(pts[0][0])} ${y(0)}`;pts.forEach(([a,e])=>{d+=` L${x(a).toFixed(1)} ${y(Math.max(0,e)).toFixed(1)}`;});d+=` L${x(pts[pts.length-1][0])} ${y(0)} Z`;
+      s+=`<path d="${d}" fill="${css('--shade')}" stroke="${css('--shade-ink')}" stroke-width="1"/>`;}
+    horAt=a=>{let best=null,bd=1e9;R.sky.az.forEach((z,i)=>{const dd=Math.abs(((a-z+540)%360)-180);if(dd<bd){bd=dd;best=R.sky.deg[i];}});return bd>3?90:best;};}
+  // hour lines (same clock time across the year)
+  const hours={};R.paths.forEach(p=>p.pts.forEach(([a,e,t])=>{if(t%60===0&&e>0){(hours[t]=hours[t]||[]).push([a,e,p.m]);}}));
+  Object.entries(hours).forEach(([t,list])=>{const ord=[12,1,2,3,4,5,6].map(m=>list.find(q=>q[2]===m)).filter(Boolean).filter(q=>Math.abs(((q[0]-az0+540)%360)-180)<=95);
+    if(ord.length<2)return;s+=`<polyline points="${ord.map(q=>x(q[0]).toFixed(1)+','+y(q[1]).toFixed(1)).join(' ')}" fill="none" stroke="${css('--ink')}" stroke-opacity=".22" stroke-width=".8" stroke-dasharray="2 3"/>`;
+    const top=ord[0];if(y(top[1])<H-pb-14)s+=`<text x="${x(top[0])}" y="${y(top[1])+14}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="${css('--muted')}">${t/60}h</text>`;});
+  // sun paths: Dec, Jan/Nov, Feb/Oct, Mar/Sep, Apr/Aug, May/Jul, Jun
+  [12,1,2,3,4,5,6].forEach(m=>{const p=R.paths.find(q=>q.m===m);if(!p)return;let seg=[],on=null;const flush=()=>{if(seg.length>1)s+=`<polyline points="${seg.join(' ')}" fill="none" stroke="${on?css('--sun'):css('--shade-ink')}" stroke-width="${on?2.2:1.2}" ${on?'':'stroke-dasharray="3 3"'} stroke-linecap="round"/>`;};
+    p.pts.forEach(([a,e])=>{const d=((a-az0+540)%360)-180;if(e<0||Math.abs(d)>95){flush();seg=[];on=null;return;}const vis=Math.abs(d)<90&&e>horAt(a);if(on!==null&&vis!==on){const pt0=x(a).toFixed(1)+','+y(e).toFixed(1);seg.push(pt0);flush();seg=[pt0];}on=vis;seg.push(x(a).toFixed(1)+','+y(e).toFixed(1));});flush();
+    const lp=p.pts.reduce((b,c)=>{const dd=Math.abs((((c[0]-az0+540)%360)-180)-(m===6?-38:m===3?-30:-22));return dd<b.dd?{dd,c}:b;},{dd:1e9,c:null}).c;if(lp&&[12,3,6].includes(m))s+=`<text x="${x(lp[0])}" y="${y(lp[1])-6}" text-anchor="middle" font-size="9.5" fill="${css('--ink2')}">${{12:'21 décembre',3:'21 mars et 21 septembre',6:'21 juin'}[m]}</text>`;});
+  s+=`<rect x="${pl}" y="${pt}" width="${W-pl-pr}" height="${H-pt-pb}" fill="none" stroke="${css('--line2')}"/>`;
+  return s+'</svg>';
+}
+
+/* hour by hour, all year: 12 months × 10 min */
+/* what the window sees: a 180° panorama in perspective, measured skyline, sun on three key days */
+function panorama(R){
+  const W=640,H=300,hz=246,f=0; const az0=R.window.az;
+  const d=a=>((a-az0+540)%360)-180; const x=a=>W/2+d(a)/90*(W/2); const y=e=>hz-Math.sin(Math.min(88,Math.max(-5,e))*Math.PI/180)*(hz-22);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Panorama depuis la fenêtre"><defs><linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9d3f6"/><stop offset="1" stop-color="#f0f2f9"/></linearGradient></defs>`;
+  s+=`<rect x="0" y="0" width="${W}" height="${hz}" fill="url(#skyG)"/><rect x="0" y="${hz}" width="${W}" height="${H-hz}" fill="#e6e9f3"/>`;
+  // sun paths
+  const days=[[12,'21 déc.'],[3,'20 mars'],[6,'21 juin']];
+  const horAt=a=>{if(!R.sky)return 0;let b=null,bd=1e9;R.sky.az.forEach((z,i)=>{const dd=Math.abs(((a-z+540)%360)-180);if(dd<bd){bd=dd;b=R.sky.deg[i];}});return bd>3?90:b;};
+  // skyline silhouette, coloured by kind of obstacle
+  if(R.sky){const pts=R.sky.az.map((a,i)=>[a,R.sky.deg[i],(R.sky.type||[])[i]||'']).filter(p=>Math.abs(d(p[0]))<=90).sort((p,q)=>d(p[0])-d(q[0]));
+    const col={'végétation':'#b9c3ea','bâtiment':'#cfd3e3','votre bâtiment':'#dfe2ee','relief':'#c3bfd9'};
+    for(let i=0;i<pts.length-1;i++){const [a1,e1,t1]=pts[i],[a2,e2]=pts[i+1];if(e1<=0.3&&e2<=0.3)continue;s+=`<path d="M${x(a1).toFixed(1)} ${hz} L${x(a1).toFixed(1)} ${y(Math.max(0,e1)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,e2)).toFixed(1)} L${x(a2).toFixed(1)} ${hz}Z" fill="${col[t1]||'#cfd3e3'}" stroke="${col[t1]||'#cfd3e3'}" stroke-width=".6"/>`;}
+    // deciduous crowns: the part of the silhouette that opens up in winter, lighter
+    if(R.sky.degB){const pb=R.sky.az.map((a,i)=>[a,R.sky.deg[i],R.sky.degB[i]]).filter(p=>Math.abs(d(p[0]))<=90).sort((p,q)=>d(p[0])-d(q[0]));
+      for(let i=0;i<pb.length-1;i++){const [a1,e1,b1]=pb[i],[a2,e2,b2]=pb[i+1];if(e1-b1<0.5&&e2-b2<0.5)continue;s+=`<path d="M${x(a1).toFixed(1)} ${y(Math.max(0,b1)).toFixed(1)} L${x(a1).toFixed(1)} ${y(Math.max(0,e1)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,e2)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,b2)).toFixed(1)}Z" fill="#dfe4f7" stroke="#dfe4f7" stroke-width=".6"/>`;}}
+    let dl=`M${x(pts[0][0])} ${y(Math.max(0,pts[0][1]))}`;pts.forEach(p=>{dl+=` L${x(p[0]).toFixed(1)} ${y(Math.max(0,p[1])).toFixed(1)}`;});s+=`<path d="${dl}" fill="none" stroke="#f0773a" stroke-width="1.2" stroke-opacity=".8"/>`;}
+  days.forEach(([m,lab])=>{const p=R.paths.find(q=>q.m===(m===3?3:m));if(!p)return;let seg=[],on=null;const flush=()=>{if(seg.length>1)s+=`<polyline points="${seg.join(' ')}" fill="none" stroke="${on?'#f0773a':'#8f95ad'}" stroke-width="${on?2.2:1.2}" ${on?'':'stroke-dasharray="3 3"'} stroke-linecap="round"/>`;};
+    p.pts.forEach(([a,e])=>{if(e<0||Math.abs(d(a))>90){flush();seg=[];on=null;return;}const vis=e>horAt(a);const pt=x(a).toFixed(1)+','+y(e).toFixed(1);if(on!==null&&vis!==on){seg.push(pt);flush();seg=[pt];}on=vis;seg.push(pt);});flush();
+    const pk=p.pts.reduce((b,c)=>c[1]>b[1]?c:b);if(Math.abs(d(pk[0]))<85){const vis=pk[1]>horAt(pk[0]);s+=`<circle cx="${x(pk[0])}" cy="${y(pk[1])}" r="7" fill="${vis?'#f6a07a':'#fdfdff'}" stroke="${vis?'#f0773a':'#8f95ad'}" stroke-width="1.2"/><text x="${x(pk[0])}" y="${y(pk[1])-12}" text-anchor="middle" font-size="10" fill="#474e6d">${lab}</text>`;}});
+  // own wall beyond ±90° and frame
+  s+=`<rect x="0" y="0" width="6" height="${H}" fill="#c9cee0"/><rect x="${W-6}" y="0" width="6" height="${H}" fill="#c9cee0"/>`;
+  [['E',90],['SE',135],['S',180],['SO',225],['O',270],['N',0],['NE',45],['NO',315]].forEach(([n,a])=>{if(Math.abs(d(a))>85)return;s+=`<text x="${x(a)}" y="${H-10}" text-anchor="middle" font-size="11" font-weight="500" fill="#474e6d">${n}</text>`;});
+  return s+'</svg>';
+}
+function heatmap(R){
+  const t0=4*6,t1=22*6; const W=640,rowH=15,pl=44,pt=4,pb=20; const cw=(W-pl)/(t1-t0); const H=pt+rowH*12+pb;
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Soleil sur la fenêtre, heure par heure, toute l'année">`;
+  const col={'0':null,'1':css('--shade'),'2':css('--sun'),'3':css('--sun-soft')};
+  R.matrix.forEach((row,mi)=>{const yy=pt+mi*rowH;s+=`<text x="${pl-8}" y="${yy+rowH*0.72}" text-anchor="end" font-size="10" fill="${css('--ink2')}">${MOIS_C[mi]}</text>`;
+    s+=`<rect x="${pl}" y="${yy+1}" width="${W-pl}" height="${rowH-2}" fill="${css('--raised')}"/>`;
+    let i=t0;while(i<t1){const c=row[i];let j=i;while(j<t1&&row[j]===c)j++;if(col[c])s+=`<rect x="${(pl+(i-t0)*cw).toFixed(1)}" y="${yy+1}" width="${((j-i)*cw).toFixed(1)}" height="${rowH-2}" fill="${col[c]}"/>`;i=j;}});
+  for(let h=4;h<=22;h+=2){const xx=pl+(h*6-t0)*cw;s+=`<line x1="${xx}" x2="${xx}" y1="${pt}" y2="${pt+12*rowH}" stroke="${css('--sheet')}" stroke-width="1"/><text x="${xx}" y="${H-6}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="${css('--muted')}">${h}h</text>`;}
+  return s+'</svg>';
+}
+
+function page(n,N,R,body,cls=''){
+  const d=new Date(R.generated);
+  return `<section class="page ${cls}"><header class="head"><div class="brand">${sunMark(20)}Quartier Soleil</div><div class="meta">${esc(R.ref||'Exemple')} · ${d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</div></header><main>${body}</main><footer class="foot"><span class="meta">${esc(R.address)}</span><span class="meta">${n} / ${N}</span></footer></section>`;
+}
+
+function render(R){
+  const N=5, W=R.window, b=W.building; const k=R.keyDates;
+  const winTxt=`Fenêtre en façade ${DIRL[W.dir]} (${W.az}°)${W.side?', '+esc(W.side):''} · ${floorName(W.floor)} · ${fr(W.heightAboveGround)} m du sol`;
+  const real=R.climate&&R.climate.realAnnual;
+  const p1=`<div class="cover"><div class="kicker">Rapport d'ensoleillement</div><h1>${esc(R.address.replace(/ (\d{5})/,', $1'))}</h1><div class="win">${winTxt}</div></div>
+    ${R.images&&R.images.aerial?`<div class="shot"><img src="${R.images.aerial}" alt="Maquette 3D du bâtiment et de ses abords, ombres du 20 mars à 15 h"></div>`:`<div class="chart" style="padding:12px 0">${heatmap(R)}</div>`}
+    <div class="hero"><div><div class="big">${hmBig(R.annual.h)}</div><div class="big-cap">de soleil direct sur la fenêtre par jour, en moyenne sur l'année</div></div>
+      <div class="stats">
+        <div class="stat"><span class="l">Sans aucun obstacle</span><span class="v">${hm(R.annual.free)}</span></div>
+        ${real!=null?`<div class="stat"><span class="l">En tenant compte des nuages</span><span class="v">≈ ${hm(real)}</span></div>`:''}
+        <div class="stat"><span class="l">Le 21 décembre</span><span class="v">${hm(k[0].h)}</span></div>
+        ${(R.annual.bareWinter||0)>=0.1?`<div class="stat"><span class="l">En hiver, arbres sans feuilles</span><span class="v">+ ${hm(R.annual.bareWinter)}</span></div>`:''}
+        <div class="stat"><span class="l">Sur l'année</span><span class="v">${Math.round(R.annual.hYear).toLocaleString('fr-FR')} h</span></div>
+      </div></div>
+    <div class="verdict">${sunMark(22)}<p>${verdict(R)}</p></div>`;
+  const p2=`<div><div class="kicker">L'essentiel</div><h2>Trois dates pour comprendre l'année</h2></div>
+    <p class="lead">Les solstices et l'équinoxe encadrent tout le reste : le soleil est au plus bas le 21 décembre, au plus haut le 21 juin. Les plages orange indiquent quand le soleil atteint directement la vitre.</p>
+    <div class="dates">${k.map(d=>`<div class="date"><div><div class="n">${d.label}</div><div class="d">${d.d} ${MOIS[d.m-1]} · lever ${d.sunrise} · coucher ${d.sunset}</div></div><div class="h">${hmBig(d.h)}</div><div class="bar24">${bar24(d,R)}<div class="r">${d.ranges.length?d.ranges.map(([a,b])=>`${a} → ${b}`).join('   ·   '):'pas de soleil direct'}${d.bare>0.05?`   · + ${hm(d.bare)} filtré par les branches nues`:''}${d.free>d.h+0.1?`   (sans obstacle : ${hm(d.free)})`:''}</div></div></div>`).join('')}</div>
+    <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil sur la fenêtre</span>${R.annual.bare!=null?`<span><i class="sw" style="background:var(--sun-soft)"></i>Soleil filtré par des arbres sans feuilles</span>`:''}<span><i class="sw" style="background:var(--sky);border:1px solid var(--line2)"></i>Jour</span><span><i class="sw" style="background:var(--raised)"></i>Nuit</span></div>
+    <div class="figure" style="margin-top:8px"><h3>Mois par mois</h3><p class="small">Heures de soleil direct par jour, le 15 de chaque mois.</p><div class="chart">${monthChart(R)}</div>
+      <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Avec les obstacles réels</span>${R.annual.bare!=null?`<span><i class="sw" style="background:var(--sun-soft)"></i>En plus, arbres sans feuilles</span>`:''}<span><i class="sw" style="border:1px dashed var(--shade-ink)"></i>Sans aucun obstacle</span>${R.climate?`<span><i class="sw" style="height:2px;background:var(--ink);border-radius:0"></i>Avec les nuages (moyenne 2019-2024)</span>`:''}</div></div>`;
+  const obs=(R.obstacles||[]).slice(0,5);
+  const p3=`<div><div class="kicker">Le masque solaire</div><h2>Ce qui cache le ciel depuis votre fenêtre</h2></div>
+    <p class="lead">Le graphique montre le ciel tel que la fenêtre le voit, de gauche à droite. La silhouette grise est l'horizon réel mesuré au laser aérien (LiDAR HD de l'IGN) : bâtiments, arbres, haies, relief. Chaque courbe est la course du soleil un jour de l'année. Là où la courbe passe au-dessus de la silhouette, le soleil entre.</p>
+    <div class="chart">${maskChart(R)}</div>
+    <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil visible</span><span><i class="sw" style="border:1px dashed var(--shade-ink)"></i>Soleil caché</span><span><i class="sw" style="background:var(--shade)"></i>Obstacles et mur de la façade</span><span><i class="sw" style="border-top:1px dashed var(--muted);border-radius:0;height:0;width:14px"></i>Heures</span></div>
+    ${obs.length?`<div class="figure"><h3>Obstacles identifiés</h3><div class="tablewrap"><table><thead><tr><th>Obstacle</th><th>Direction</th><th class="n">Distance</th><th class="n">Hauteur</th><th class="n">Masque</th><th class="n">Soleil retiré / an</th></tr></thead><tbody>
+      ${obs.map(o=>`<tr><td><span class="tag"><i class="dot" style="background:${o.type==='végétation'?'#8f9bd6':o.type==='relief'?'#b0a8d0':'#a9afc6'}"></i>${o.type==='végétation'?(o.dec?'Arbre à feuilles caduques':'Végétation'):o.type==='votre bâtiment'?'Votre bâtiment':o.type==='bâtiment'?'Bâtiment voisin':'Mur, clôture ou relief'}</span></td><td>${DIRL[o.dir]} <span class="mono">${o.az0}°–${o.az1}°</span></td><td class="n">${o.d} m</td><td class="n">${o.h!=null?fr(o.h)+' m':'—'}</td><td class="n">${o.deg}°</td><td class="n">${o.lostH} h</td></tr>`).join('')}
+      </tbody></table></div><p class="small">« Masque » : angle jusqu'auquel l'obstacle cache le ciel vu de la fenêtre. « Soleil retiré » : heures de soleil direct par an que la fenêtre recevrait si cet obstacle n'existait pas.</p></div>`:''}`;
+  const views=(R.images&&R.images.views)||[];
+  const vlab=[['21 décembre','12 h 30'],['20 mars','13 h'],['21 juin','13 h 30']];
+  const p4=`<div><div class="kicker">Heure par heure</div><h2>Toute l'année d'un coup d'œil</h2></div>
+    <p class="lead">Chaque ligne est un mois, de 4 h à 22 h. En orange, le soleil frappe la vitre. En gris, il est levé et face à la fenêtre, mais caché par un obstacle.</p>
+    <div class="chart">${heatmap(R)}</div>
+    <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil sur la fenêtre</span>${R.annual.bare!=null?`<span><i class="sw" style="background:var(--sun-soft)"></i>Soleil filtré par des arbres sans feuilles</span>`:''}<span><i class="sw" style="background:var(--shade)"></i>Soleil caché par un obstacle</span><span><i class="sw" style="background:var(--raised)"></i>Soleil absent ou derrière la façade</span></div>
+    <div class="figure" style="margin-top:8px"><h3>Ce que voit la fenêtre</h3><p class="small">Panorama à 180° depuis la vitre, dessiné à partir de l'horizon mesuré au LiDAR (trait orange) : bâtiments en beige, végétation en vert${R.sky&&R.sky.degB?', en vert pâle la partie des arbres à feuilles caduques qui s\'ouvre en hiver':''}. Les arcs sont la course du soleil le 21 décembre, le 20 mars et le 21 juin ; pleins quand le soleil est visible, pointillés quand il est caché.</p>
+      <div class="chart pano">${panorama(R)}</div></div>`;
+  const p5=`<div><div class="kicker">Méthode</div><h2>Comment ces chiffres sont calculés</h2></div>
+    <div class="method">
+      <div><h3>La position du soleil</h3><p>Calculée pour l'adresse exacte, toutes les 5 à 10 minutes, avec l'algorithme astronomique de la NOAA et l'heure légale française (heure d'été comprise).</p></div>
+      <div><h3>La fenêtre</h3><p>${winTxt}. Le soleil compte comme « direct » quand il est au-dessus de l'horizon, face à la façade, et qu'aucun obstacle ne coupe la ligne entre lui et le centre de la vitre.</p></div>
+      <div><h3>Les obstacles</h3><p>L'horizon est mesuré dans ${R.sky?R.sky.az.length:'—'} directions autour de la fenêtre, jusqu'à 320 m, sur le modèle numérique de surface LiDAR HD de l'IGN (un point tous les 50 cm, qui inclut bâtiments, arbres, haies et relief). Le contour du bâtiment est recalé sur le toit mesuré au laser.</p></div>
+      <div><h3>Les nuages</h3><p>${R.climate?`Le rayonnement direct réellement reçu à cet endroit, mesuré par satellite de 2019 à 2024, est comparé à celui d'un ciel parfaitement clair, mois par mois. Le résultat est recalé sur les normales d'ensoleillement Météo-France 1991-2020 de dix grandes villes (écart résiduel d'environ ±5 %).`:'Non disponible pour cette adresse.'}</p></div>
+      ${R.annual.bare!=null?`<div><h3>Les arbres en hiver</h3><p>Chaque arbre est classé à feuilles caduques ou persistantes d'après la photo infrarouge de l'IGN et les zones forestières de la BD TOPO ; en cas de doute il est compté caduc. Les chiffres principaux comptent les arbres avec leurs feuilles toute l'année. Le soleil qui passe entre les branches nues, de décembre à mars avec une transition de mi-octobre à fin novembre et en avril, est donné à part : il garde environ ${Math.round((R.annual.bareT||0.55)*100)} % de son intensité.</p></div>`:''}
+      <div><h3>Les limites</h3><p>${R.annual.bare!=null?'Le classement des arbres se trompe parfois (haies mixtes, chênes verts, oliviers). ':'Les arbres à feuilles caduques laissent passer une partie du soleil en hiver : le rapport les compte comme opaques toute l\'année. '}Les données LiDAR datent du dernier vol de l'IGN sur la zone, un chantier ou un abattage récent n'y figure pas. Les débords de toit, volets et balcons ne sont pas modélisés.</p></div>
+      <div><h3>Précision</h3><p>Sur nos tests, l'horizon mesuré correspond à la vue réelle à quelques degrés près. Les heures de soleil sont données à 10 minutes près. L'estimation avec les nuages est une moyenne : une année donnée peut s'en écarter.</p></div>
+    </div>
+    <div class="figure"><h3>Sources</h3><ul class="src">
+      <li><span>Bâtiments, hauteurs, routes, haies : BD TOPO®</span><span>IGN</span></li>
+      <li><span>Hauteurs des obstacles : LiDAR HD, modèles de surface et de hauteur</span><span>IGN</span></li>
+      <li><span>Relief : RGE ALTI®</span><span>IGN</span></li>
+      <li><span>Vue aérienne : BD ORTHO®${R.annual.bare!=null?', infrarouge couleur':''}</span><span>IGN</span></li>
+      <li><span>Ensoleillement réel : rayonnement satellite 2019-2024</span><span>Open-Meteo</span></li>
+      <li><span>Calage des nuages : normales d'ensoleillement 1991-2020</span><span>Météo-France</span></li>
+      <li><span>Adresse : Base Adresse Nationale</span><span>data.gouv.fr</span></li>
+    </ul></div>
+    <p class="small" style="margin-top:auto">${R.anonymous?'Exemple réel, adresse volontairement tronquée.':`Coordonnées : <span class="mono">${fr(R.lat,5)}, ${fr(R.lon,5)} · altitude ${R.alt} m</span>.`} Ce rapport décrit l'ensoleillement géométrique d'une fenêtre à partir de données publiques. Il ne remplace pas une visite à différentes heures.</p>`;
+  const all=[p1,p2,p3,p4,p5].map((b,i)=>page(i+1,N,R,b,i===0?'cover-page':''));
+  $('#doc').innerHTML=(new URLSearchParams(location.search).get('embed')?[all[2],all[1]]:all).join('');
+  document.title=`Ensoleillement · ${R.address}`;
+}
+
+(async()=>{
+  const q=new URLSearchParams(location.search); let R=null;
+  if(!q.get('ex')){try{const s=localStorage.getItem('qs-report');if(s)R=JSON.parse(s);}catch(e){}}
+  if(!R){const ex=(q.get('ex')||'clichy').replace(/[^a-z0-9-]/g,'');try{R=await (await fetch(`exemples/${ex}.json`)).json();R.__example=true;}catch(e){$('#doc').innerHTML='<p class="loading">Rapport introuvable.</p>';return;}}
+  if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+  render(R);
+  if(q.get('embed')){document.body.style.paddingTop='16px';}
+  else{$('#toolbar').hidden=false;
+    $('#tbNote').textContent=R.__example?'Exemple de rapport, calculé sur un immeuble réel de Clichy (92)':'Rapport '+(R.ref||'')+' · '+new Date(R.generated).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
+    if(!R.__example)$('#tbGo').textContent='Retour à l\u2019outil';
+    $('#pdf').addEventListener('click',()=>window.print());
+    const tq='ref='+encodeURIComponent(R.ref||'')+'&source='+(R.__example?'exemple':'rapport');
+    $('#tally').src='https://tally.so/embed/ArzGWo?alignLeft=1&hideTitle=1&transparentBackground=1&dynamicHeight=1&'+tq;
+    $('#tallyLink').href='https://tally.so/r/ArzGWo?'+tq; $('#fde3d6ck').hidden=false;}
+})();
+</script>
+</body>
+</html>

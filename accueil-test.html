@@ -232,12 +232,48 @@ nav .btn.primary.sm{box-shadow:none}
 @property --aura3{syntax:'<color>';inherits:true;initial-value:#efc6d8}
 @property --grain{syntax:'<number>';inherits:true;initial-value:.06}
 .hero{transition:--bg 1.6s cubic-bezier(.45,0,.55,1),--card 1.6s cubic-bezier(.45,0,.55,1),--raised 1.6s cubic-bezier(.45,0,.55,1),--ink 1.6s cubic-bezier(.45,0,.55,1),--ink2 1.6s cubic-bezier(.45,0,.55,1),--muted 1.6s cubic-bezier(.45,0,.55,1),--line 1.6s cubic-bezier(.45,0,.55,1),--line2 1.6s cubic-bezier(.45,0,.55,1),--sun 1.6s cubic-bezier(.45,0,.55,1),--sun2 1.6s cubic-bezier(.45,0,.55,1),--sun-ink 1.6s cubic-bezier(.45,0,.55,1),--sun-soft 1.6s cubic-bezier(.45,0,.55,1),--btn 1.6s cubic-bezier(.45,0,.55,1),--btn-ink 1.6s cubic-bezier(.45,0,.55,1),--aura1 1.6s cubic-bezier(.45,0,.55,1),--aura2 1.6s cubic-bezier(.45,0,.55,1),--aura3 1.6s cubic-bezier(.45,0,.55,1),--grain 1.6s cubic-bezier(.45,0,.55,1)}
+/* ===== the rest of the page speaks the hero's language: pastel light in the air, grain, one warm accent ===== */
+html,body{overflow-x:clip}
+section.block,.facts,.cta{position:relative;isolation:isolate}
+/* the lights are not clipped by their section: they spill softly into the next one */
+/* each section gets its own soft light, placed differently, as if the sun moved across the page */
+section.block::before,.cta::before{content:"";position:absolute;z-index:-1;pointer-events:none;width:min(900px,120vw);aspect-ratio:1;border-radius:50%;filter:blur(60px);opacity:.55}
+#comment::before{left:-25%;top:-10%;background:radial-gradient(closest-side,#c9d3f6,transparent)}
+#exemple::before{right:-30%;top:5%;background:radial-gradient(closest-side,#f8cdbb,transparent)}
+#fiabilite::before{left:-20%;bottom:-30%;background:radial-gradient(closest-side,#efc6dc,transparent)}
+#tarifs::before{right:-25%;top:-20%;background:radial-gradient(closest-side,#c9d3f6,transparent)}
+section.block:not([id])::before{left:10%;top:0;background:radial-gradient(closest-side,#f6d6c8,transparent);opacity:.4}
+/* figures: light serif numbers, units in the warm accent */
+.facts{border-color:var(--line)}
+.fact .v{color:var(--ink)}
+.fact .v small{color:var(--sun-ink)}
+/* the section examples: no flat beige, a cool paper */
+#exemple{background:transparent!important;border:0!important}
+.paper{border-radius:22px;border-color:var(--line);background:#e9ecf7}.paper::after{background:linear-gradient(to bottom,transparent,#e9ecf7)}
+/* soft, rounded, airy cards */
+.step,.card{border-radius:22px;border-color:rgba(255,255,255,.7)}
+.step .n{color:transparent;background:linear-gradient(100deg,var(--sun),var(--sun2));-webkit-background-clip:text;background-clip:text}
+.limits{background:color-mix(in srgb,#c9d3f6 35%,transparent);border-radius:18px}
+.badge{background:linear-gradient(100deg,#fde3d6,#fbdbe7);color:var(--sun-ink)}
+.btn{border-radius:12px}
+.btn.ghost{background:rgba(255,255,255,.5);border-color:var(--line2)}
+.btn.ghost:hover{background:rgba(255,255,255,.85)}
+details summary::after{color:var(--sun-ink)}
+/* the closing call is a small night window: navy, grain, one warm glow */
+.cta .box{position:relative;overflow:hidden;isolation:isolate;background:#0f1430;border:0;border-radius:28px;color:#eef0fa;
+  box-shadow:0 30px 70px -30px rgba(20,24,60,.6)}
+.cta .box::before{content:"";position:absolute;z-index:-1;right:-10%;top:-60%;width:70%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(255,138,76,.75),rgba(240,103,154,.35) 45%,transparent);filter:blur(10px)}
+.cta .box::after{content:"";position:absolute;inset:0;z-index:-1;opacity:.22;mix-blend-mode:overlay;pointer-events:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+.cta .box p,.cta .box .hint{color:#aab0cb}
+.cta .box .btn.ghost{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);color:#eef0fa}
 </style>
 <script>window.QS_SUN=3</script>
 </head>
 <body>
 <nav id="nav"><div class="wrap">
-  <a class="brand" href="./" aria-label="Quartier Soleil, accueil"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#e8772e"/><path d="M2 17h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
+  <a class="brand" href="./" aria-label="Quartier Soleil, accueil"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#f0773a" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#f0773a"/><path d="M2 17h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
   <div class="links"><a class="l" href="#comment">Comment ça marche</a><a class="l" href="#exemple">Exemple</a><a class="l" href="#fiabilite">Fiabilité</a><a class="l" href="#tarifs">Tarifs</a><a class="btn primary sm" href="explorer.html">Essayer</a></div>
 </div></nav>
 
@@ -269,11 +305,11 @@ nav .btn.primary.sm{box-shadow:none}
   <div class="head2 rise"><div class="kicker">Comment ça marche</div><h2>Trois étapes, sans visite</h2><p>Une annonce dit « lumineux ». Nous mesurons combien de temps le soleil touche réellement la vitre, en hiver comme en été.</p></div>
   <div class="steps">
     <div class="step rise"><span class="n">01</span><h3>Votre adresse</h3><p>Le quartier est reconstruit en 3D à partir des données de l'IGN : bâtiments, toitures, arbres, haies et relief.</p>
-      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><g fill="var(--card)" stroke="var(--line2)"><rect x="30" y="52" width="44" height="40"/><rect x="92" y="34" width="36" height="58"/><rect x="146" y="60" width="52" height="32"/><rect x="216" y="44" width="40" height="48"/></g><g fill="#a9bd9c"><circle cx="84" cy="80" r="9"/><circle cx="206" cy="78" r="11"/></g><line x1="20" y1="92" x2="280" y2="92" stroke="var(--line2)"/></svg></div>
+      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><g fill="var(--card)" stroke="var(--line2)"><rect x="30" y="52" width="44" height="40"/><rect x="92" y="34" width="36" height="58"/><rect x="146" y="60" width="52" height="32"/><rect x="216" y="44" width="40" height="48"/></g><g fill="#a6b6f6"><circle cx="84" cy="80" r="9"/><circle cx="206" cy="78" r="11"/></g><line x1="20" y1="92" x2="280" y2="92" stroke="var(--line2)"/></svg></div>
     <div class="step rise"><span class="n">02</span><h3>Votre fenêtre</h3><p>Choisissez la façade, l'étage et la position. L'horizon réel est mesuré depuis ce point précis.</p>
-      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="110" y="18" width="80" height="84" fill="var(--card)" stroke="var(--line2)"/><g fill="var(--raised)" stroke="var(--line2)"><rect x="122" y="30" width="16" height="16"/><rect x="162" y="30" width="16" height="16"/><rect x="122" y="76" width="16" height="16"/><rect x="162" y="76" width="16" height="16"/></g><rect x="162" y="53" width="16" height="16" fill="#e8772e"/><path d="M178 61h70" stroke="#e8772e" stroke-width="1.5" stroke-dasharray="3 3"/><circle cx="252" cy="61" r="3" fill="#e8772e"/></svg></div>
+      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="110" y="18" width="80" height="84" fill="var(--card)" stroke="var(--line2)"/><g fill="var(--raised)" stroke="var(--line2)"><rect x="122" y="30" width="16" height="16"/><rect x="162" y="30" width="16" height="16"/><rect x="122" y="76" width="16" height="16"/><rect x="162" y="76" width="16" height="16"/></g><rect x="162" y="53" width="16" height="16" fill="#f0773a"/><path d="M178 61h70" stroke="#f0773a" stroke-width="1.5" stroke-dasharray="3 3"/><circle cx="252" cy="61" r="3" fill="#f0773a"/></svg></div>
     <div class="step rise"><span class="n">03</span><h3>Votre rapport</h3><p>Heures de soleil jour par jour, masque solaire, obstacles nommés, effet des nuages. Prêt à partager.</p>
-      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="60" y="14" width="180" height="96" rx="4" fill="var(--card)" stroke="var(--line2)"/><path d="M80 92a70 70 0 0 1 140 0" fill="none" stroke="#e8772e" stroke-width="2"/><path d="M80 92l20-18 18 6 20-14 22 10 22-4 18 20z" fill="var(--raised)" stroke="var(--line2)"/><line x1="80" y1="92" x2="220" y2="92" stroke="var(--line2)"/></svg></div>
+      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="60" y="14" width="180" height="96" rx="4" fill="var(--card)" stroke="var(--line2)"/><path d="M80 92a70 70 0 0 1 140 0" fill="none" stroke="#f0773a" stroke-width="2"/><path d="M80 92l20-18 18 6 20-14 22 10 22-4 18 20z" fill="var(--raised)" stroke="var(--line2)"/><line x1="80" y1="92" x2="220" y2="92" stroke="var(--line2)"/></svg></div>
   </div>
 </div></section>
 
@@ -291,7 +327,7 @@ nav .btn.primary.sm{box-shadow:none}
     </ul>
     <a class="btn ghost" href="rapport.html?ex=clichy">Lire le rapport d'exemple</a>
   </div>
-  <div class="paper rise"><iframe src="rapport.html?ex=clichy&amp;embed=1&amp;v=2" title="Aperçu du rapport d'exemple" loading="lazy" tabindex="-1" aria-hidden="true"></iframe><a class="btn primary sm" href="rapport.html?ex=clichy">Ouvrir le rapport</a></div>
+  <div class="paper rise"><iframe src="rapport-test.html?ex=clichy&amp;embed=1&amp;v=2" title="Aperçu du rapport d'exemple" loading="lazy" tabindex="-1" aria-hidden="true"></iframe><a class="btn primary sm" href="rapport.html?ex=clichy">Ouvrir le rapport</a></div>
 </div></section>
 
 <section class="block" id="fiabilite"><div class="wrap">
