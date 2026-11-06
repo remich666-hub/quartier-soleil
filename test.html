@@ -2880,11 +2880,11 @@ update(); if(!S.startPending)load($('addr').value); // an address handed over by
    Runs once the laser buildings are there, in the background, nearest first, and pauses while the camera is being moved.
    Visual only: the window study reads its horizon from the laser rasters, not from these meshes. */
 var RF=window.RF||{};
-const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0};
+const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0,log:[]};
 ['pointerdown','pointermove','wheel','touchstart','keydown'].forEach(k=>addEventListener(k,e=>{if(k!=='pointermove'||e.buttons)QV4.last=performance.now();},{passive:true,capture:true}));
 const qsSleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function qsV4(){
-  const T=S.T; QV4.T=T; QV4.rings=[]; QV4.n=0; QV4.ms=0;
+  const T=S.T; QV4.T=T; QV4.rings=[]; QV4.n=0; QV4.ms=0; QV4.log=[];
   for(let i=0;i<400&&!(S.lidarBuilt&&S.lidarR&&S.lidarR.mnh&&S.T&&S.T.lidarBuilt);i++){await qsSleep(100);if(S.T!==T)return;}
   if(S.T!==T||!S.lidarBuilt)return;
   await qsSleep(400); /* let the scene settle (vegetation, edges) */
@@ -2906,7 +2906,11 @@ function qsV4Model(fam){
   const run=o=>{try{const M=roofModelV4(R,Object.assign({big},o));return M&&M.cells.length?Object.assign(M,{sh0:o.noShift?{dx:0,dy:0}:R.sh}):null;}catch(e){return null;}};
   let M=run({}); if(!M||(!big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
   if(!M||M.rms>0.3){const M3=run({big:false,lam:4,kinks:true});if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
-  return M&&M.rms<=0.6?{M,main}:null; /* a model that explains the laser badly: the current roofs stay */
+  if(!M||M.rms>0.6)return null; /* a model that explains the laser badly: the current roofs stay */
+  /* keep the better of the two: the current roof (laser planes or IGN roof) and the v4 one, both measured against the laser */
+  const cur=qsCurErr(fam,R), mine=qsV4Err(M,R); QV4.log.push({x:Math.round(main.userData.rings[0][0].x),y:Math.round(main.userData.rings[0][0].y),cur:+cur.toFixed(2),v4:+mine.toFixed(2),types:M.v4.types.join(',')});
+  if(!(mine<cur*0.8&&cur-mine>0.08))return null;
+  return {M,main};
 }
 function qsV4One(fam){
   const r=qsV4Model(fam); if(!r)return false; const {M,main}=r, A0=S.alt0, dx=-M.sh0.dx, dy=-M.sh0.dy, u=main.userData;
@@ -2925,7 +2929,7 @@ function qsV4One(fam){
   const pieceAt=(x,y,not)=>M.pieces.find(o=>o!==not&&pointInPoly(x,y,o.P.map(q=>({x:q[0],y:q[1]}))));
   M.pieces.forEach(pc=>pc.edgeProfiles.forEach(ep=>{const L=Math.hypot(ep.b[0]-ep.a[0],ep.b[1]-ep.a[1])||1,nx=(ep.b[1]-ep.a[1])/L,ny=-(ep.b[0]-ep.a[0])/L;
     for(let k=0;k<ep.prof.length-1;k++){const p=ep.prof[k],q=ep.prof[k+1],mx=(p[0]+q[0])/2,my=(p[1]+q[1])/2;let za,zb;
-      if(ep.outer){const o=blockAt(X(mx)-nx*0.4,Y(my)-ny*0.4)||blockAt(X(mx)+nx*0.4,Y(my)+ny*0.4)||main;za=zb=o.userData.zBase+top.get(o);}
+      if(ep.outer){const o=blockAt(X(mx)-nx*0.4,Y(my)-ny*0.4)||blockAt(X(mx)+nx*0.4,Y(my)+ny*0.4);if(!o)continue;za=zb=o.userData.zBase+top.get(o);}
       else{const o=pieceAt(mx+nx*0.3,my+ny*0.3,pc);if(!o)continue;za=o.roofZ(p[0],p[1])-A0;zb=o.roofZ(q[0],q[1])-A0;if(Math.min(p[2]-A0-za,q[2]-A0-zb)<0.05)continue;}
       quad([X(p[0]),Y(p[1])],[X(q[0]),Y(q[1])],za,zb,p[2]-A0,q[2]-A0,nx,ny);}}));
   if(!P.length)return false;
@@ -2956,6 +2960,24 @@ function qsFoldRoofs(){ if(!QV4.rings.length)return; const rg=QV4.rings;
     for(let t=0;t<nt;t++){const v=[0,1,2].map(k=>ix?ix[t*3+k]:t*3+k);if(A[v[0]*3+2]<-100)continue;const cx=(A[v[0]*3]+A[v[1]*3]+A[v[2]*3])/3,cy=(A[v[0]*3+1]+A[v[1]*3+1]+A[v[2]*3+1])/3;if(inB(cx,cy)){v.forEach(q=>{A[q*3+2]=-200;});ch=true;}}
     if(ch){pa.needsUpdate=true;m.geometry.computeBoundingSphere();}});
   (S.roofEdgeParts||[]).forEach(A=>{for(let q=0;q+5<A.length;q+=6){if(A[q+2]>-100&&inB((A[q]+A[q+3])/2,(A[q+1]+A[q+4])/2)){A[q+2]=-200;A[q+5]=-200;}}});}
+
+/* error of a roof against the laser: robust RMS (the worst 10 % of points, chimneys and foliage, left out) */
+function qsRms(d){d=d.filter(v=>isFinite(v)).map(v=>v*v).sort((a,b)=>a-b);if(d.length<8)return Infinity;const n=Math.floor(d.length*0.9);let s=0;for(let i=0;i<n;i++)s+=d[i];return Math.sqrt(s/n);}
+function qsV4Err(M,R){const dx=M.sh0.dx-R.sh.dx,dy=M.sh0.dy-R.sh.dy,P=M.pieces.map(pc=>({pc,poly:pc.P.map(q=>({x:q[0],y:q[1]}))}));
+  return qsRms(R.cells.map(c=>{const x=c.x+dx,y=c.y+dy;let z=-Infinity;P.forEach(({pc,poly})=>{if(pointInPoly(x,y,poly))z=Math.max(z,pc.roofZ(x,y));});return isFinite(z)?z-c.z:4;}));}
+const qsRay=new THREE.Raycaster();
+function qsCurErr(fam,R){
+  /* what is drawn now over these footprints: the blocks, their laser pans, and the IGN roof triangles of the shared meshes */
+  const objs=[];fam.forEach(o=>{objs.push(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.hiRoof)objs.push(c);});});
+  const rg=fam.map(o=>o.userData.rings[0]),inB=(x,y)=>rg.some(r=>pointInPoly(x,y,r)),T=[];
+  (S.roofSetMeshes||[]).forEach(m=>{const A=m.geometry.attributes.position.array,ix=m.geometry.index?m.geometry.index.array:null,nt=(ix?ix.length:A.length/3)/3;
+    for(let t=0;t<nt;t++){const v=[0,1,2].map(k=>ix?ix[t*3+k]:t*3+k);if(A[v[0]*3+2]<-100)continue;if(inB((A[v[0]*3]+A[v[1]*3]+A[v[2]*3])/3,(A[v[0]*3+1]+A[v[1]*3+1]+A[v[2]*3+1])/3))v.forEach(q=>T.push(A[q*3],A[q*3+1],A[q*3+2]));}});
+  let tmp=null;if(T.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(T,3));tmp=new THREE.Mesh(g,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));tmp.updateMatrixWorld();objs.push(tmp);}
+  objs.forEach(o=>o.updateMatrixWorld());
+  const A0=S.alt0,dn=new THREE.Vector3(0,0,-1),org=new THREE.Vector3();
+  const err=qsRms(R.cells.filter((c,i)=>i%2===0).map(c=>{org.set(c.x-R.sh.dx,c.y-R.sh.dy,400);qsRay.set(org,dn);qsRay.far=800;const h=qsRay.intersectObjects(objs,false);return h.length?(h[0].point.z+A0)-c.z:4;}));
+  if(tmp){tmp.geometry.dispose();tmp.material.dispose();}
+  return err;}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
@@ -3163,7 +3185,7 @@ function roofModelV4(R,opt){opt=opt||{};
 
 
 window.__S=S;window.__fam=family;window.__cam=cam;window.__shot=()=>{applyCam();renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.9);};
-window.__QV4=QV4;window.__qsM=qsV4Model;window.__rc=roofCells;window.__v4=roofModelV4;
+window.__QV4=QV4;window.__qsM=qsV4Model;window.__qcur=qsCurErr;window.__rc=roofCells;window.__v4=roofModelV4;
 
 })();
 </script>
