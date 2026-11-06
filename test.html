@@ -3217,7 +3217,8 @@ function qsJoinPans(D,th){if(!D.length)return;
   for(let it=0;it<4;it++){
     const T=D.map(d=>d.outer.map(q=>({q,z:null,w:1})));const extra=D.map(()=>[]);
     D.forEach((d,i)=>d.outer.forEach((q,k)=>{const zi=d.pl[0]*q[0]+d.pl[1]*q[1]+d.pl[2];const zs=[zi],js=[];
-      D.forEach((e,j)=>{if(j===i||!onEdge(q,e))return;const zj=e.pl[0]*q[0]+e.pl[1]*q[1]+e.pl[2],same=d.dir&&e.dir&&d.dir[0]*e.dir[0]+d.dir[1]*e.dir[1]>0.99;if(Math.abs(zj-zi)<(same?0.08:0.6)){zs.push(zj);js.push(j);}}); /* two roofs side by side running down the same way: a step over 8 cm is kept */
+      const qn=d.outer[(k+1)%d.outer.length],qp=d.outer[(k+d.outer.length-1)%d.outer.length],mn=[(q[0]+qn[0])/2,(q[1]+qn[1])/2],mp=[(q[0]+qp[0])/2,(q[1]+qp[1])/2];
+      D.forEach((e,j)=>{if(j===i||!onEdge(q,e)||!(onEdge(mn,e)||onEdge(mp,e)))return; /* a neighbour along an edge, not one touching only at this corner */const zj=e.pl[0]*q[0]+e.pl[1]*q[1]+e.pl[2],same=d.dir&&e.dir&&d.dir[0]*e.dir[0]+d.dir[1]*e.dir[1]>0.99;if(Math.abs(zj-zi)<(same?0.08:0.6)){zs.push(zj);js.push(j);}}); /* two roofs side by side running down the same way: a step over 8 cm is kept */
       if(!js.length)return;const m=zs.reduce((s,v)=>s+v,0)/zs.length;T[i][k].z=m;T[i][k].w=4;js.forEach(j=>extra[j].push({q,z:m,w:4}));}));
     D.forEach((d,i)=>{const pts=T[i].map(t=>({q:t.q,z:t.z!=null?t.z:d.pl[0]*t.q[0]+d.pl[1]*t.q[1]+d.pl[2],w:t.w})).concat(extra[i]);if(pts.length<3)return;
       /* weighted least squares for a, b, c (centred for stability) */
@@ -3287,7 +3288,11 @@ function qsWeld(D,OUT,th){const tol=0.25,reps=[];let nid=0;
   const at=new Map();D.forEach(d=>{d.vz=new Map();d.rings.forEach(R=>R.forEach(r=>{if(!at.has(r.id))at.set(r.id,[]);const L=at.get(r.id);if(!L.some(x=>x.d===d))L.push({d,z:d.zf(r.x,r.y)});}));});
   at.forEach((L,id)=>{L.sort((x,y)=>x.z-y.z);let g=[L[0]];const flush=()=>{const m=g.reduce((s,x)=>s+x.z,0)/g.length;g.forEach(x=>x.d.vz.set(id,m));};
     const same=(p,q)=>p.dir&&q.dir&&(p.dir[0]||p.dir[1])&&p.dir[0]*q.dir[0]+p.dir[1]*q.dir[1]>0.99;
-    for(let k=1;k<L.length;k++){const last=g[g.length-1];if(L[k].z-last.z<(g.some(x=>same(x.d,L[k].d))?0.08:0.6))g.push(L[k]);else{flush();g=[L[k]];}}flush();});
+    /* pans meeting at this point are given one height only when they share an edge here (not across a corner), and are close in height */
+    const nb=d=>{const s=new Set();d.rings.forEach(R=>{for(let k=0;k<R.length;k++)if(R[k].id===id){s.add(R[(k+1)%R.length].id);s.add(R[(k+R.length-1)%R.length].id);}});return s;};
+    const P=L.map(x=>({x,nb:nb(x.d)})),par=P.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i]));
+    for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){const a=P[i],b=P[j];if(![...a.nb].some(v=>b.nb.has(v)))continue;if(Math.abs(a.x.z-b.x.z)<(same(a.x.d,b.x.d)?0.08:0.6))par[f(i)]=f(j);}
+    const G2=new Map();P.forEach((p,i)=>{const r=f(i);if(!G2.has(r))G2.set(r,[]);G2.get(r).push(p.x);});G2.forEach(gr=>{g=gr;flush();});});
   const byXY=new Map();reps.forEach(r=>byXY.set(r.x.toFixed(4)+','+r.y.toFixed(4),r));
   D.forEach(d=>{d.vzOf=q=>{const r=byXY.get(q[0].toFixed(4)+','+q[1].toFixed(4));return r&&d.vz.has(r.id)?d.vz.get(r.id):d.zf(q[0],q[1]);};});}
 
@@ -3356,9 +3361,9 @@ function qsCoplanar(D){const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;
   const SG=new Map();D.forEach((d,i)=>{const r=g(i);if(!SG.has(r))SG.set(r,[]);SG.get(r).push(d);});
   SG.forEach(L=>{if(L.length<2)return;let sw=0,sk=0;L.forEach(d=>{const w=area(d.outer);sk+=w*(d.pl[0]*d.dir[0]+d.pl[1]*d.dir[1]);sw+=w;});const k=sk/sw;
     L.forEach(d=>{let cx=0,cy=0;d.outer.forEach(q=>{cx+=q[0];cy+=q[1];});cx/=d.outer.length;cy/=d.outer.length;
-      /* the pan turns about its ridge (where it meets the pan running the other way): the ridge stays put, only the eave moves */
-      const rq=d.outer.filter(q=>D.some(e=>e!==d&&e.dir&&e.dir[0]*d.dir[0]+e.dir[1]*d.dir[1]<-0.99&&onB(q,e)));
-      if(rq.length>=2){cx=rq.reduce((s,q)=>s+q[0],0)/rq.length;cy=rq.reduce((s,q)=>s+q[1],0)/rq.length;}
+      /* the pan turns about its eave (the wall top, the surest laser height): the eave stays, the ridge follows the common pitch */
+      {let zmin=Infinity;d.outer.forEach(q=>{zmin=Math.min(zmin,z(d,q));});const eq=d.outer.filter(q=>z(d,q)<zmin+0.05);
+       if(eq.length){cx=eq.reduce((s,q)=>s+q[0],0)/eq.length;cy=eq.reduce((s,q)=>s+q[1],0)/eq.length;}}
       const zc=z(d,[cx,cy]),[ux,uy]=d.dir;
       d.pl=[k*ux,k*uy,zc-k*(ux*cx+uy*cy)];const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const n=Math.hypot(a,b,1);d.n=[-a/n,-b/n,1/n];});});}
 
