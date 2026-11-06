@@ -2506,7 +2506,11 @@ function splitByLevel(rings,pts,cell,depth){
   const cA=A.reduce((s,p)=>[s[0]+p.x/A.length,s[1]+p.y/A.length],[0,0]),cB=B.reduce((s,p)=>[s[0]+p.x/B.length,s[1]+p.y/B.length],[0,0]);
   let wx=cB[0]-cA[0],wy=cB[1]-cA[1];const wl=Math.hypot(wx,wy);if(wl<1.5)return parts;wx/=wl;wy/=wl;
   // best straight cut perpendicular to the A→B direction, tried at a few angles
-  let cut=null;for(let da=-0.5;da<=0.5001;da+=0.125){const cs=Math.cos(da),sn=Math.sin(da),ax=wx*cs-wy*sn,ay=wx*sn+wy*cs;
+  // the cut is a wall: it runs parallel to one of the footprint's own walls (never askew), the axis closest to the A→B direction that separates best
+  const axes=[];{const r0=rings[0];for(let i=0;i<r0.length;i++){const p=r0[i],q=r0[(i+1)%r0.length];let dx=q.x-p.x,dy=q.y-p.y;const l=Math.hypot(dx,dy);if(l<1)continue;dx/=l;dy/=l;
+    for(const [ux,uy] of [[dx,dy],[-dy,dx]]){const sg=ux*wx+uy*wy>=0?1:-1,vx=ux*sg,vy=uy*sg;if(vx*wx+vy*wy<0.5)continue;if(!axes.some(a=>a[0]*vx+a[1]*vy>0.996))axes.push([vx,vy]);}}}
+  const tryAxes=axes.length?axes:[[wx,wy]];
+  let cut=null;for(const [ax,ay] of tryAxes){
     const pr=pts.map(p=>({s:p.x*ax+p.y*ay,b:p.h>=best.t})).sort((a,b)=>a.s-b.s);const totB=B.length;let aL=0,bL=0;
     for(let i=0;i<pr.length;i++){if(pr[i].b)bL++;else aL++;const acc=(aL+(totB-bL))/pr.length;if(!cut||acc>cut.acc)cut={acc,ax,ay,c:(pr[i].s+(pr[i+1]?pr[i+1].s:pr[i].s))/2};}}
   if(!cut||cut.acc<0.86)return parts;
