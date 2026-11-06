@@ -3066,9 +3066,8 @@ function qsWindows(main){const V=main.userData._v4;if(!V)return;const {fam,XL,OU
   /* wall lines: the edges of the outline (the walls stand under the roof edge), and the steps between two roofs */
   const lines=[];(OUT||[]).forEach(poly=>poly.forEach((R0,ri)=>{const R=R0.slice(0,-1),n=R.length;let ar=0;for(let k=0,q=n-1;k<n;q=k++)ar+=(R[q][0]-R[k][0])*(R[q][1]+R[k][1]);
     for(let k=0;k<n;k++){const a={x:R[k][0],y:R[k][1]},b={x:R[(k+1)%n][0],y:R[(k+1)%n][1]},L=Math.hypot(b.x-a.x,b.y-a.y);if(L<1.6)continue;
-      let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;if(!inFam(a.x/2+b.x/2-nx*0.3,a.y/2+b.y/2-ny*0.3)&&inFam(a.x/2+b.x/2+nx*0.3,a.y/2+b.y/2+ny*0.3)){nx=-nx;ny=-ny;}
-      const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,inside=pointInPoly(mx-nx*0.1,my-ny*0.1,poly[0].map(([x,y])=>({x,y})))&&!poly.slice(1).some(h=>pointInPoly(mx-nx*0.1,my-ny*0.1,h.map(([x,y])=>({x,y}))));
-      if(!inside){nx=-nx;ny=-ny;} lines.push({a,b,L,nx,ny});}}));
+      /* outward normal from the ring's own turning direction (outer ring counter-clockwise: right-hand side; a courtyard: the other way) */
+      const sgn=(ar>0?1:-1)*(ri?-1:1);const nx=sgn*(b.y-a.y)/L,ny=-sgn*(b.x-a.x)/L; lines.push({a,b,L,nx,ny});}}));
   XL.forEach(l=>lines.push(Object.assign({L:Math.hypot(l.b.x-l.a.x,l.b.y-l.a.y)},l)));
   /* one grid per facade: edges on the same straight line (two blocks sharing a facade, a ring split at a flat vertex) are merged into one run */
   {const G=[];lines.forEach(l=>{const ex=(l.b.x-l.a.x)/l.L,ey=(l.b.y-l.a.y)/l.L,off=l.a.x*l.nx+l.a.y*l.ny;
@@ -3122,7 +3121,7 @@ if(typeof buildGroundFloors==='function'){const _g=buildGroundFloors;buildGround
   try{return _g(w);}finally{sw.forEach(([u,h])=>u.h=h);}};}
 /* square an outline: every edge within 12° of the axis (or its perpendicular) is turned onto it, consecutive edges on the
    same line are merged, a jog shorter than 60 cm between two parallel edges is removed; other edges (a real slant, a curve) stay */
-function qsSquare(R,th){const n=R.length;if(n<4)return R;const Q=Math.PI/2;
+function qsSquare(R,th){R=qsDespike(R);const n=R.length;if(n<4)return R;const Q=Math.PI/2;
   let E=[];for(let k=0;k<n;k++){const a=R[k],b=R[(k+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<1e-6)continue;let ang=Math.atan2(b[1]-a[1],b[0]-a[0]);
     const kk=Math.round((ang-th)/Q),dev=ang-th-kk*Q,snap=Math.abs(dev)<0.21;if(snap)ang=th+kk*Q;E.push({p:[(a[0]+b[0])/2,(a[1]+b[1])/2],d:[Math.cos(ang),Math.sin(ang)],L,snap,a,b});}
   const par=(e,f)=>e.snap&&f.snap&&Math.abs(e.d[0]*f.d[1]-e.d[1]*f.d[0])<1e-6&&e.d[0]*f.d[0]+e.d[1]*f.d[1]>0;
@@ -3146,6 +3145,12 @@ function qsSquare(R,th){const n=R.length;if(n<4)return R;const Q=Math.PI/2;
 if(typeof buildGroundFloors==='function'){const _g2=buildGroundFloors;buildGroundFloors=function(w){
   const v=S.meshes.filter(m=>m.userData&&m.userData.v4done).map(m=>m.userData.rings[0]);
   return _g2(v.length&&w?w.filter(x=>{const mx=(x.a.x+x.b.x)/2-x.nx*0.6,my=(x.a.y+x.b.y)/2-x.ny*0.6;return !v.some(r=>pointInPoly(mx,my,r));}):w);};}
+
+/* a ring without slits: a vertex where the outline turns back on itself (a zero-width spike left by the clipping) is dropped */
+function qsDespike(R){R=R.slice();for(let it=0;it<R.length*2&&R.length>3;it++){let ch=false;
+  for(let k=0;k<R.length;k++){const p=R[(k+R.length-1)%R.length],q=R[k],r=R[(k+1)%R.length],ax=q[0]-p[0],ay=q[1]-p[1],bx=r[0]-q[0],by=r[1]-q[1],la=Math.hypot(ax,ay),lb=Math.hypot(bx,by);
+    if(la<0.02||lb<0.02||(ax*bx+ay*by)/(la*lb)<-0.97){R.splice(k,1);ch=true;break;}}
+  if(!ch)break;}return R;}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
