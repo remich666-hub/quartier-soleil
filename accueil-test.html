@@ -464,10 +464,10 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
         /* outside: halo + patch */
         let gl=0,gr=0,gg2=0,gb=0,pm=0;
         if(mW<0.999){
-          if(LI>0.01){const an=Math.atan2(yc-WY,dxw),f=dlw/(R*1.15)*(1+0.13*Math.sin(3*an+PH0)+0.07*Math.sin(5*an-PH0*1.4));gl=(sunUp?1:0.55)*LI*Math.exp(-f*f*3.2);if(gl>0.004){const c=Math.min(1,f*1.6);gr=LC[0]+(LC2[0]-LC[0])*c;gg2=LC[1]+(LC2[1]-LC[1])*c;gb=LC[2]+(LC2[2]-LC[2])*c;}else gl=0;}
+          if(LI>0.01){const an=Math.atan2(yc-WY,dxw),f=dlw/(R*1.7)*(1+0.13*Math.sin(3*an+PH0)+0.07*Math.sin(5*an-PH0*1.4));gl=(sunUp?0.62:0.4)*LI*Math.exp(-f*f*2.2);if(gl>0.004){const c=Math.min(1,f*1.6);gr=LC[0]+(LC2[0]-LC[0])*c;gg2=LC[1]+(LC2[1]-LC[1])*c;gb=LC[2]+(LC2[2]-LC[2])*c;}else gl=0;}
           if(inPatchRow){const d=Math.max(pxl-xc,xc-pxr,py0-yc,yc-py1);if(d<psoft*8)pm=soft(d,psoft)*pfade;}
         }
-        const nx=(xc-PW/2)/(PW/2),ny=(yc-PH/2)/(PH/2),ea=Math.atan2(ny,nx),er=Math.sqrt(nx*nx+ny*ny)*(1+0.08*Math.sin(3*ea+PH0)+0.05*Math.sin(5*ea-PH0*1.3)+0.03*Math.sin(8*ea+PH0*2.1)),fe=(1-sm(0.68,1.02,er))*sm(0,Math.min(PW,PH)*0.05,Math.min(xc,PW-xc,fy));gl*=fe;pm*=fe;const cols=x+1<PW?2:1;
+        const nx=(xc-PW/2)/(PW/2),ny=(yc-PH/2)/(PH/2),ea=Math.atan2(ny,nx),er=Math.sqrt(nx*nx+ny*ny)*(1+0.08*Math.sin(3*ea+PH0)+0.05*Math.sin(5*ea-PH0*1.3)+0.03*Math.sin(8*ea+PH0*2.1)),fe=(1-sm(0.6,1.08,er))*sm(0,Math.min(PW,PH)*0.05,Math.min(xc,PW-xc,fy));gl*=fe;pm*=fe;const cols=x+1<PW?2:1;
         for(let oy=0;oy<rows;oy++)for(let ox=0;ox<cols;ox++){
           const i=(y+oy)*PW+x+ox,t1=T1[i],t2=T2[i];
           if(mW>t1){
@@ -476,7 +476,7 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
             buf[i]=px(r,g_,b,255);continue;
           }
           let al=0,r=gr,g_=gg2,b=gb;
-          if(gl>0)al=t2<gl*1.3?(0.45+0.55*gl)*wallA:gl*0.28;
+          if(gl>0)al=t2<gl*0.8?(0.35+0.4*gl)*wallA:gl*0.34;
           if(pm>0.001){if(pm*PI>T3[i]*0.9+0.05){const pa=(0.6+0.35*t2)*PI*wallA;if(pa>al){al=pa;r=pal[0];g_=pal[1];b=pal[2];}}
             else{const pa=pm*PI*0.22;if(pa>al){al=pa;r=LC[0];g_=LC[1];b=LC[2];}}}
           buf[i]=al>0.004?px(r,g_,b,al*255):0;
