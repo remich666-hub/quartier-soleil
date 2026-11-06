@@ -3503,7 +3503,7 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
   const vegMat=new THREE.MeshLambertMaterial({color:PALE}),vegMatD=new THREE.MeshLambertMaterial({color:PALE,side:THREE.DoubleSide}),trunkMat=new THREE.MeshLambertMaterial({color:TRUNK});
   const lotTex=(()=>{const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d'),r=g.createRadialGradient(128,128,0,128,128,128);
     r.addColorStop(0,'rgba(255,190,160,1)');r.addColorStop(0.45,'rgba(250,175,190,.75)');r.addColorStop(0.8,'rgba(215,195,250,.3)');r.addColorStop(1,'rgba(215,195,250,0)');g.fillStyle=r;g.fillRect(0,0,256,256);return new THREE.CanvasTexture(c);})();
-  const lotMat=new THREE.MeshLambertMaterial({map:lotTex,transparent:true,depthWrite:false,emissive:new THREE.Color(0x000000),emissiveMap:lotTex,polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-20});
+  const lotMat=new THREE.MeshLambertMaterial({map:lotTex,transparent:true,depthWrite:false,emissive:new THREE.Color(0x000000),emissiveMap:lotTex,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
   lotMat._qsGlow=1; /* the parcel keeps its own wash (no fade into the air) */
   const plainMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xe6e8f3).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
   try{ROOF.tuile.color.set(0xdcdde6);ROOF.ardoise.color.set(0xc9ccd8);ROOF.zinc.color.set(0xd6d8e2);ROOF.autre.color.set(0xdfe1e9);}catch(e){}
@@ -3830,6 +3830,8 @@ async function qsHouseFirst(){
     R0(fsScene,fsCam);renderer.autoClear=au;renderer.shadowMap.autoUpdate=su;renderer.shadowMap.needsUpdate=sn;};
   renderer.render=function(s,c){R0(s,c);if(s===scene&&c===camera&&!renderer.getRenderTarget()){try{draw(c);}catch(e){}}};
 }catch(e){console.warn('outline',e);}})();
+/* windows only on the studied house: the ground-floor window bands of the other buildings are never drawn */
+(()=>{try{const hide=()=>{try{groundBands.forEach(m=>{m.visible=false;});}catch(e){}};const _b=buildGroundFloors;buildGroundFloors=function(...a){const r=_b.apply(this,a);hide();return r;};hide();setInterval(hide,1000);}catch(e){console.warn('bands',e);}})();
 
 /* ===== the loading veil plays the home page's window (copy of home-hero.js, own ids) ===== */
 window.QS_SUN=window.QS_SUN||3;
