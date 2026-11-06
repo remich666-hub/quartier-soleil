@@ -2914,7 +2914,7 @@ function qsV4Model(fam){
   return {M,main};
 }
 function qsV4One(fam){
-  const r=qsV4Model(fam); if(!r)return false; const {M,main}=r, A0=S.alt0, dx=-M.sh0.dx, dy=-M.sh0.dy, u=main.userData;
+  const tm0=performance.now();const r=qsV4Model(fam);QV4.tModel=(QV4.tModel||0)+performance.now()-tm0; if(!r)return false; const {M,main}=r, A0=S.alt0, dx=-M.sh0.dx, dy=-M.sh0.dy, u=main.userData;
   const X=x=>x+dx, Y=y=>y+dy;
   const blockAt=(x,y)=>fam.find(o=>pointInPoly(x,y,o.userData.rings[0]));
   /* the tallest block over a point (footprints overlap: a tower inside the outline of the main block) */
@@ -3039,7 +3039,7 @@ function qsV4One(fam){
   main.userData.v4=M.v4.types.length;
   qsFoldRoofs(); try{if(typeof partsSync==='function')fam.forEach(o=>partsSync(o));}catch(e){}
   S.obstacles=(S.obstacles||[]).filter(o=>!goneObs.has(o)).concat(adds);
-  main.userData._v4={fam,XL,OUT,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(q=>d.vzOf?d.vzOf(q):d.zf(q[0],q[1]))}))}; QV4.done.push(main); try{qsWindows(main);}catch(e){console.error('v4 windows',e);}
+  QV4.tBuild=(QV4.tBuild||0)+performance.now()-tm0;main.userData._v4={fam,XL,OUT,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(q=>d.vzOf?d.vzOf(q):d.zf(q[0],q[1]))}))}; QV4.done.push(main); {const tw0=performance.now();try{qsWindows(main);}catch(e){console.error('v4 windows',e);}QV4.tWin=(QV4.tWin||0)+performance.now()-tw0;}
   try{if(S.gfWalls)buildGroundFloors(S.gfWalls);}catch(e){}
   rebuildEdges(); return true;}
 /* the IGN pitched roofs of these buildings live in shared meshes: their triangles are folded under the ground */
