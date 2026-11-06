@@ -4109,7 +4109,7 @@ function qsModel5(R,opt){opt=opt||{};
       else if(best.r<(best.ax?c:a)+0.3||best.r>(best.ax?d:b)-0.3){ /* the ridge lies outside this half: its one pitch */
         const [x0,k1,k2m]=best.sol,r=best.r,lo=best.r>(best.ax?d:b)-0.3,kk=lo?k1:k2m,c0=x0-kk*r,pw=best.ax?[c0,0,kk]:[c0,kk,0];l.type='shedU';l.x=[0,0];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;}
       else{const [x0,k1,k2m]=best.sol,r=best.r;delete l.pw;l.r=r;l.x=[x0,k1,-k2m];l.type=best.ax===1?'gableU':'gableV';
-        l.pred=best.ax===1?((u,v)=>x0-k1*Math.max(0,r-v)+k2m*Math.max(0,v-r)):((u)=>x0-k1*Math.max(0,r-u)+k2m*Math.max(0,u-r));}l.shared=1;});}catch(e){}
+        l.pred=best.ax===1?((u,v)=>x0-k1*Math.max(0,r-v)+k2m*Math.max(0,v-r)):((u)=>x0-k1*Math.max(0,r-u)+k2m*Math.max(0,u-r));}l.shared=1;});}catch(e){DBG.push(['err',String(e&&e.message)]);}
   /* quality: median |laser - model| over the building */
   const ds=[];pts.forEach(p=>{const lf=leaves.find(l=>inside(l.R,p[0],p[1]));const m=lf?lf.pred(p[0],p[1]):0;const [x,y]=XY(p[0],p[1]);if(p[2]===p[2]&&(p[2]>2||m>2)&&nearRing(x,y,1))ds.push(Math.abs(p[2]-m));});ds.sort((a,b)=>a-b);
   const rms=ds.length?ds[ds.length>>1]:9;
