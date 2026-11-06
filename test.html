@@ -4108,6 +4108,8 @@ function qsModel5(R,opt){opt=opt||{};
       /* robust: the edges mix wall and ground, a chimney, a gutter: fit, drop the far points, fit again */
       let best=fitAll(PU),QI=PU;for(let it=0;it<2&&best;it++){const lim=it?0.2:0.35;QI=PU.filter(p=>Math.abs(res(best,p))<lim);if(QI.length<Math.max(16,PU.length*0.65)){best=null;break;}best=fitAll(QI);}
       DBG.push(['fit',best&&best.k,best&&+best.rms.toFixed(3),best&&best.r,QI.length,P.length,nO]);if(!best||best.rms>0.12)return; /* not one roof: two roofs, left as they are */
+      /* the model is drawn moved back by the laser/cadastre shift of this building; a shared roof must sit where the laser is, the same for both neighbours */
+      if(!opt.noShift){const su=U(R.sh.dx,R.sh.dy),sv=V(R.sh.dx,R.sh.dy);if(best.k=='plane')best.sol=[best.sol[0]-best.sol[1]*su-best.sol[2]*sv,best.sol[1],best.sol[2]];else best.r+=best.ax?sv:su;}
       if(best.k=='plane'){const pw=best.sol;l.type='shedU';l.x=[0,0];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;}
       else if(best.r<(best.ax?c:a)+0.3||best.r>(best.ax?d:b)-0.3){ /* the ridge lies outside this half: its one pitch */
         const [x0,k1,k2m]=best.sol,r=best.r,lo=best.r>(best.ax?d:b)-0.3,kk=lo?k1:k2m,c0=x0-kk*r,pw=best.ax?[c0,0,kk]:[c0,kk,0];l.type='shedU';l.x=[0,0];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;}
