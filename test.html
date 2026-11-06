@@ -3732,11 +3732,12 @@ async function qsHouseFirst(){
   const capShow=k=>{const order=['foot','laser','rough','refined','merged','solid'],i=order.indexOf(k);cap.innerHTML='<b>Votre bâtiment</b>'+order.slice(0,i+1).map((x,j)=>'<span class="'+(j===i?'cur':'')+'">'+(j<i?'✓  ':'·  ')+NAMES[x]+'</span>').join('');cap.classList.add('on');};
   const lineMat=(c,o)=>new THREE.LineBasicMaterial({color:c,transparent:true,opacity:o,fog:false,depthWrite:false});
   const fadeTo=(objs,to,ms)=>new Promise(r=>{const from=objs.map(o=>o.material.opacity),s0=performance.now();const st=()=>{const e=Math.min(1,(performance.now()-s0)/ms),k=e<.5?2*e*e:1-Math.pow(-2*e+2,2)/2;objs.forEach((o,i)=>o.material.opacity=from[i]+(to-from[i])*k);if(e<1)setTimeout(st,16);else r();};st();});
-  const gridLines=(snaps,col,op)=>{const P=[];snaps.forEach(a=>{const at=(i,j)=>{const k=(i*5+j)*3;return [a[k],a[k+1],a[k+2]];};for(let i=0;i<5;i++)for(let j=0;j<4;j++){P.push(...at(i,j),...at(i,j+1));P.push(...at(j,i),...at(j+1,i));}
+  const gridLines=(snaps,col,op)=>{const P=[],z0=S.alt0||0;snaps.forEach(a=>{const at=(i,j)=>{const k=(i*5+j)*3;return [a[k],a[k+1],a[k+2]-z0];};for(let i=0;i<5;i++)for(let j=0;j<4;j++){P.push(...at(i,j),...at(i,j+1));P.push(...at(j,i),...at(j+1,i));}
       /* the vertical edges down to the eaves' foot are drawn by the footprint */});const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));const l=new THREE.LineSegments(g,lineMat(col,0));l.renderOrder=6;l.frustumCulled=false;return l;};
-  const houseMeshes=()=>{try{const f=family(S.target||S.building);return f.flatMap(o=>[o,...o.children.filter(c=>c.isMesh)]);}catch(e){return [];}};
+  const houseMats=()=>{const m=new Set();try{[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(x=>x&&m.add(x));for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(x=>m.add(x));}catch(e){}return m;};
+  const houseMeshes=()=>{const out=[];try{const f=family(S.target||S.building);f.forEach(o=>{out.push(o);o.children.forEach(c=>{if(c.isMesh)out.push(c);});});const hm=houseMats();scene.traverse(o=>{if(o.isMesh&&!out.includes(o)){const ms=Array.isArray(o.material)?o.material:[o.material];if(ms.some(x=>hm.has(x)))out.push(o);}});}catch(e){}return out;};
   const drawHouse=async t=>{const grp=new THREE.Group();scene.add(grp);const objs=[];let hidden=true;
-    const keepHidden=setInterval(()=>{if(hidden)houseMeshes().forEach(o=>o.visible=false);},60),keepSwept=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},200);
+    const keepHidden=setInterval(()=>{if(hidden)houseMeshes().forEach(o=>o.visible=false);},120),keepSwept=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},200);
     try{DR.stages=[];DR.tok=t;
       if(typeof QW!=='undefined'){QW.onStage=(fam,k,d)=>{if(DR.tok===t)DR.stages.push({k,d});};QW.wantStages=fam=>{try{const tf=family(S.target||S.building);return DR.tok===t&&fam.some(o=>tf.includes(o));}catch(e){return false;}};}
       /* footprint: the cadastral outline extruded to the building's height */
@@ -3746,7 +3747,7 @@ async function qsHouseFirst(){
       let shown=0,cur=null,pts=null;const s0=performance.now();
       while(t===token){
         if(DR.stages.length>shown){const st=DR.stages[shown++];
-          if(st.k==='laser'){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(st.d,3));pts=new THREE.Points(g,new THREE.PointsMaterial({color:0xe8678e,size:3.5,sizeAttenuation:false,transparent:true,opacity:0,fog:false,depthWrite:false}));pts.renderOrder=7;pts.frustumCulled=false;grp.add(pts);capShow('laser');await fadeTo([pts],0.95,500);}
+          if(st.k==='laser'){const g=new THREE.BufferGeometry();const dd=st.d.slice();for(let q=2;q<dd.length;q+=3)dd[q]-=S.alt0||0;g.setAttribute('position',new THREE.Float32BufferAttribute(dd,3));pts=new THREE.Points(g,new THREE.PointsMaterial({color:0xe8678e,size:3.5,sizeAttenuation:false,transparent:true,opacity:0,fog:false,depthWrite:false}));pts.renderOrder=7;pts.frustumCulled=false;grp.add(pts);capShow('laser');await fadeTo([pts],0.95,500);}
           else{const col=st.k==='rough'?0xff9fc0:st.k==='refined'?0xff9a70:0xffb070;const l=gridLines(st.d,col);grp.add(l);capShow(st.k);const fd=[fadeTo([l],st.k==='merged'?1:0.85,450)];if(cur)fd.push(fadeTo([cur],0,450));if(pts&&st.k!=='rough')fd.push(fadeTo([pts],st.k==='merged'?0:0.35,450));await Promise.all(fd);if(cur){grp.remove(cur);cur.geometry.dispose();}cur=l;}
           await sleep(650);continue;}
         if(houseDone()&&(shown>=DR.stages.length)&&(DR.stages.some(x=>x.k==='merged')||performance.now()-s0>1500))break;
