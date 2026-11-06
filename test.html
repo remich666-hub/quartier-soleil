@@ -2951,6 +2951,7 @@ function qsV4One(fam){
       D2.splice(bi,1);un.forEach(poly=>D2.push({outer:poly[0].slice(0,-1),holes:poly.slice(1).map(h=>h.slice(0,-1)),zf:d.zf,n:d.n}));});
     drawn.length=0;drawn.push(...D2);}
   qsJoinPans(drawn,qsAxis(main));
+  qsWeld(drawn,OUT);
   const inOut=(x,y)=>!OUT||OUT.some(poly=>pointInPoly(x,y,poly[0].map(([a,b])=>({x:a,y:b})))&&!poly.slice(1).some(h=>pointInPoly(x,y,h.map(([a,b])=>({x:a,y:b})))));
   const inRing=(x,y,R)=>{let o=false;for(let i=0,j=R.length-1;i<R.length;j=i++){const [a,b]=R[i],[c,d]=R[j];if((b>y)!==(d>y)&&x<(c-a)*(y-b)/(d-b)+a)o=!o;}return o;};
   const drawnZ=(x,y)=>{let z=-Infinity;drawn.forEach(d=>{if(inRing(x,y,d.outer)&&!d.holes.some(h=>inRing(x,y,h)))z=Math.max(z,d.zf(x,y));});return z;};
@@ -2964,7 +2965,7 @@ function qsV4One(fam){
   const P=[],N=[];
   drawn.forEach(d=>{let tr;try{tr=THREE.ShapeUtils.triangulateShape(d.outer.map(([x,y])=>new THREE.Vector2(x,y)),d.holes.map(h=>h.map(([x,y])=>new THREE.Vector2(x,y))));}catch(e){return;}
     const all=d.outer.concat(...d.holes);tr.forEach(t=>{let [A,B,C]=t.map(k=>all[k]);if(!A||!B||!C)return;if((B[0]-A[0])*(C[1]-A[1])-(B[1]-A[1])*(C[0]-A[0])<0){const T=B;B=C;C=T;}
-      [A,B,C].forEach(q=>{P.push(q[0],q[1],d.zf(q[0],q[1]));N.push(d.n[0],d.n[1],d.n[2]);});});});
+      [A,B,C].forEach(q=>{P.push(q[0],q[1],d.vzOf?d.vzOf(q):d.zf(q[0],q[1]));N.push(d.n[0],d.n[1],d.n[2]);});});});
   /* every roof edge stands on a wall: down to the roof drawn just beyond it, else to the facade top of the block under it.
      A ridge or a hip (the neighbouring pan as high) needs none. */
   const XL=[]; /* XL: wall lines off the outlines (a step between two roofs), for the windows */
@@ -2974,16 +2975,17 @@ function qsV4One(fam){
     [[0,1,2],[0,2,3]].forEach(q=>q.forEach(i=>{GP.push(t[i],[nx,ny]);}));};
   /* the outline segment a point lies on (for windows in line with the facade below) */
   const onRing=(x,y)=>{for(const o of fam){const r=o.userData.rings[0];for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length],ex=b.x-a.x,ey=b.y-a.y,L=Math.hypot(ex,ey);if(L<0.05)continue;const t=((x-a.x)*ex+(y-a.y)*ey)/(L*L);if(t<-0.01||t>1.01)continue;if(Math.abs((x-a.x)*ey-(y-a.y)*ex)/L<0.08)return {o,a,L,ex:ex/L,ey:ey/L};}}return null;};
-  drawn.forEach(d=>{[d.outer,...d.holes].forEach(R=>{for(let e=0;e<R.length;e++){const a=R[e],b=R[(e+1)%R.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<0.05)continue;
-    let nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;if(inRing(mx+nx*0.1,my+ny*0.1,d.outer)&&!d.holes.some(h=>inRing(mx+nx*0.1,my+ny*0.1,h))){nx=-nx;ny=-ny;} /* outward from this roof part */
-    const m=Math.max(1,Math.ceil(L/0.25)); if(L>=2.2&&inOut(mx+nx*0.15,my+ny*0.15))XL.push({a:{x:a[0],y:a[1]},b:{x:b[0],y:b[1]},nx,ny}); /* a step between two roofs */
-    for(let s2=0;s2<m;s2++){const t0=s2/m,t1=(s2+1)/m,A=[a[0]+(b[0]-a[0])*t0,a[1]+(b[1]-a[1])*t0],B=[a[0]+(b[0]-a[0])*t1,a[1]+(b[1]-a[1])*t1];
-      const zA=d.zf(A[0],A[1]),zB=d.zf(B[0],B[1]),cx=(A[0]+B[0])/2,cy=(A[1]+B[1])/2,ox=cx+nx*0.15,oy=cy+ny*0.15;
-      const zo=drawnZ(ox,oy);if(isFinite(zo)&&zo>=Math.min(zA,zB)-0.05)continue; /* as high beyond: a ridge, a hip, or a taller part with its own wall */
-      const under=tallAt(cx-nx*0.15,cy-ny*0.15)||blockAt(cx-nx*0.15,cy-ny*0.15)||main;
-      /* an outer wall: one face from under the ground up to the roof edge; a step: from the roof below */
-      const zg=isFinite(zo)?null:under.userData.zBase-SINK, zlo=zg!=null?zg:Math.min(zo,zA-0.03), zlo2=zg!=null?zg:Math.min(zo,zB-0.03);
-      quad(A,B,zlo,zlo2,zA,zB,nx,ny,under);}}});});
+  /* the roof is one mesh: an edge shared by two pans is the same edge for both. A wall stands only under an edge with no neighbour
+     (the outline: from under the ground) or under a real step (from the lower pan's edge up to the higher one's) */
+  const EK=new Map();drawn.forEach(d=>(d.rings||[]).forEach(R=>{for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length];EK.set(a.id+'>'+b.id,{d,a,b});}}));
+  drawn.forEach(d=>(d.rings||[]).forEach((R,ri)=>{let ar=0;for(let k=0,q=R.length-1;k<R.length;q=k++)ar+=(R[q].x-R[k].x)*(R[q].y+R[k].y);const sg=(ar>0?1:-1)*(ri?-1:1);
+    for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.05)continue;const nx=sg*(b.y-a.y)/L,ny=-sg*(b.x-a.x)/L;
+      const za=d.vz.get(a.id),zb=d.vz.get(b.id),tw=EK.get(b.id+'>'+a.id),mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+      const under=tallAt(mx-nx*0.15,my-ny*0.15)||blockAt(mx-nx*0.15,my-ny*0.15)||main;let lo0,lo1;
+      if(tw){const ta=tw.d.vz.get(a.id),tb=tw.d.vz.get(b.id);if((ta+tb)/2>=(za+zb)/2-0.05)continue; /* a ridge, a hip, a valley, or the higher side's wall */
+        lo0=Math.min(ta,za-0.03);lo1=Math.min(tb,zb-0.03);if(L>=2.2)XL.push({a:{x:a.x,y:a.y},b:{x:b.x,y:b.y},nx,ny});}
+      else{lo0=lo1=under.userData.zBase-SINK;}
+      quad([a.x,a.y],[b.x,b.y],lo0,lo1,za,zb,nx,ny,under);}}));
   if(!P.length)return false;
   /* swap: old laser pans and IGN roof triangles out, blocks cut at their new wall top, new pans and walls in */
   const goneObs=new Set();
@@ -3013,7 +3015,7 @@ function qsV4One(fam){
   main.userData.v4=M.v4.types.length;
   qsFoldRoofs(); try{if(typeof partsSync==='function')fam.forEach(o=>partsSync(o));}catch(e){}
   S.obstacles=(S.obstacles||[]).filter(o=>!goneObs.has(o)).concat(adds);
-  main.userData._v4={fam,XL,OUT,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(([x,y])=>d.zf(x,y))}))}; QV4.done.push(main); try{qsWindows(main);}catch(e){console.error('v4 windows',e);}
+  main.userData._v4={fam,XL,OUT,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(q=>d.vzOf?d.vzOf(q):d.zf(q[0],q[1]))}))}; QV4.done.push(main); try{qsWindows(main);}catch(e){console.error('v4 windows',e);}
   try{if(S.gfWalls)buildGroundFloors(S.gfWalls);}catch(e){}
   rebuildEdges(); return true;}
 /* the IGN pitched roofs of these buildings live in shared meshes: their triangles are folded under the ground */
@@ -3216,6 +3218,31 @@ function qsRidges(D){const PC=PCSYNC;if(!PC)return;
 
 /* the main wall axis of a building: the direction of the longest edge of its main footprint */
 function qsAxis(main){const mr=main.userData.rings[0];let th=0,best=0;for(let k=0;k<mr.length;k++){const a=mr[k],b=mr[(k+1)%mr.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L>best){best=L;th=Math.atan2(b.y-a.y,b.x-a.x);}}return th;}
+
+/* weld the pans into one mesh: corners closer than 25 cm become one point (an outline corner wins: the walls stay put), a corner lying on
+   a neighbour's edge is inserted into it (no T-junction), slivers left between two pans vanish. Each shared point then gets one height
+   for the pans that meet there (within 60 cm: a ridge, a hip, a valley); pans further apart keep their own (a real step). */
+function qsWeld(D,OUT){const tol=0.25,reps=[];let nid=0;
+  const add=(x,y,fixed)=>{const r={x,y,fixed,n:1,id:nid++};reps.push(r);return r;};
+  (OUT||[]).forEach(poly=>poly.forEach(R=>R.slice(0,-1).forEach(q=>{if(!reps.some(r=>Math.hypot(r.x-q[0],r.y-q[1])<0.01))add(q[0],q[1],true);})));
+  const snap=q=>{let best=null,bd=tol;reps.forEach(r=>{const dd=Math.hypot(r.x-q[0],r.y-q[1]);if(dd<bd){bd=dd;best=r;}});
+    if(!best)return add(q[0],q[1],false);if(!best.fixed){best.x=(best.x*best.n+q[0])/(best.n+1);best.y=(best.y*best.n+q[1])/(best.n+1);best.n++;}return best;};
+  D.forEach(d=>{d.rings=[d.outer,...d.holes].map(R=>R.map(snap));});
+  const segD=(r,a,b)=>{const ex=b.x-a.x,ey=b.y-a.y,L2=ex*ex+ey*ey;if(L2<1e-6)return null;const t=((r.x-a.x)*ex+(r.y-a.y)*ey)/L2;if(t<=0.02||t>=0.98)return null;
+    const d=Math.hypot(a.x+ex*t-r.x,a.y+ey*t-r.y);return d<0.12?t:null;};
+  const area=R=>{let s=0;for(let k=0,q=R.length-1;k<R.length;q=k++)s+=(R[q].x-R[k].x)*(R[q].y+R[k].y);return Math.abs(s/2);};
+  const clean=R=>{let out=R.filter((r,k)=>r!==R[(k+1)%R.length]);for(let it=0;it<out.length&&out.length>2;it++){let ch=false;
+      for(let k=0;k<out.length;k++){if(out[(k+out.length-1)%out.length]===out[(k+1)%out.length]){out.splice(k,1);out=out.filter((r,q)=>r!==out[(q+1)%out.length]);ch=true;break;}}if(!ch)break;}return out;};
+  D.forEach(d=>{d.rings=d.rings.map(R=>{const out=[];for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length];out.push(a);if(a===b)continue;
+      const ins=[];reps.forEach(r=>{if(r===a||r===b)return;const t=segD(r,a,b);if(t!=null)ins.push([t,r]);});ins.sort((x,y)=>x[0]-y[0]).forEach(([,r])=>out.push(r));}return clean(out);});});
+  for(let i=D.length-1;i>=0;i--){const d=D[i];if(d.rings[0].length<3||area(d.rings[0])<0.2){D.splice(i,1);continue;}d.rings=[d.rings[0]].concat(d.rings.slice(1).filter(R=>R.length>=3&&area(R)>0.2));
+    d.outer=d.rings[0].map(r=>[r.x,r.y]);d.holes=d.rings.slice(1).map(R=>R.map(r=>[r.x,r.y]));}
+  /* one height per shared point, for the pans that meet there */
+  const at=new Map();D.forEach(d=>{d.vz=new Map();d.rings.forEach(R=>R.forEach(r=>{if(!at.has(r.id))at.set(r.id,[]);const L=at.get(r.id);if(!L.some(x=>x.d===d))L.push({d,z:d.zf(r.x,r.y)});}));});
+  at.forEach((L,id)=>{L.sort((x,y)=>x.z-y.z);let g=[L[0]];const flush=()=>{const m=g.reduce((s,x)=>s+x.z,0)/g.length;g.forEach(x=>x.d.vz.set(id,m));};
+    for(let k=1;k<L.length;k++){if(L[k].z-g[g.length-1].z<0.6)g.push(L[k]);else{flush();g=[L[k]];}}flush();});
+  const byXY=new Map();reps.forEach(r=>byXY.set(r.x.toFixed(4)+','+r.y.toFixed(4),r));
+  D.forEach(d=>{d.vzOf=q=>{const r=byXY.get(q[0].toFixed(4)+','+q[1].toFixed(4));return r&&d.vz.has(r.id)?d.vz.get(r.id):d.zf(q[0],q[1]);};});}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
