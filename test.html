@@ -4096,13 +4096,20 @@ function qsModel5(R,opt){opt=opt||{};
       for(let u=a+0.25;u<b;u+=gs)for(let v=c+0.25;v<d;v+=gs){const [x0,y0]=XY(u,v),x=Math.round(x0/gs)*gs,y=Math.round(y0/gs)*gs,z=Zl(x,y);if(z==null||z-Z0<1.8||z-Z0>5)continue;const k=kq(x,y);if(!seen.has(k)){seen.set(k,[x,y,z]);Q.push([x,y,z]);}}
       for(let q=0;q<Q.length&&seen.size<900;q++){const [x,y,z]=Q[q];for(const [ex,ey] of [[gs,0],[-gs,0],[0,gs],[0,-gs]]){const X=x+ex,Y=y+ey,k=kq(X,Y);if(seen.has(k)||Math.hypot(X-cxl,Y-cyl)>8)continue;const Z=Zl(X,Y);if(Z==null||Math.abs(Z-z)>0.3||Z-Z0<1.8||Z-Z0>5)continue;if(!own(X,Y)&&!oth(X,Y))continue;seen.set(k,[X,Y,Z]);Q.push([X,Y,Z]);}}
       const P=[...seen.values()],nO=P.filter(([x,y])=>!own(x,y)&&oth(x,y)).length;if(nO*gs*gs<3||P.length<16)return;
-      const np=P.length;let mx=0,my=0,mz=0;P.forEach(([x,y,z])=>{mx+=x/np;my+=y/np;mz+=z/np;});let xx=0,xy=0,yy=0,xz=0,yz=0;P.forEach(([x,y,z])=>{const dx=x-mx,dy=y-my,dz=z-mz;xx+=dx*dx;xy+=dx*dy;yy+=dy*dy;xz+=dx*dz;yz+=dy*dz;});
-      const det=xx*yy-xy*xy;if(Math.abs(det)<1e-6)return;const p1=(xz*yy-yz*xy)/det,p2=(yz*xx-xz*xy)/det,zw=(x,y)=>mz+p1*(x-mx)+p2*(y-my);
-      let e=0;P.forEach(([x,y,z])=>{e+=(z-zw(x,y))**2;});if(Math.sqrt(e/np)>0.18)return; /* not one plane: two roofs, left as they are */
-      const gu=p1*t[0]+p2*t[1],gv=p1*n[0]+p2*n[1],zf=(u,v)=>zw(...XY(u,v))-Z0;
-      if(Math.max(Math.abs(gu),Math.abs(gv))<0.04){l.type='flat';l.x=[zf((a+b)/2,(c+d)/2)];}
-      else if(Math.abs(gu)>=Math.abs(gv)){l.type='shedU';l.x=[zf(a,(c+d)/2),gu];}else{l.type='shedV';l.x=[zf((a+b)/2,c),gv];}
-      const pw=[zf(0,0),gu,gv];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;});}catch(e){}
+      /* one plane, or one gable whose ridge crosses the party line (the ridge parallel to a wall): the best that explains the laser */
+      const PU=P.map(([x,y,z])=>[U(x,y),V(x,y),z-Z0]);const ls3=(rows)=>{const M=[[0,0,0],[0,0,0],[0,0,0]],B=[0,0,0];rows.forEach(([f,z])=>{for(let i=0;i<3;i++){B[i]+=f[i]*z;for(let k=0;k<3;k++)M[i][k]+=f[i]*f[k];}});
+        const d=M[0][0]*(M[1][1]*M[2][2]-M[1][2]*M[2][1])-M[0][1]*(M[1][0]*M[2][2]-M[1][2]*M[2][0])+M[0][2]*(M[1][0]*M[2][1]-M[1][1]*M[2][0]);if(Math.abs(d)<1e-9)return null;
+        const sol=[0,1,2].map(c=>{const Mc=M.map((r,i)=>r.map((v,k)=>k===c?B[i]:v));return (Mc[0][0]*(Mc[1][1]*Mc[2][2]-Mc[1][2]*Mc[2][1])-Mc[0][1]*(Mc[1][0]*Mc[2][2]-Mc[1][2]*Mc[2][0])+Mc[0][2]*(Mc[1][0]*Mc[2][1]-Mc[1][1]*Mc[2][0]))/d;});
+        let e=0;rows.forEach(([f,z])=>{e+=(z-sol[0]*f[0]-sol[1]*f[1]-sol[2]*f[2])**2;});return {sol,rms:Math.sqrt(e/rows.length)};};
+      let best=null;const pl=ls3(PU.map(([u,v,z])=>[[1,u,v],z]));if(pl)best={k:'plane',rms:pl.rms,sol:pl.sol};
+      for(const ax of [0,1]){const ws=PU.map(p=>p[ax]);const w0=Math.min(...ws),w1=Math.max(...ws);for(let r=w0+1;r<=w1-1;r+=0.25){
+        const g=ls3(PU.map(p=>[[1,Math.min(0,p[ax]-r),Math.max(0,p[ax]-r)],p[2]]));if(g&&g.sol[1]>0.05&&g.sol[2]<-0.05&&(!best||g.rms<best.rms-0.02))best={k:'gable',ax,r,rms:g.rms,sol:g.sol};}}
+      if(!best||best.rms>0.15)return; /* not one roof: two roofs, left as they are */
+      if(best.k=='plane'){const pw=best.sol;l.type='shedU';l.x=[0,0];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;}
+      else if(best.r<(best.ax?c:a)+0.3||best.r>(best.ax?d:b)-0.3){ /* the ridge lies outside this half: its one pitch */
+        const [x0,k1,k2m]=best.sol,r=best.r,lo=best.r>(best.ax?d:b)-0.3,kk=lo?k1:k2m,c0=x0-kk*r,pw=best.ax?[c0,0,kk]:[c0,kk,0];l.type='shedU';l.x=[0,0];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;}
+      else{const [x0,k1,k2m]=best.sol,r=best.r;delete l.pw;l.r=r;l.x=[x0,k1,-k2m];l.type=best.ax===1?'gableU':'gableV';
+        l.pred=best.ax===1?((u,v)=>x0-k1*Math.max(0,r-v)+k2m*Math.max(0,v-r)):((u)=>x0-k1*Math.max(0,r-u)+k2m*Math.max(0,u-r));}l.shared=1;});}catch(e){}
   /* quality: median |laser - model| over the building */
   const ds=[];pts.forEach(p=>{const lf=leaves.find(l=>inside(l.R,p[0],p[1]));const m=lf?lf.pred(p[0],p[1]):0;const [x,y]=XY(p[0],p[1]);if(p[2]===p[2]&&(p[2]>2||m>2)&&nearRing(x,y,1))ds.push(Math.abs(p[2]-m));});ds.sort((a,b)=>a-b);
   const rms=ds.length?ds[ds.length>>1]:9;
@@ -4189,7 +4196,7 @@ function qsV5Snap(L,fam,M,log){const L5=M.L5,sx=M.sh0.dx,sy=M.sh0.dy,E=1e-6;
   log.push(['snap',[...mv.entries()].map(([k,v])=>k[0]+(v-+k.slice(1)).toFixed(2)).join(' '),own2.length]);}
 /* the rules of the trade, on the parameters */
 function qsV5Rules(L,log){const E=1e-6,ov=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0),deg=k=>Math.atan(k)*180/Math.PI;
-  const adj=[];for(let i=0;i<L.length;i++)for(let j=0;j<L.length;j++){if(i==j)continue;const A=L[i].R,B=L[j].R;
+  const adj=[];for(let i=0;i<L.length;i++)for(let j=0;j<L.length;j++){if(i==j||L[i].shared||L[j].shared||L[i].pw||L[j].pw)continue;const A=L[i].R,B=L[j].R;
     if(Math.abs(A[1]-B[0])<E&&ov(A[2],A[3],B[2],B[3])>0.3)adj.push({w:i,e:j,ori:'u',at:A[1]}); /* A west of B */
     if(Math.abs(A[3]-B[2])<E&&ov(A[0],A[1],B[0],B[1])>0.3)adj.push({w:i,e:j,ori:'v',at:A[3]});} /* A south of B */
   /* gable: eaves (low edges) and pitches; a pan pivots about its eave */
@@ -4231,7 +4238,7 @@ function qsV5Build(M,fam,main){const L5=M.L5;if(!L5||!PCSYNC)return null;const P
   const L=L5.leaves.map(l=>{const c=Object.assign({},l);c.R=l.R.map(r3);c.x=l.x?l.x.slice():l.x;c.pred=qsV5Pred(c);return c;});
   qsV5Snap(L,fam,M,log);
   /* no roof under 2.2 m above the ground (a laser fit that took in the yard or a hedge): the low edge is lifted, the high one kept */
-  {const zmin=Math.min(...fam.map(o=>o.userData.zBase))+2.2+A0-L5.Z0;L.forEach((l,i)=>{const x=l.x,[a,b,c,d]=l.R;let ch=false;
+  {const zmin=Math.min(...fam.map(o=>o.userData.zBase))+2.2+A0-L5.Z0;L.forEach((l,i)=>{if(l.pw)return;const x=l.x,[a,b,c,d]=l.R;let ch=false;
     if(l.type=='flat'||l.type=='hip'||l.type=='mansard'){if(x[0]<zmin){x[0]=zmin;ch=true;}}
     else if(l.type=='shedU'||l.type=='shedV'){const w=l.type=='shedU'?b-a:d-c,z0=x[0],z1=x[0]+x[1]*w;if(Math.min(z0,z1)<zmin){ch=true;if(Math.max(z0,z1)<=zmin+0.05){l.type='flat';l.x=[zmin];}else if(z0<z1)l.x=[zmin,(z1-zmin)/w];else l.x=[z0,(zmin-z0)/w];}}
     else if(l.type=='gableU'||l.type=='gableV'){const lo=l.type=='gableU'?c:a,hi=l.type=='gableU'?d:b,e1=x[0]-x[1]*(l.r-lo),e2=x[0]-x[2]*(hi-l.r);
@@ -4308,7 +4315,7 @@ function qsWorkerMain(){ /* runs inside the worker */
     if(m.kind==='data'){if(m.mnh!==undefined){S.lidarR={mnh:mkAt(m.mnh)};F=mkAt(m.F);C=mkAt(m.C);}if(m.ortho!==undefined)GD=null,S.rawOrtho=m.ortho?{raw:{width:m.ortho.width,height:m.ortho.height,getContext:()=>({getImageData:()=>({data:m.ortho.data})})},w:m.ortho.w,e:m.ortho.e,n:m.ortho.n,s:m.ortho.s}:null;return;}
     const t0=performance.now(),inF=(x,y)=>F&&Math.abs(x)<F.R-2&&Math.abs(y)<F.R-2;
     const R=Object.assign({},m.R,{Z:(x,y)=>{let z=inF(x,y)?F.at(x,y):null;if(z==null&&C)z=C.at(x,y);return z;}});
-    const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0,pw:l.pw}))});
+    const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0,pw:l.pw,shared:l.shared}))});
     const ro=S.rawOrtho,green=ro?((x,y)=>{const W=ro.raw.width,H=ro.raw.height,mpp=(ro.e-ro.w)/W,d=GD||(GD=ro.raw.getContext().getImageData().data);const px=Math.round((x-ro.w)/mpp),py=Math.round((ro.n-y)/mpp);if(px<0||py<0||px>=W||py>=H)return -99;const k=(py*W+px)*4;return 2*d[k+1]-d[k]-d[k+2];}):null;
     let staged=!m.stages;const run=o=>{try{const st=staged?null:(k,d)=>self.postMessage({id:m.id,stage:k,data:d});staged=true;const M=qsModel5(R,Object.assign({big:m.big,green,onStage:st},o));return M&&M.cells.length?pack(M,o):null;}catch(err){return null;}};
     let M=run({});if(!M||(!m.big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
