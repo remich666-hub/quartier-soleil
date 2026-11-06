@@ -2980,7 +2980,7 @@ function qsV4One(fam){
   /* storey-high wall pieces (a tower above the rest) carry the window grid of the facades */
   if(TP.length){const m=mk(TP,TN,matsFor(u.usage,false)[1],true);m.geometry.setAttribute('uv',new THREE.Float32BufferAttribute(TU,2));adds.push(m);}
   /* edges: creases of the new roof (ridges, hips, outline) and of the upper walls, added to the main block's lines */
-  const ex=[]; adds.forEach(m=>{const eg=new THREE.EdgesGeometry(m.geometry,15);ex.push(eg.attributes.position.array.slice());eg.dispose();});
+  const ex=[]; [roofM].forEach(m=>{const eg=new THREE.EdgesGeometry(m.geometry,15);ex.push(eg.attributes.position.array.slice());eg.dispose();});
   {let tot=main.userData.edgeArr.length;ex.forEach(a=>tot+=a.length);const all=new Float32Array(tot);all.set(main.userData.edgeArr);let o=main.userData.edgeArr.length;ex.forEach(a=>{all.set(a,o);o+=a.length;});main.userData.edgeArr=all;}
   main.userData.v4=M.v4.types.length;
   qsFoldRoofs(); try{if(typeof partsSync==='function')fam.forEach(o=>partsSync(o));}catch(e){}
