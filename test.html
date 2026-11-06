@@ -3173,7 +3173,7 @@ function qsWindows(main){const V=main.userData._v4;if(!V)return;if(V.w5)return q
 /* a block selected beyond the processed radius: rebuilt on demand, ahead of the queue */
 if(typeof setHi==='function'){const _hi=setHi;setHi=function(m,on){_hi(m,on);try{const u=m&&m.userData;if(!on||!u||!u.lidar||u.monu||u.church||!QV4.pri)return;
   const fam=family(m).filter(o=>o.userData.rings);if(fam.some(o=>o.userData.v4done||QV4.used.has(o)||(QV4.tried&&QV4.tried.has(o))||QV4.pri.some(it=>it.fam.includes(o))))return;
-  if(fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0)>4000)return;QV4.pri.push({fam,d:0});}catch(e){}};}
+  if(fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0)>4000)return;const bc=m.geometry.boundingSphere;if(bc&&bc.center.length()>RECENTER_D&&!(S.qsExt||[]).some(e=>e.T===S.T&&Math.hypot(e.cx-bc.center.x,e.cy-bc.center.y)<40))return; /* far: after the laser extension (recenterOn) */QV4.pri.push({fam,d:0});}catch(e){}};}
 /* the model's slope pass and ground-floor bands, kept consistent with these buildings: no texture grid laid back on their walls,
    windows laid again when the ground data changes, ground-floor bands no higher than the wall as drawn */
 if(typeof slopeWalls==='function'){const _sw=slopeWalls;slopeWalls=function(m){const u=m&&m.userData;
@@ -3397,6 +3397,39 @@ function qsCoplanar(D){const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;
 function qsUnion(list){const PC=PCSYNC;try{return PC.union(...list);}catch(e){}
   const r=v=>Math.round(v*1000)/1000,L2=list.map(poly=>poly.map(R=>R.map(([x,y])=>[r(x),r(y)])));try{return PC.union(...L2);}catch(e){}
   const r2=v=>Math.round(v*100)/100;return PC.union(...list.map(poly=>poly.map(R=>R.map(([x,y])=>[r2(x),r2(y)]))));}
+/* ===== a building chosen away from the address: the laser is extended around it instead of reloading the whole neighbourhood
+   (ground, gardens, trees and buildings stay as they are; only the fine laser rasters gain a square centred on it) ===== */
+const QS_EXT_D=180; /* within the laser-rebuilt zone (200 m); beyond, the neighbourhood is reloaded as before */
+async function qsRasterAt(kind,R,res,cx,cy){const W=Math.round(2*R/res),[lo0,la0]=unproj(cx-R,cy-R),[lo1,la1]=unproj(cx+R,cy+R);
+  const u=`https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=IGNF_LIDAR-HD_${kind}_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G&STYLES=&CRS=EPSG:4326&BBOX=${la0.toFixed(7)},${lo0.toFixed(7)},${la1.toFixed(7)},${lo1.toFixed(7)}&WIDTH=${W}&HEIGHT=${W}&FORMAT=image/x-bil;bits=32`;
+  const r=await gpf(u);if(!r.ok)return null;const buf=await r.arrayBuffer();if(buf.byteLength!==W*W*4)return null;
+  const f=new Float32Array(buf),ok=v=>v>-500&&v<9000;let nv=0;for(let k=0;k<f.length;k+=97)if(ok(f[k]))nv++;if(nv<(f.length/97)*0.6)return null;return {f,W,R,res,cx,cy};}
+/* several rasters as one: the newest square first, then the older ones (the one around the address keeps the rest) */
+function qsMosaic(old,part){const parts=[part].concat(old?(old.parts||[{f:old.f,W:old.W,R:old.R,res:old.res,cx:0,cy:0}]):[]),ok=v=>v>-500&&v<9000;
+  const at=(x,y)=>{for(const p of parts){const i=Math.floor((x-p.cx+p.R)/p.res),j=Math.floor((p.R-(y-p.cy))/p.res);if(i<0||j<0||i>=p.W||j>=p.W)continue;const v=p.f[j*p.W+i];if(ok(v))return v;}return null;};
+  const res=Math.min(...parts.map(p=>p.res));const max=(x,y,rad)=>{let m=null;for(let dy=-rad;dy<=rad+1e-6;dy+=res)for(let dx=-rad;dx<=rad+1e-6;dx+=res){const v=at(x+dx,y+dy);if(v!=null&&(m==null||v>m))m=v;}return m;};
+  return {R:1e9,res,W:parts[0].W,f:parts[0].f,at,max,parts};}
+if(typeof recenterOn==='function'){const _rc=recenterOn;recenterOn=async function(obj){
+  const b=obj.geometry.boundingSphere||(obj.geometry.computeBoundingSphere(),obj.geometry.boundingSphere),c=b.center,d=Math.hypot(c.x,c.y),L=S.lidarR;
+  if(d>QS_EXT_D||S.loading||!L||!L.mnh||!S.T)return _rc(obj);
+  const T=S.T,fam=family(obj).filter(o=>o.userData.rings);
+  if(!(S.qsExt||(S.qsExt=[])).some(e=>e.T===T&&Math.hypot(e.cx-c.x,e.cy-c.y)<40)){
+    if(QV4.extBusy)return;QV4.extBusy=true;
+    try{toast('Laser fin autour de ce bâtiment…');
+      const [F2,C2,H2]=await Promise.all([qsRasterAt('MNS',120,0.5,c.x,c.y),qsRasterAt('MNS',330,1,c.x,c.y),qsRasterAt('MNH',320,1,c.x,c.y)].map(p=>p.catch(()=>null)));
+      if(S.T!==T)return;if(!F2)return _rc(obj); /* no fine laser there: as before */
+      const nF=qsMosaic(L.mnsFine||S.mnsF,F2),nC=C2?qsMosaic(L.mns,C2):L.mns,nH=H2?qsMosaic(L.mnh,H2):L.mnh;
+      L.mnsFine=nF;S.mnsF=nF;L.mns=nC;L.mnh=nH;S.lidarP={mnsFine:Promise.resolve(nF),mns:Promise.resolve(nC),mnh:Promise.resolve(nH)};
+      S.qsExt.push({T,cx:c.x,cy:c.y});
+      /* the roofs around it rebuilt with this laser, the chosen building first */
+      const seen=new Set(),near=[];S.meshes.forEach(m=>{const u=m.userData;if(!u||!u.rings||!u.lidar||u.monu||u.church||u.v4done)return;const g=u.gid||m.uuid;if(seen.has(g))return;seen.add(g);
+        const f=family(m).filter(o=>o.userData.rings);if(f.some(o=>QV4.used.has(o)))return;let dd=1e9;f.forEach(o=>o.userData.rings[0].forEach(p=>{dd=Math.min(dd,Math.hypot(p.x-c.x,p.y-c.y));}));
+        if(f.some(o=>fam.includes(o)))dd=-1;if(dd<=50&&f.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0)<=2000){f.forEach(o=>QV4.tried&&QV4.tried.delete(o));near.push({fam:f,d:dd});}});
+      near.sort((a,p)=>a.d-p.d);if(QV4.pri)QV4.pri.unshift(...near);
+      /* the window study again, now on the fine laser */
+      try{if(S.building&&S.win)chooseFacade(+$('facade').value||0);}catch(e){}
+      toast('Laser fin chargé autour de ce bâtiment');}
+    finally{QV4.extBusy=false;}}};}
 
 /* ===== Quartier Soleil v5: the v4 roof model, own copy (Toit Soleil untouched), faster and returning its rectangles ===== */
 function qsModel5(R,opt){opt=opt||{};
@@ -3725,7 +3758,7 @@ function qsWorker(){if(QW.failed)return null;if(QW.w)return QW.w;
     w.onerror=e=>{console.warn('qs worker',e.message);QW.failed=true;QW.cb.forEach(f=>f({M:null,err:1}));QW.cb.clear();};
     QW.w=w;return w;}catch(e){QW.failed=true;return null;}}
 function qsWorkerMain(){ /* runs inside the worker */
-  const mkAt=o=>{if(!o)return null;const {f,W,R,res}=o,ok=v=>v>-500&&v<9000;return {R,res,W,at:(x,y)=>{const i=Math.floor((x+R)/res),j=Math.floor((R-y)/res);if(i<0||j<0||i>=W||j>=W)return null;const v=f[j*W+i];return ok(v)?v:null;}};};
+  const mkAt=o=>{if(!o)return null;const parts=o.parts,ok=v=>v>-500&&v<9000;return {R:parts.length>1?1e9:parts[0].R,res:parts[0].res,W:parts[0].W,at:(x,y)=>{for(const p of parts){const i=Math.floor((x-p.cx+p.R)/p.res),j=Math.floor((p.R-(y-p.cy))/p.res);if(i<0||j<0||i>=p.W||j>=p.W)continue;const v=p.f[j*p.W+i];if(ok(v))return v;}return null;}};};
   let F=null,C=null,GD=null;
   self.onmessage=e=>{const m=e.data;
     if(m.kind==='data'){if(m.mnh!==undefined){S.lidarR={mnh:mkAt(m.mnh)};F=mkAt(m.F);C=mkAt(m.C);}if(m.ortho!==undefined)GD=null,S.rawOrtho=m.ortho?{raw:{width:m.ortho.width,height:m.ortho.height,getContext:()=>({getImageData:()=>({data:m.ortho.data})})},w:m.ortho.w,e:m.ortho.e,n:m.ortho.n,s:m.ortho.s}:null;return;}
@@ -3737,8 +3770,8 @@ function qsWorkerMain(){ /* runs inside the worker */
     let M=run({});if(!M||(!m.big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
     if(!M||M.rms>0.3){const M3=run({big:false,lam:4,kinks:true});if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
     self.postMessage({id:m.id,M,ms:performance.now()-t0});};}
-function qsWorkerData(){const w=qsWorker();if(!w)return;const L=S.lidarR||{},pk=o=>o?{f:o.f,W:o.W,R:o.R,res:o.res}:null;
-  if(QW.sent!==S.T){QW.sent=S.T;QW.ortho=null;w.postMessage({kind:'data',mnh:pk(L.mnh),F:pk(S.mnsF||L.mnsFine),C:pk(L.mns)});}
+function qsWorkerData(){const w=qsWorker();if(!w)return;const L=S.lidarR||{},pk=o=>o?{parts:o.parts||[{f:o.f,W:o.W,R:o.R,res:o.res,cx:0,cy:0}]}:null;
+  if(QW.sent!==S.T||QW.sentH!==L.mnh){QW.sent=S.T;QW.sentH=L.mnh;QW.ortho=null;w.postMessage({kind:'data',mnh:pk(L.mnh),F:pk(S.mnsF||L.mnsFine),C:pk(L.mns)});}
   const ro=S.rawOrtho;if(ro&&ro.raw&&QW.ortho!==ro){QW.ortho=ro;let o=null;try{const W=ro.raw.width,H=ro.raw.height;o={width:W,height:H,data:ro.raw.getContext('2d').getImageData(0,0,W,H).data,w:ro.w,e:ro.e,n:ro.n,s:ro.s};}catch(e){}w.postMessage({kind:'data',ortho:o});}}
 /* the model of a group of blocks, computed in the worker; resolves to the same shape as qsV4Model (or null: the current roofs stay) */
 function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.userData.rings[0]))-Math.abs(areaOf(p.userData.rings[0])))[0];
