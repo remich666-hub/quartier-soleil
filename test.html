@@ -3205,7 +3205,7 @@ function qsJoinPans(D,th){if(!D.length)return;
       /* a refit that tilts the pan noticeably is refused (the laser slope stays the reference) */
       if(Math.hypot(a-d.pl[0],b-d.pl[1])>0.12)return;d.pl=[a,b,c];});}
   D.forEach(d=>{const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const L=Math.hypot(a,b,1);d.n=[-a/L,-b/L,1/L];});
-  try{qsHipPitch(D);}catch(e){console.warn('v4 hips',e);}
+  try{qsCoplanar(D);qsHipPitch(D);qsCoplanar(D);}catch(e){console.warn('v4 hips',e);}
   try{qsRidges(D);}catch(e){console.warn('v4 ridges',e);}}
 /* two pans that meet (a ridge, a hip, a valley) share the line where their planes cross: the dividing line cut by the laser model
    (often a few degrees off) is replaced by that line, so the ridge runs level and parallel to the eaves and both pans start from it */
@@ -3303,6 +3303,24 @@ function qsRelax(D,reps,th){if(th==null)return;const fam=[0,1,2,3].map(k=>th+k*M
   /* the measure kept for the check: worst remaining deviation of a shared edge from its family */
   let worst=0;ed.forEach(({a,b,f})=>{let dv=((Math.atan2(b.y-a.y,b.x-a.x)-f)%Math.PI+Math.PI)%Math.PI;dv=Math.min(dv,Math.PI-dv);worst=Math.max(worst,dv);});
   (QV4.relax=QV4.relax||[]).push({edges:ed.length,worstDeg:+(worst*180/Math.PI).toFixed(2),list:ed.map(({a,b,f})=>{let dv=((Math.atan2(b.y-a.y,b.x-a.x)-f)%Math.PI+Math.PI)%Math.PI;dv=Math.min(dv,Math.PI-dv);return [+(dv*180/Math.PI).toFixed(1),+Math.hypot(b.x-a.x,b.y-a.y).toFixed(1),!!a.out,!!b.out,!!a.seg,!!b.seg];}).filter(x=>x[0]>0.3)});}
+
+/* one slope, one plane: two neighbouring pans running down the same way and meeting at the same height (within 30 cm) are one
+   side of the roof; they get one plane, fitted on all their corners (weighted by area) */
+function qsCoplanar(D){const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2<1e-6)continue;
+    const t=((q[0]-a[0])*ex+(q[1]-a[1])*ey)/L2;if(t<-0.01||t>1.01)continue;if(Math.abs((q[0]-a[0])*ey-(q[1]-a[1])*ex)/Math.sqrt(L2)<0.08)return true;}return false;};
+  const z=(d,q)=>d.pl[0]*q[0]+d.pl[1]*q[1]+d.pl[2];
+  const area=R=>{let s=0;for(let k=0,j=R.length-1;k<R.length;j=k++)s+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);return Math.abs(s/2);};
+  const par=D.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i]));
+  for(let i=0;i<D.length;i++)for(let j=i+1;j<D.length;j++){const d=D[i],e=D[j];if(!d.dir||!e.dir)continue;
+    const flat=v=>!(v.dir[0]||v.dir[1]);if(flat(d)!==flat(e))continue;if(!flat(d)&&d.dir[0]*e.dir[0]+d.dir[1]*e.dir[1]<0.99)continue;
+    const sh=d.outer.filter(q=>onB(q,e)).concat(e.outer.filter(q=>onB(q,d)));if(sh.length<2)continue;
+    let span=0;sh.forEach(a=>sh.forEach(b=>{span=Math.max(span,Math.hypot(a[0]-b[0],a[1]-b[1]));}));if(span<1.0)continue;
+    if(sh.some(q=>Math.abs(z(d,q)-z(e,q))>0.3))continue;par[f(i)]=f(j);}
+  const G=new Map();D.forEach((d,i)=>{const r=f(i);if(!G.has(r))G.set(r,[]);G.get(r).push(d);});
+  G.forEach(L=>{if(L.length<2)return;const pts=[];L.forEach(d=>{const w=area(d.outer)/d.outer.length;d.outer.forEach(q=>pts.push({q,z:z(d,q),w}));});
+    const dir=L[0].dir;let sw=0,mx=0,my=0;pts.forEach(p=>{sw+=p.w;mx+=p.w*p.q[0];my+=p.w*p.q[1];});mx/=sw;my/=sw;let zm=0;pts.forEach(p=>zm+=p.w*p.z);zm/=sw;
+    let pl;if(!(dir[0]||dir[1]))pl=[0,0,zm];else{const [ux,uy]=dir;let suu=0,suz=0;pts.forEach(p=>{const t=(p.q[0]-mx)*ux+(p.q[1]-my)*uy;suu+=p.w*t*t;suz+=p.w*t*(p.z-zm);});const k=suu>1e-6?suz/suu:0;pl=[k*ux,k*uy,zm-k*(ux*mx+uy*my)];}
+    L.forEach(d=>{d.pl=pl.slice();const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const n=Math.hypot(a,b,1);d.n=[-a/n,-b/n,1/n];});});}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
