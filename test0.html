@@ -2876,7 +2876,7 @@ function frame(now){
 requestAnimationFrame(frame);
 window.QS={terrainZ,floorBase,facEave,facGround,storeyH,nFloors,S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown},get treesD(){return treeCrownD},LEAF,LEAFU,classifyTrees};
 update(); if(!S.startPending)load($('addr').value); // an address handed over by the home page is loaded once, not also the last one seen
-window.__S=S;window.__fam=family;window.__cam=cam;window.__shot=()=>{applyCam();renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.9);};
+window.__S=S;window.__fam=family;window.__cam=cam;window.__scene=scene;window.__shot=()=>{applyCam();renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.9);};window.__recenter=recenterOn;window.__selB=selectBuilding;
 
 })();
 </script>
