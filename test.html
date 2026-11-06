@@ -3423,23 +3423,34 @@ function qsModel5(R,opt){opt=opt||{};
   let CU=dedupe(cu,u0,u1,0.7),CV=dedupe(cv,v0,v1,0.7);for(let gp=1;(CU.length>10||CV.length>10)&&gp<4;gp+=0.5){CU=dedupe(cu,u0,u1,gp);CV=dedupe(cv,v0,v1,gp);}
   /* fitting */
   const pts=[];for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)pts.push([u0+(i+.5)*g,v0+(j+.5)*g,H[i][j]]);
-  const ptsIn=Rc=>{const i0=Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),i1=Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),j0=Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),j1=Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1),out=[];for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)out.push(pts[i*NV+j]);return out;};
-  const lsq=(rows,np)=>{const Mx=[...Array(np)].map(()=>Array(np).fill(0)),bb=Array(np).fill(0);rows.forEach(([f,z])=>{for(let a=0;a<np;a++){bb[a]+=f[a]*z;for(let c=0;c<np;c++)Mx[a][c]+=f[a]*f[c];}});for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
-  const CL=0.6,costOf=(P,pr)=>{let s=0;P.forEach(p=>{s+=Math.min(Math.abs(p[2]-pr(p[0],p[1])),CL);});return s;};
-  const fitM=(P,feat,np)=>{const rows=P.map(p=>[feat(p[0],p[1]),p[2]]);let x=lsq(rows,np);for(let it=0;it<1;it++){const r2=rows.filter(([f,z])=>Math.abs(z-f.reduce((s,v,i)=>s+v*x[i],0))<0.5);if(r2.length>np+3)x=lsq(r2,np);}return x;};
+  /* fitting on the grid itself (typed arrays, no per-point allocation): same models, same order, same solver as v4 */
+  const PZ=new Float64Array(NU*NV);for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)PZ[i*NV+j]=H[i][j];
+  const rngOf=Rc=>[Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1)];
+  const ptsIn=Rc=>{const [i0,i1,j0,j1]=rngOf(Rc),out=[];for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)out.push(pts[i*NV+j]);return out;};
+  const solveN=(Mx,bb,np)=>{for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
+  const CL=0.6;
+  const fitM=(I,feat,np)=>{const f=new Float64Array(np);
+    const pass=x=>{const Mx=[...Array(np)].map(()=>Array(np).fill(0)),bb=Array(np).fill(0);let n=0;
+      for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const v=v0+(j+.5)*g,z=PZ[i*NV+j];feat(u,v,f);
+        if(x){let pz=0;for(let a=0;a<np;a++)pz+=f[a]*x[a];if(!(Math.abs(z-pz)<0.5))continue;}n++;
+        for(let a=0;a<np;a++){bb[a]+=f[a]*z;const fa=f[a],Ma=Mx[a];for(let c=0;c<np;c++)Ma[c]+=fa*f[c];}}}return {Mx,bb,n};};
+    const p0=pass(null);let x=solveN(p0.Mx,p0.bb,np);const p1=pass(x);if(p1.n>np+3)x=solveN(p1.Mx,p1.bb,np);return x;};
+  const costI=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const d=Math.abs(PZ[i*NV+j]-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
   const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){r=leafFit0(Rc);LFC.set(key,r);}return r;};
-  const leafFit0=Rc=>{const P=ptsIn(Rc),none={type:'none',pred:()=>0,cost:0,cr:0,R:Rc,np:0};if(!P.length)return none;const occ=P.filter(p=>p[2]>2).length/P.length;const cands=[{type:'none',pred:()=>0,np:0}];
-    if(occ>0.3){const a=P.filter(p=>p[2]>1).map(p=>p[2]).sort((x,y)=>x-y),md=a.length?a[a.length>>1]:0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
-      const su=fitM(P,u=>[1,u-Rc[0]],2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
-      const sv=fitM(P,(u,v)=>[1,v-Rc[2]],2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
+  const leafFit0=Rc=>{const I=rngOf(Rc),none={type:'none',pred:()=>0,cost:0,cr:0,R:Rc,np:0};const nP=(I[1]-I[0]+1)*(I[3]-I[2]+1);if(I[1]<I[0]||I[3]<I[2])return none;
+    let n2=0,zmax=-1e9;const hi=[];for(let i=I[0];i<=I[1];i++)for(let j=I[2];j<=I[3];j++){const z=PZ[i*NV+j];if(z>2)n2++;if(z>1)hi.push(z);if(z>zmax)zmax=z;}
+    const occ=n2/nP;const cands=[{type:'none',pred:()=>0,np:0}];
+    if(occ>0.3){hi.sort((x,y)=>x-y);const md=hi.length?hi[hi.length>>1]:0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
+      const su=fitM(I,(u,v,f)=>{f[0]=1;f[1]=u-Rc[0];},2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
+      const sv=fitM(I,(u,v,f)=>{f[0]=1;f[1]=v-Rc[2];},2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
       const w=Rc[3]-Rc[2],l=Rc[1]-Rc[0];
-      for(const f of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[2]+f*w,x=fitM(P,(u,v)=>[1,-Math.max(0,r-v),-Math.max(0,v-r)],3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableU',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-v)-x[2]*Math.max(0,v-r),np:3});}
-      for(const f of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[0]+f*l,x=fitM(P,u=>[1,-Math.max(0,r-u),-Math.max(0,u-r)],3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableV',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-u)-x[2]*Math.max(0,u-r),np:3});}
-      const dm=(u,v)=>Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);const hx=fitM(P,(u,v)=>[1,dm(u,v)],2);if(hx[1]>0.15&&hx[1]<1.8)cands.push({type:'hip',x:hx,pred:(u,v)=>hx[0]+hx[1]*dm(u,v),np:2});
-      if(big)for(const w0 of [0.8,1.2,1.6]){if(Math.min(w,l)<2*w0+1)continue;const x=fitM(P,(u,v)=>{const d=dm(u,v);return [1,Math.min(d,w0),Math.max(0,d-w0)];},3);if(x[1]>1.2&&x[1]<4&&x[2]>=0&&x[2]<0.8)cands.push({type:'mansard',w0,x,pred:(u,v)=>{const d=dm(u,v);return x[0]+x[1]*Math.min(d,w0)+x[2]*Math.max(0,d-w0);},np:3});}}
-    const hmax=Math.max(...P.map(p=>p[2]))+0.5;let best=null;
+      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[2]+fr*w,x=fitM(I,(u,v,f)=>{f[0]=1;f[1]=-Math.max(0,r-v);f[2]=-Math.max(0,v-r);},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableU',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-v)-x[2]*Math.max(0,v-r),np:3});}
+      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[0]+fr*l,x=fitM(I,(u,v,f)=>{f[0]=1;f[1]=-Math.max(0,r-u);f[2]=-Math.max(0,u-r);},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableV',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-u)-x[2]*Math.max(0,u-r),np:3});}
+      const dm=(u,v)=>Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);const hx=fitM(I,(u,v,f)=>{f[0]=1;f[1]=dm(u,v);},2);if(hx[1]>0.15&&hx[1]<1.8)cands.push({type:'hip',x:hx,pred:(u,v)=>hx[0]+hx[1]*dm(u,v),np:2});
+      if(big)for(const w0 of [0.8,1.2,1.6]){if(Math.min(w,l)<2*w0+1)continue;const x=fitM(I,(u,v,f)=>{const d=dm(u,v);f[0]=1;f[1]=Math.min(d,w0);f[2]=Math.max(0,d-w0);},3);if(x[1]>1.2&&x[1]<4&&x[2]>=0&&x[2]<0.8)cands.push({type:'mansard',w0,x,pred:(u,v)=>{const d=dm(u,v);return x[0]+x[1]*Math.min(d,w0)+x[2]*Math.max(0,d-w0);},np:3});}}
+    const hmax=zmax+0.5;let best=null;
     cands.forEach(c=>{if((c.type=='shedU'||c.type=='shedV')&&c.k>1)return;if(c.type!='none'){let bad=false;[[Rc[0],Rc[2]],[Rc[1],Rc[2]],[Rc[0],Rc[3]],[Rc[1],Rc[3]],[(Rc[0]+Rc[1])/2,(Rc[2]+Rc[3])/2]].forEach(([u,v])=>{const z=c.pred(u,v);if(z>hmax||z<-0.5)bad=true;});if(bad)return;}
-      const cr=costOf(P,c.pred),co=cr+0.15*c.np*Math.sqrt(P.length);if(!best||co<best.cost)best={...c,cost:co,cr};});best.R=Rc;return best;};
+      const cr=costI(I,c.pred),co=cr+0.15*c.np*Math.sqrt(nP);if(!best||co<best.cost)best={...c,cost:co,cr};});best.R=Rc;return best;};
   const LAM=(opt.lam||8)*(g*g/0.25)**0.5, memo=new Map(), tS=performance.now();
   const solve=(a,b,c,d)=>{const key=a+','+b+','+c+','+d;if(memo.has(key))return memo.get(key);const lf=leafFit([CU[a],CU[b],CV[c],CV[d]]);let best={cost:lf.cost+(lf.type=='none'?0:LAM),leaves:[lf]};
     if(performance.now()-tS<6000){
@@ -3737,7 +3748,7 @@ function roofModelV4(R,opt){opt=opt||{};
 
 
 window.__S=S;window.__fam=family;window.__cam=cam;window.__scene=scene;window.__shot=()=>{applyCam();renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.9);};
-window.__QV4=QV4;window.__qsW=qsWindows;window.__qsRows=qsRows;window.__qsM=qsV4Model;window.__qcur=qsCurErr;window.__rc=roofCells;window.__v4=roofModelV4;
+window.__QV4=QV4;window.__qsW=qsWindows;window.__qsRows=qsRows;window.__qsM=qsV4Model;window.__qcur=qsCurErr;window.__rc=roofCells;window.__v4=roofModelV4;window.__qm5=qsModel5;
 
 })();
 </script>
