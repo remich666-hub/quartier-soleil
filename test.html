@@ -3434,6 +3434,65 @@ if(typeof recenterOn==='function'){const _rc=recenterOn;recenterOn=async functio
       toast('Laser fin chargé autour de ce bâtiment');}
     finally{QV4.extBusy=false;}}};}
 
+/* ===== Quartier Soleil — « Aube givrée » theme (light) and its night (dark): pale lavender-blue air, a deep night-blue mass,
+   one warm orange-to-pink light, always soft; fine grain on the glass panels. The warm light follows the sun of the chosen hour. ===== */
+(function(){
+  const NOISE="url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")";
+  const css=`
+:root{--bg:#eef1f8;--panel:rgba(244,246,252,.70);--fg:#151a33;--ink2:#474e6d;--muted:#7a809b;--line:rgba(21,26,51,.10);--raised:rgba(21,26,51,.055);
+  --accent:#f0773a;--accent2:#e8678e;--accent-ink:#c2521c;--accent-fg:#fff;--btn:#151a33;--btn-fg:#f6f7fc;--sun:#f0873f;--shade:#d5d9e8;
+  --aura-a:#f0873f;--aura-b:#e8678e;--aura-c:#8fa3d9;--grain:.05;--glass:22px;color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0c1022;--panel:rgba(14,18,38,.66);--fg:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;--line:rgba(238,240,250,.10);--raised:rgba(238,240,250,.06);
+  --accent:#ff8a4c;--accent2:#f0679a;--accent-ink:#ffa070;--accent-fg:#0c1022;--btn:#eef0fa;--btn-fg:#0c1022;--sun:#ff8a4c;--shade:#2a3050;--grain:.07;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0c1022;--panel:rgba(14,18,38,.66);--fg:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;--line:rgba(238,240,250,.10);--raised:rgba(238,240,250,.06);
+  --accent:#ff8a4c;--accent2:#f0679a;--accent-ink:#ffa070;--accent-fg:#0c1022;--btn:#eef0fa;--btn-fg:#0c1022;--sun:#ff8a4c;--shade:#2a3050;--grain:.07;color-scheme:dark}
+/* frosted glass with grain, a soft glow of the hour's light in the corner */
+.panel,#timePill{position:relative;background:var(--panel);backdrop-filter:blur(var(--glass)) saturate(1.5);-webkit-backdrop-filter:blur(var(--glass)) saturate(1.5);
+  border:1px solid color-mix(in srgb,var(--fg) 8%,transparent);box-shadow:0 18px 50px -18px color-mix(in srgb,var(--aura-c) 55%,transparent),0 2px 6px rgba(21,26,51,.06)}
+.panel{border-radius:20px;isolation:isolate}
+.panel::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
+  background:radial-gradient(90% 55% at 100% 0%,color-mix(in srgb,var(--aura-a) 26%,transparent),transparent 70%),radial-gradient(70% 45% at 0% 100%,color-mix(in srgb,var(--aura-c) 22%,transparent),transparent 70%);transition:background 1.2s var(--ease)}
+.panel::after,#timePill::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background-image:${NOISE};opacity:var(--grain);mix-blend-mode:overlay}
+input[type=text],.stepper{background:color-mix(in srgb,var(--bg) 70%,transparent);border-color:var(--line)}
+.hintBox,#info{background:var(--raised)}
+/* the result: the hours of sun on a soft halo of the hour's light */
+.big{position:relative;isolation:isolate}
+.big::before{content:"";position:absolute;left:-18px;top:-26px;width:190px;height:120px;z-index:-1;border-radius:50%;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--aura-a) 70%,transparent),color-mix(in srgb,var(--aura-b) 35%,transparent) 55%,transparent);filter:blur(18px);opacity:.75;transition:background 1.2s var(--ease)}
+.big .v{color:var(--fg)}
+.strip{border-radius:6px;height:14px}
+.strip i.on{background:linear-gradient(180deg,var(--accent),var(--accent2))}
+.strip i.filt{background:color-mix(in srgb,var(--accent2) 35%,var(--line))}
+button.cta{background:linear-gradient(100deg,var(--accent),var(--accent2));border:0;color:#fff;box-shadow:0 10px 26px -10px color-mix(in srgb,var(--accent) 80%,transparent)}
+button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 88%,#000),color-mix(in srgb,var(--accent2) 88%,#000))}
+.step .n{color:var(--accent-ink)}
+#timePill svg,.hintBox svg{color:var(--accent)}
+.badge i{box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 20%,transparent)}
+#toast{background:color-mix(in srgb,var(--fg) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+`;
+  const st=document.createElement('style');st.id='qsTheme';st.textContent=css;document.head.appendChild(st);
+  /* the model: cool white volumes, rosy tiles, the studied building in night blue */
+  try{Object.assign(USAGE,{'Résidentiel':[0xf4f5fa,0xdfe2ee],'Commercial et services':[0xf1f3f8,0xdadeea],'Industriel':[0xeceff6,0xd5dae6],'Religieux':[0xf3f2f6,0xe0dde8],'Agricole':[0xf2f2f6,0xdcdce6],'Sportif':[0xf0f2f7,0xd8dce8]});}catch(e){}
+  try{ROOF.tuile.color.set(0xe5ccc6);ROOF.ardoise.color.set(0xa7adc4);ROOF.zinc.color.set(0xc6cad8);ROOF.autre.color.set(0xd9dbe6);}catch(e){}
+  const HI_WALL=0x2d3675,HI_ROOF=0x1f2552;
+  try{PART_HI.roof=new THREE.MeshLambertMaterial({color:HI_ROOF});PART_HI.wall=new THREE.MeshLambertMaterial({color:HI_WALL,side:THREE.DoubleSide});PART_HI.wallT=patchWall(new THREE.MeshLambertMaterial({color:HI_WALL,map:wallTex,side:THREE.DoubleSide}));}catch(e){}
+  try{const _m=matsFor;matsFor=function(u,t){const r=_m(u,t);if(t&&!r._qs){r[0].color.set(HI_ROOF);r[1].color.set(HI_WALL);r._qs=1;}return r;};}catch(e){}
+  try{sunPath.material.color.set(0xf28a62);}catch(e){}
+  /* the sky of the hour, in the reference's palette, and the panels' warm light following it */
+  const root=document.documentElement,hex=c=>'#'+c.getHexString();
+  try{const _us=updateSky;updateSky=function(sp,wx){_us(sp,wx);
+    const cloud=wx?wx.cloud/100:0.12,alt=sp.alt;let top,hor,a,b,c;
+    if(alt<-0.12){top=new THREE.Color(0x0b1026);hor=new THREE.Color(0x1d2244);a=lerpC(0x5b5fd6,0x5b5fd6,0);b=new THREE.Color(0xe8678e);c=new THREE.Color(0x3a4380);}
+    else if(alt<0.1){const t=(alt+0.12)/0.22;top=lerpC(0x0b1026,0x8e9bd8,t);hor=lerpC(0x2c2347,0xf4a07a,t);a=lerpC(0x7a5fd6,0xff7a3a,t);b=lerpC(0xe8678e,0xf06a8a,t);c=lerpC(0x3a4380,0x9aa6dc,t);}
+    else{const t=Math.min(1,(alt-0.1)/0.5);top=lerpC(0x8e9bd8,0xb7c4ea,t);hor=lerpC(0xf4b29a,0xeaedf7,t);a=lerpC(0xff7a3a,0xf0873f,t);b=lerpC(0xf06a8a,0xe8678e,t);c=lerpC(0x9aa6dc,0x8fa3d9,t);}
+    const grey=new THREE.Color(0xc4c8d6);top.lerp(grey,cloud*0.8*(alt>0?1:0.3));hor.lerp(grey,cloud*0.45*(alt>0?1:0.3));
+    skyUni.top.value.copy(top);skyUni.horizon.value.copy(hor);skyUni.ground.value.copy(hor.clone().multiplyScalar(0.86));
+    const day=Math.max(0,Math.min(1,alt/0.25));
+    hemi.color=day>0.05?top.clone().lerp(new THREE.Color(0xffffff),0.6):new THREE.Color(0x8f9bd0);hemi.groundColor=new THREE.Color(0xd9d6e6).multiplyScalar(0.55+0.45*day);
+    scene.fog=new THREE.FogExp2(hor.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.00045);
+    root.style.setProperty('--aura-a',hex(a));root.style.setProperty('--aura-b',hex(b));root.style.setProperty('--aura-c',hex(c));};}catch(e){console.warn('theme sky',e);}
+})();
+
 /* ===== Quartier Soleil v5: the v4 roof model, own copy (Toit Soleil untouched), faster and returning its rectangles ===== */
 function qsModel5(R,opt){opt=opt||{};
   const TT={},tk=k=>{const n=performance.now();TT[k]=(TT[k]||0)+n-TT._;TT._=n;};TT._=performance.now();const t0=performance.now(), raw=S.rawOrtho, MH=S.lidarR&&S.lidarR.mnh, Zl=R.Z; if(!MH||!Zl)return null;
