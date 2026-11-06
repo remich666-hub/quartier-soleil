@@ -3788,9 +3788,10 @@ async function qsHouseFirst(){
 /* ===== Selection outline: a thick line around the outside of the chosen building (and of the chosen window), traced on the screen
    from a mask of their silhouette. Replaces the façade rectangle. ===== */
 (()=>{try{
-  const COL=new THREE.Color(0xfbe3c4), LH=7, LW=8;
+  const COL=new THREE.Color(0xfbe3c4),DAY=new THREE.Color(0xf0773a),NIGHT=new THREE.Color(0xfbe3c4), LH=7, LW=8;
+  const clip=new THREE.Plane(new THREE.Vector3(0,0,1),0);renderer.localClippingEnabled=true; /* the part of the walls sunk in the ground stays out of the silhouette */
   try{facadeLine.layers.set(31);}catch(e){} /* the old rectangle: never drawn */
-  const maskH=new THREE.MeshBasicMaterial({color:0xff0000,side:THREE.DoubleSide,fog:false,toneMapped:false});
+  const maskH=new THREE.MeshBasicMaterial({color:0xff0000,side:THREE.DoubleSide,fog:false,toneMapped:false,clippingPlanes:[clip]});
   const maskW=new THREE.MeshBasicMaterial({color:0x00ff00,side:THREE.DoubleSide,fog:false,toneMapped:false,depthTest:false,depthWrite:false,blending:THREE.AdditiveBlending,transparent:true});
   const winQ=new THREE.Mesh(new THREE.PlaneGeometry(1.15,1.35),maskW);winQ.layers.set(LW);winQ.frustumCulled=false;scene.add(winQ);
   const fsCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1),fsScene=new THREE.Scene();
@@ -3809,7 +3810,8 @@ async function qsHouseFirst(){
     tagged.forEach(o=>{if(!nx.has(o))o.layers.disable(LH);});nx.forEach(o=>o.layers.enable(LH));tagged=nx;};
   const draw=c=>{
     const w=S.win,b=(w&&w.obj)||S.building||S.addrTarget;if(!b||!b.parent||cam.mode==='window'){if(tagged.size)tag([]);return;}
-    tag(family(b));
+    const fam=family(b);tag(fam);if(b._qsClipFor!==b.uuid+fam.length){let z=1e9;fam.forEach(o=>{if(!o.geometry)return;if(!o.geometry.boundingBox)o.geometry.computeBoundingBox();o.updateMatrixWorld();const bz=o.geometry.boundingBox.min.z+o.matrixWorld.elements[14];z=Math.min(z,bz+SINK);});b._qsClip=z===1e9?0:z;b._qsClipFor=b.uuid+fam.length;}clip.constant=-b._qsClip+0.05;
+    {let day=true;try{day=sun.position.z-sun.target.position.z>0;}catch(e){}COL.lerp(day?DAY:NIGHT,0.08);}
     /* the window: a pane on the wall where the window is, seen only from the side it faces */
     let front=0;if(w&&w.pos&&w.normal){const n=w.normal;winQ.position.set(w.pos.x-n.x*0.4,w.pos.y-n.y*0.4,w.pos.z);winQ.lookAt(winQ.position.x+n.x,winQ.position.y+n.y,winQ.position.z);
       front=n.x*(c.position.x-winQ.position.x)+n.y*(c.position.y-winQ.position.y)>0?1:0;}
@@ -3823,7 +3825,7 @@ async function qsHouseFirst(){
     if(winQ.visible){c.layers.set(LW);scene.overrideMaterial=null;R0(scene,c);}
     c.layers.mask=lm;scene.overrideMaterial=ov;scene.background=bg;renderer.setRenderTarget(null);renderer.setClearColor(cc,ca);
     const dpr=renderer.getPixelRatio();fsMat.uniforms.tM.value=rt.texture;fsMat.uniforms.px.value.set(1/W,1/H);
-    fsMat.uniforms.rH.value=Math.min(5.5,Math.max(1.5,3*dpr/2));fsMat.uniforms.rW.value=Math.min(4.5,Math.max(1.2,2.2*dpr/2));
+    fsMat.uniforms.rH.value=Math.min(6,Math.max(2,3.5*dpr/2));fsMat.uniforms.rW.value=Math.min(5,Math.max(1.6,2.5*dpr/2));
     fsMat.uniforms.aH.value=w&&w.pos?0.55:1;fsMat.uniforms.aW.value=aWin;
     R0(fsScene,fsCam);renderer.autoClear=au;renderer.shadowMap.autoUpdate=su;renderer.shadowMap.needsUpdate=sn;};
   renderer.render=function(s,c){R0(s,c);if(s===scene&&c===camera&&!renderer.getRenderTarget()){try{draw(c);}catch(e){}}};
