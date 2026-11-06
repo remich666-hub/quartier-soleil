@@ -3001,6 +3001,7 @@ function qsV4One(fam){
     const geo=new THREE.ShapeGeometry(shape);geo.translate(0,0,SINK-0.3);
     ud.v4done=true; ud._v4top=h; geo.computeBoundingBox();geo.computeBoundingSphere();
     o.geometry.dispose();o.geometry=geo; ud.edgeArr=new Float32Array(0);
+    o.scale.z=1; /* the model may squash a block to its laser height: these walls and roofs are drawn at their true heights */
     QV4.rings.push(...ud.rings.slice(0,1));});
   const z0=main.position.z, mk=(P,N,mat,gable)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
     const m=new THREE.Mesh(g,mat);m.castShadow=m.receiveShadow=true;m.position.z=-z0;if(gable)m.userData.gable=true;main.add(m);return m;};
