@@ -2990,9 +2990,19 @@ function qsV4One(fam){
       const under=tallAt(mx-nx*0.15,my-ny*0.15)||blockAt(mx-nx*0.15,my-ny*0.15)||main;let lo0,lo1;
       if(tw){const ta=tw.d.vz.get(a.id),tb=tw.d.vz.get(b.id);if((ta+tb)/2>=(za+zb)/2-0.05)continue; /* a ridge, a hip, a valley, or the higher side's wall */
         lo0=Math.min(ta,za-0.03);lo1=Math.min(tb,zb-0.03);if(L>=2.2)XL.push({a:{x:a.x,y:a.y},b:{x:b.x,y:b.y},nx,ny});}
-      else if(inOut(mx+nx*0.15,my+ny*0.15)){const zo=drawnZ(mx+nx*0.15,my+ny*0.15);if(isFinite(zo)&&zo>=Math.min(za,zb)-0.05)continue;if(isFinite(zo)){lo0=Math.min(zo,za-0.03);lo1=Math.min(zo,zb-0.03);}else lo0=lo1=under.userData.zBase-SINK;} /* a leftover gap inside: a step at most */
-      else{lo0=lo1=under.userData.zBase-SINK;}
+      else if(inOut(mx+nx*0.15,my+ny*0.15)){const zo=drawnZ(mx+nx*0.15,my+ny*0.15);if(isFinite(zo)&&zo>=Math.min(za,zb)-0.05)continue;if(isFinite(zo)){lo0=Math.min(zo,za-0.03);lo1=Math.min(zo,zb-0.03);}else continue;} /* a leftover gap inside: a step at most */
+      else continue; /* an outline edge: its wall is built on the outline itself, below */
       quad([a.x,a.y],[b.x,b.y],lo0,lo1,za,zb,nx,ny,under);}}));
+  /* the outer walls stand on the outline itself, from under the ground up to the roof as drawn just inside it (the roof mesh,
+     triangle by triangle): every outline wall is whole, whatever the pans along it */
+  {const TR=[];for(let i=0;i<P.length;i+=9)TR.push([P[i],P[i+1],P[i+2],P[i+3],P[i+4],P[i+5],P[i+6],P[i+7],P[i+8]]);
+   const roofAt=(x,y)=>{let z=-Infinity;for(const t of TR){const d=(t[4]-t[7])*(t[0]-t[6])+(t[6]-t[3])*(t[1]-t[7]);if(Math.abs(d)<1e-9)continue;
+     const l1=((t[4]-t[7])*(x-t[6])+(t[6]-t[3])*(y-t[7]))/d,l2=((t[7]-t[1])*(x-t[6])+(t[0]-t[6])*(y-t[7]))/d,l3=1-l1-l2;if(l1<-1e-4||l2<-1e-4||l3<-1e-4)continue;z=Math.max(z,l1*t[2]+l2*t[5]+l3*t[8]);}return z;};
+   (OUT||[]).forEach(poly=>poly.forEach((R0,ri)=>{const R=R0.slice(0,-1),n=R.length;let ar=0;for(let k=0,q=n-1;k<n;q=k++)ar+=(R[q][0]-R[k][0])*(R[q][1]+R[k][1]);const sg=(ar>0?1:-1)*(ri?-1:1);
+     for(let k=0;k<n;k++){const a=R[k],b=R[(k+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<0.02)continue;const nx=sg*(b[1]-a[1])/L,ny=-sg*(b[0]-a[0])/L,m=Math.max(1,Math.ceil(L/0.25));
+       let prev=null;for(let s2=0;s2<=m;s2++){const t=s2/m,x=a[0]+(b[0]-a[0])*t,y=a[1]+(b[1]-a[1])*t;let z=roofAt(x-nx*0.02,y-ny*0.02);if(!isFinite(z))z=roofAt(x-nx*0.15,y-ny*0.15);
+         if(prev&&isFinite(z)&&isFinite(prev.z)){const mx=(prev.x+x)/2,my=(prev.y+y)/2,own=tallAt(mx-nx*0.3,my-ny*0.3)||blockAt(mx-nx*0.3,my-ny*0.3)||main,zg=own.userData.zBase-SINK;
+           quad([prev.x,prev.y],[x,y],zg,zg,prev.z,z,nx,ny,own);}prev={x,y,z};}}}));}
   if(!P.length)return false;
   /* swap: old laser pans and IGN roof triangles out, blocks cut at their new wall top, new pans and walls in */
   const goneObs=new Set();
