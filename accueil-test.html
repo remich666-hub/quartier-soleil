@@ -184,12 +184,12 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 :root{--bg:#eef1f8;--card:rgba(248,249,253,.72);--raised:rgba(21,26,51,.05);--ink:#151a33;--ink2:#474e6d;--muted:#7a809b;
   --line:rgba(21,26,51,.09);--line2:rgba(21,26,51,.16);--sun:#f0773a;--sun2:#e8678e;--sun-ink:#c2521c;--sun-soft:#fbe3d8;--btn:#151a33;--btn-ink:#f6f7fc;
   --aura1:#f6c3b0;--aura2:#c9d3f0;--aura3:#efc6d8;--grain:.06;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0c1022;--card:rgba(16,20,40,.62);--raised:rgba(238,240,250,.06);--ink:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;
-  --line:rgba(238,240,250,.08);--line2:rgba(238,240,250,.16);--sun:#ff8a4c;--sun2:#f0679a;--sun-ink:#ffa070;--sun-soft:#3a2436;--btn:#eef0fa;--btn-ink:#0c1022;
-  --aura1:#4a2a4a;--aura2:#1e2858;--aura3:#3a2050;--grain:.08;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#0c1022;--card:rgba(16,20,40,.62);--raised:rgba(238,240,250,.06);--ink:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;
-  --line:rgba(238,240,250,.08);--line2:rgba(238,240,250,.16);--sun:#ff8a4c;--sun2:#f0679a;--sun-ink:#ffa070;--sun-soft:#3a2436;--btn:#eef0fa;--btn-ink:#0c1022;
-  --aura1:#4a2a4a;--aura2:#1e2858;--aura3:#3a2050;--grain:.08;color-scheme:dark}
+/* the home page is always light; only the hero turns to night, following the window */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#eef1f8;--card:rgba(248,249,253,.72);--raised:rgba(21,26,51,.05);--ink:#151a33;--ink2:#474e6d;--muted:#7a809b;--line:rgba(21,26,51,.09);--line2:rgba(21,26,51,.16);--sun:#f0773a;--sun2:#e8678e;--sun-ink:#c2521c;--sun-soft:#fbe3d8;--btn:#151a33;--btn-ink:#f6f7fc;--aura1:#f6c3b0;--aura2:#c9d3f0;--aura3:#efc6d8;--grain:.06;color-scheme:light}}
+:root[data-theme="dark"]{--bg:#eef1f8;--card:rgba(248,249,253,.72);--raised:rgba(21,26,51,.05);--ink:#151a33;--ink2:#474e6d;--muted:#7a809b;--line:rgba(21,26,51,.09);--line2:rgba(21,26,51,.16);--sun:#f0773a;--sun2:#e8678e;--sun-ink:#c2521c;--sun-soft:#fbe3d8;--btn:#151a33;--btn-ink:#f6f7fc;--aura1:#f6c3b0;--aura2:#c9d3f0;--aura3:#efc6d8;--grain:.06;color-scheme:light}
+.hero[data-mode="dark"]{--bg:#0c1022;--card:rgba(16,20,40,.62);--raised:rgba(238,240,250,.06);--ink:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;--line:rgba(238,240,250,.08);--line2:rgba(238,240,250,.16);--sun:#ff8a4c;--sun2:#f0679a;--sun-ink:#ffa070;--sun-soft:#3a2436;--btn:#eef0fa;--btn-ink:#0c1022;--aura1:#4a2a4a;--aura2:#1e2858;--aura3:#3a2050;--grain:.08;color-scheme:dark}
+.hero{background:var(--bg);color:var(--ink)}
+#themeBtn{display:none}
 /* the page sits in soft coloured air, with a fixed grain over everything */
 body{background:var(--bg)}
 body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:40;opacity:var(--grain);mix-blend-mode:overlay;
@@ -231,13 +231,14 @@ nav .btn.primary.sm{box-shadow:none}
 @property --aura2{syntax:'<color>';inherits:true;initial-value:#c9d3f0}
 @property --aura3{syntax:'<color>';inherits:true;initial-value:#efc6d8}
 @property --grain{syntax:'<number>';inherits:true;initial-value:.06}
-:root{transition:--bg 1.6s cubic-bezier(.45,0,.55,1),--card 1.6s cubic-bezier(.45,0,.55,1),--raised 1.6s cubic-bezier(.45,0,.55,1),--ink 1.6s cubic-bezier(.45,0,.55,1),--ink2 1.6s cubic-bezier(.45,0,.55,1),--muted 1.6s cubic-bezier(.45,0,.55,1),--line 1.6s cubic-bezier(.45,0,.55,1),--line2 1.6s cubic-bezier(.45,0,.55,1),--sun 1.6s cubic-bezier(.45,0,.55,1),--sun2 1.6s cubic-bezier(.45,0,.55,1),--sun-ink 1.6s cubic-bezier(.45,0,.55,1),--sun-soft 1.6s cubic-bezier(.45,0,.55,1),--btn 1.6s cubic-bezier(.45,0,.55,1),--btn-ink 1.6s cubic-bezier(.45,0,.55,1),--aura1 1.6s cubic-bezier(.45,0,.55,1),--aura2 1.6s cubic-bezier(.45,0,.55,1),--aura3 1.6s cubic-bezier(.45,0,.55,1),--grain 1.6s cubic-bezier(.45,0,.55,1)}
+.hero{transition:--bg 1.6s cubic-bezier(.45,0,.55,1),--card 1.6s cubic-bezier(.45,0,.55,1),--raised 1.6s cubic-bezier(.45,0,.55,1),--ink 1.6s cubic-bezier(.45,0,.55,1),--ink2 1.6s cubic-bezier(.45,0,.55,1),--muted 1.6s cubic-bezier(.45,0,.55,1),--line 1.6s cubic-bezier(.45,0,.55,1),--line2 1.6s cubic-bezier(.45,0,.55,1),--sun 1.6s cubic-bezier(.45,0,.55,1),--sun2 1.6s cubic-bezier(.45,0,.55,1),--sun-ink 1.6s cubic-bezier(.45,0,.55,1),--sun-soft 1.6s cubic-bezier(.45,0,.55,1),--btn 1.6s cubic-bezier(.45,0,.55,1),--btn-ink 1.6s cubic-bezier(.45,0,.55,1),--aura1 1.6s cubic-bezier(.45,0,.55,1),--aura2 1.6s cubic-bezier(.45,0,.55,1),--aura3 1.6s cubic-bezier(.45,0,.55,1),--grain 1.6s cubic-bezier(.45,0,.55,1)}
 </style>
+<script>window.QS_SUN=3</script>
 </head>
 <body>
 <nav id="nav"><div class="wrap">
   <a class="brand" href="./" aria-label="Quartier Soleil, accueil"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#e8772e"/><path d="M2 17h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
-  <div class="links"><a class="l" href="#comment">Comment ça marche</a><a class="l" href="#exemple">Exemple</a><a class="l" href="#fiabilite">Fiabilité</a><a class="l" href="#tarifs">Tarifs</a><button class="tbtn" type="button" id="themeBtn" aria-label="Basculer clair / foncé"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" stroke-linejoin="round"/></svg></button><a class="btn primary sm" href="explorer.html">Essayer</a></div>
+  <div class="links"><a class="l" href="#comment">Comment ça marche</a><a class="l" href="#exemple">Exemple</a><a class="l" href="#fiabilite">Fiabilité</a><a class="l" href="#tarifs">Tarifs</a><a class="btn primary sm" href="explorer.html">Essayer</a></div>
 </div></nav>
 
 <header class="hero"><div class="wrap">
@@ -332,7 +333,7 @@ nav .btn.primary.sm{box-shadow:none}
 
 <script>
 /* theme toggle */
-document.getElementById('themeBtn').addEventListener('click',()=>{const r=document.documentElement;const cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');const nx=cur==='dark'?'light':'dark';r.dataset.theme=nx;try{localStorage.setItem('qs-theme',nx);}catch(e){}});
+document.getElementById('themeBtn')?.addEventListener('click',()=>{const r=document.documentElement;const cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');const nx=cur==='dark'?'light':'dark';r.dataset.theme=nx;try{localStorage.setItem('qs-theme',nx);}catch(e){}});
 /* nav border on scroll */
 const nav=document.getElementById('nav');addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>8),{passive:true});
 /* reveal on scroll */
@@ -450,7 +451,8 @@ void main(){
   }
   const clockT=document.getElementById('clockT'),clockL=document.getElementById('clockL');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const dark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches;};
+  /* only the hero goes dark (with the night in the window); the rest of the page stays light */
+  const HERO=stage.closest('.hero')||document.body;const dark=()=>HERO.dataset.mode==='dark';
   let W=0,H=0,DPR=1,PW=0,PH=0,img=null,buf=null,T1=null,T2=null,T3=null,G={};
   function build(){
     PW=cv.width;PH=cv.height;if(GL){GL.viewport(0,0,PW,PH);}else{img=ctx.createImageData(PW,PH);buf=new Uint32Array(img.data.buffer);
@@ -554,8 +556,7 @@ void main(){
   }
   /* one day and one night in 18 s: the night passes quicker, dawn and dusk linger (ease in / ease out); ~30 fps is plenty */
   /* the whole page follows the window: light while the sun is up, dark once night falls (until the visitor picks a theme) */
-  let auto=true;const tb=document.getElementById('themeBtn');if(tb)tb.addEventListener('click',()=>{auto=false;},true);
-  const follow=a=>{if(!auto)return;const want=a<-0.06?'dark':'light',r=document.documentElement;if(r.dataset.theme!==want)r.dataset.theme=want;};
+  const follow=a=>{const want=a<-0.06?'dark':'light';if(HERO.dataset.mode!==want)HERO.dataset.mode=want;};
   const CYCLE=18000;let t0=performance.now()-0.2*18000,visible=true,raf=0,last=-1e9;
   const hourAt=p=>{const k=[[0,4],[0.1,6],[0.2,8],[0.68,19],[0.82,21.5],[1,28]];let i=0;while(i<k.length-2&&p>k[i+1][0])i++;const t=(p-k[i][0])/(k[i+1][0]-k[i][0]),e=0.5-0.5*Math.cos(Math.PI*t);return k[i][1]+(k[i+1][1]-k[i][1])*e;};
   function frame(now){raf=0;if(now-last>=32||reduce){last=now;const p=reduce?0.66:((now-t0)%CYCLE)/CYCLE;const h=hourAt(p)%24;draw(h);const dd=(h-6)/15;follow(dd>=0&&dd<=1?Math.sin(Math.PI*dd):-Math.min(1,(dd<0?-dd:dd-1)*5));}if(visible&&!reduce)raf=requestAnimationFrame(frame);}
