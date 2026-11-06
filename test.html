@@ -386,7 +386,12 @@ async function loadLot(lat,lon){ const T0=S.T;
       if(votes.size){const top=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0][0];par.set(u.bid,new Set([top]));}});
     const adrPt=new Map(); ab.forEach(f=>{const p=f.properties;if(!p.id_bat||!p.id_adr)return;(adr.get(p.id_bat)||adr.set(p.id_bat,new Set()).get(p.id_bat)).add(p.id_adr);const c=f.geometry&&f.geometry.coordinates;if(c&&c[0]&&!adrPt.has(p.id_adr))adrPt.set(p.id_adr,c[0]);});
     if(!par.size)return; const adrPar=new Set(); const parBats=new Map(); adr.forEach((_,b)=>{const P=par.get(b);if(P)P.forEach(x=>{adrPar.add(x);(parBats.get(x)||parBats.set(x,[]).get(x)).push(b);});}); S.lot={par,adr,adrPar,adrPt,parBats,lab:new Map(),PL}; S.T.lot=performance.now();
-    if(S.target)setHi(S.target,false); linkAnnexes(); if(S.target)setHi(S.target,true);
+    if(S.target)setHi(S.target,false);
+    /* an address linked to several buildings (11 on one house, 11 and 13 on the next): the house that carries this number alone is its house */
+    try{const ids=S.addrBats,cur=S.addrTarget;if(ids&&ids.size>1&&cur&&!S.win&&S.target===cur){const n=m=>(adr.get(m.userData.bid)||new Set()).size||99;
+      const C=S.meshes.filter(m=>ids.has(m.userData.bid)&&m.userData.rings&&!m.userData.monu).sort((a,b)=>n(a)-n(b)||Math.abs(areaOf(b.userData.rings[0]))-Math.abs(areaOf(a.userData.rings[0])));
+      const nb=C[0];if(nb&&nb.userData.bid!==cur.userData.bid&&n(nb)<n(cur)){S.addrTarget=nb;S.target=nb;}}}catch(e){}
+    linkAnnexes(); if(S.target)setHi(S.target,true);
   }catch(e){}}
 /* buildings touching a house that belong to the same lot (garage, shed, veranda: separate IGN footprints) are one selection, one colour.
    With the cadastre and the address base: same cadastral parcel (or, for a single-storey shed, a parcel with no address at all: the plot next to the house), no address of their own (or only the house's), not taller nor bigger than the house.
@@ -401,13 +406,13 @@ function linkAnnexes(){ // re-run after the laser rebuild: undo the previous lin
   const lot=S.lot, ids=g=>[...new Set(g.os.map(o=>o.m.userData.bid).filter(Boolean))], parOf=g=>{const s=new Set();ids(g).forEach(i=>{const P=lot.par.get(i);if(P)P.forEach(x=>s.add(x));});return s;};
   G.forEach(g=>{g.byLot=!!(lot&&ids(g).length&&ids(g).every(i=>lot.par.has(i)));if(g.byLot)g.par=parOf(g);});
   G.sort((a,b)=>b.area-a.area);
-  G.forEach(a=>{if(a.os.some(o=>(o.m.userData.floors||1)>1))return; // a storeyed lodging is not an annex
+  G.forEach(a=>{if(a.area>=15&&a.os.some(o=>(o.m.userData.floors||1)>1))return; // a storeyed lodging is not an annex (a small porch or stair tower is, whatever its storeys)
     const adrOf=g=>{const s=new Set();ids(g).forEach(i=>{const A=lot.adr.get(i);if(A)A.forEach(x=>s.add(x));});return s;};
     if(a.byLot)a.adrs=adrOf(a);
     else if(a.area>=35||!(a.h<=3.5||!a.u||/indiff/i.test(a.u)))return;
     let best=null;
     G.forEach(b=>{if(b===a||b.annex)return;
-      if(a.byLot){if(!b.byLot||b.area<=a.area||b.h<a.h-0.3||(a.adrs.size&&![...a.adrs].every(x=>adrOf(b).has(x)))||!([...a.par].some(x=>b.par.has(x))||(a.h<=5&&[...a.par].every(x=>!lot.adrPar.has(x)))))return;}
+      if(a.byLot){if(!b.byLot||b.area<=a.area||(b.h<a.h-0.3&&a.area>=15)||(a.adrs.size&&![...a.adrs].every(x=>adrOf(b).has(x)))||!([...a.par].some(x=>b.par.has(x))||(a.h<=5&&[...a.par].every(x=>!lot.adrPar.has(x)))))return;}
       else if(b.area<2.5*a.area||b.area<40)return;
       const near=a.os.some(o=>b.os.some(q=>o.x0<q.x1+0.6&&q.x0<o.x1+0.6&&o.y0<q.y1+0.6&&q.y0<o.y1+0.6&&dist(o.r,q.r)<0.6)); if(near&&(!best||b.area>best.area))best=b;});
     if(!best)return; a.annex=true; const main=best.os[0].m; if(!main.userData.gid){main.userData.gid=++GID;best.os.forEach(o=>o.m.userData.gid=main.userData.gid);}
@@ -3690,7 +3695,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   try{const _add=scene.add.bind(scene);scene.add=function(...a){const r=_add(...a);a.forEach(o=>{try{o.traverse(c=>{if(c.isMesh||c.isLine){const ms=Array.isArray(c.material)?c.material:[c.material];ms.forEach(m=>{if(m&&!isHouse(m)&&!m._qsKeepClone)patch(m,false);});}});}catch(e){}});return r;};}catch(e){}
   /* centre on the studied building; strength follows the hour (softer at night) */
   setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent){const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
-      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(55,Math.max(sz.x,sz.y)*2.8);const hs=Math.max(sz.x,sz.y)/2;QSU.uQsD0.value=hs+15;QSU.uQsD1.value=hs+120;QSU.uQsL0.value=hs+170;QSU.uQsL1.value=hs+460;}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;QSU.uQsD0.value=60;QSU.uQsD1.value=170;QSU.uQsL0.value=220;QSU.uQsL1.value=520;}
+      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(55,Math.max(sz.x,sz.y)*2.8);const hs=Math.max(sz.x,sz.y)/2;QSU.uQsD0.value=hs+25;QSU.uQsD1.value=hs+210;QSU.uQsL0.value=hs+240;QSU.uQsL1.value=hs+520;}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;QSU.uQsD0.value=80;QSU.uQsD1.value=250;QSU.uQsL0.value=280;QSU.uQsL1.value=560;}
     const up=sun.position.z-sun.target.position.z>0;QSU.uQsLine.value.set(up?0x7a80b8:0xc9cbf2);QSU.uQsLA.value=up?0.7:0.6;QSU.uQsK.value=(typeof photoMode!=='undefined'&&photoMode)?0:(up?1:0.6);}catch(e){}},400);
   window.__QSU=QSU;
 })();
