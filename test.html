@@ -3355,7 +3355,11 @@ function qsCoplanar(D){const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;
   const sp=D.map((_,i)=>i),g=i=>sp[i]===i?i:(sp[i]=g(sp[i]));side.forEach(([i,j])=>{sp[g(i)]=g(j);});
   const SG=new Map();D.forEach((d,i)=>{const r=g(i);if(!SG.has(r))SG.set(r,[]);SG.get(r).push(d);});
   SG.forEach(L=>{if(L.length<2)return;let sw=0,sk=0;L.forEach(d=>{const w=area(d.outer);sk+=w*(d.pl[0]*d.dir[0]+d.pl[1]*d.dir[1]);sw+=w;});const k=sk/sw;
-    L.forEach(d=>{let cx=0,cy=0;d.outer.forEach(q=>{cx+=q[0];cy+=q[1];});cx/=d.outer.length;cy/=d.outer.length;const zc=z(d,[cx,cy]),[ux,uy]=d.dir;
+    L.forEach(d=>{let cx=0,cy=0;d.outer.forEach(q=>{cx+=q[0];cy+=q[1];});cx/=d.outer.length;cy/=d.outer.length;
+      /* the pan turns about its ridge (where it meets the pan running the other way): the ridge stays put, only the eave moves */
+      const rq=d.outer.filter(q=>D.some(e=>e!==d&&e.dir&&e.dir[0]*d.dir[0]+e.dir[1]*d.dir[1]<-0.99&&onB(q,e)));
+      if(rq.length>=2){cx=rq.reduce((s,q)=>s+q[0],0)/rq.length;cy=rq.reduce((s,q)=>s+q[1],0)/rq.length;}
+      const zc=z(d,[cx,cy]),[ux,uy]=d.dir;
       d.pl=[k*ux,k*uy,zc-k*(ux*cx+uy*cy)];const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const n=Math.hypot(a,b,1);d.n=[-a/n,-b/n,1/n];});});}
 
 /* polygon union that survives the clipping library's precision failures: retried on coordinates rounded to the millimetre */
