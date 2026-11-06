@@ -3564,6 +3564,23 @@ function qsV5Pred(l){const [a,b,c,d]=l.R,x=l.x;
     case 'hip':return (u,v)=>x[0]+x[1]*Math.min(u-a,b-u,v-c,d-v);
     case 'mansard':return (u,v)=>{const dd=Math.min(u-a,b-u,v-c,d-v);return x[0]+x[1]*Math.min(dd,l.w0)+x[2]*Math.max(0,dd-l.w0);};
   }return l.pred;}
+/* the walls on the cadastre: an outer edge of the volumes within 80 cm of a parallel footprint edge is moved onto it
+   (the laser sees the roof with its overhang; the walls stand under it, on the footprint). A cut is one value shared by every
+   volume that uses it, so neighbours move together and stay joined. */
+function qsV5Snap(L,fam,M,log){const L5=M.L5,sx=M.sh0.dx,sy=M.sh0.dy,E=1e-6;
+  const seg=[];fam.forEach(o=>o.userData.rings.forEach(r=>{for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length],A=[L5.U(a.x+sx,a.y+sy),L5.V(a.x+sx,a.y+sy)],B=[L5.U(b.x+sx,b.y+sy),L5.V(b.x+sx,b.y+sy)],du=B[0]-A[0],dv=B[1]-A[1],len=Math.hypot(du,dv);if(len<0.5)continue;
+    if(Math.abs(du)<len*0.087)seg.push({o:'u',c:(A[0]+B[0])/2,t0:Math.min(A[1],B[1]),t1:Math.max(A[1],B[1])});else if(Math.abs(dv)<len*0.087)seg.push({o:'v',c:(A[1]+B[1])/2,t0:Math.min(A[0],B[0]),t1:Math.max(A[0],B[0])});}}));
+  /* outer edges: the parts of a rectangle side no other rectangle touches */
+  const outer=(l,o,c,t0,t1)=>{let iv=[[t0,t1]];L.forEach(m=>{if(m===l)return;const [a,b,cc,d]=m.R;let hit=null;if(o=='u'&&(Math.abs(a-c)<E||Math.abs(b-c)<E))hit=[cc,d];if(o=='v'&&(Math.abs(cc-c)<E||Math.abs(d-c)<E))hit=[a,b];if(!hit)return;
+      iv=iv.flatMap(([p,q])=>{if(hit[1]<=p||hit[0]>=q)return [[p,q]];const out=[];if(hit[0]>p)out.push([p,hit[0]]);if(hit[1]<q)out.push([hit[1],q]);return out;});});return iv;};
+  const vote=new Map();L.forEach(l=>{const [a,b,c,d]=l.R;[['u',a,c,d],['u',b,c,d],['v',c,a,b],['v',d,a,b]].forEach(([o,cc,t0,t1])=>{const k=o+cc.toFixed(3);const V=vote.get(k)||vote.set(k,{o,c:cc,len:0,ext:0,tg:[]}).get(k);V.len+=t1-t0;
+    outer(l,o,cc,t0,t1).forEach(([p,q])=>{if(q-p<0.3)return;V.ext+=q-p;let best=null;seg.forEach(sg=>{if(sg.o!==o)return;const ov=Math.min(q,sg.t1)-Math.max(p,sg.t0);if(ov<0.3*(q-p))return;const dd=sg.c-cc;if(Math.abs(dd)<=0.8&&(!best||Math.abs(dd)<Math.abs(best.dd)))best={dd,w:ov};});if(best)V.tg.push(best);});});});
+  const mv=new Map();vote.forEach(V=>{if(!V.tg.length)return;const w=V.tg.reduce((s,t)=>s+t.w,0);if(w<0.5*V.ext)return;const m=V.tg.reduce((s,t)=>s+t.dd*t.w,0)/w;if(V.tg.some(t=>Math.abs(t.dd-m)>0.15)||Math.abs(m)<0.02)return;mv.set(V.o+V.c.toFixed(3),Math.round((V.c+m)*1000)/1000);});
+  if(!mv.size)return;L.forEach(l=>{const R0=l.R.slice(),R=l.R;[0,1].forEach(i=>{const k='u'+R[i].toFixed(3);if(mv.has(k))R[i]=mv.get(k);});[2,3].forEach(i=>{const k='v'+R[i].toFixed(3);if(mv.has(k))R[i]=mv.get(k);});
+    if(R[1]-R[0]<0.8||R[3]-R[2]<0.8){l.R=R0;return;}
+    if(l.type=='hip'||l.type=='mansard'){const sh=Math.min(R[0]-R0[0],R0[1]-R[1],R[2]-R0[2],R0[3]-R[3]);if(sh>0)l.x=[l.x[0]+l.x[1]*sh,...l.x.slice(1)];} /* the eave stays on the laser roof */
+    if(l.type=='shedU'&&R[0]!==R0[0])l.x=[l.x[0]+l.x[1]*(R[0]-R0[0]),l.x[1]];if(l.type=='shedV'&&R[2]!==R0[2])l.x=[l.x[0]+l.x[1]*(R[2]-R0[2]),l.x[1]];});
+  log.push(['snap',[...mv.entries()].map(([k,v])=>k[0]+(v-+k.slice(1)).toFixed(2)).join(' ')]);}
 /* the rules of the trade, on the parameters */
 function qsV5Rules(L,log){const E=1e-6,ov=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0),deg=k=>Math.atan(k)*180/Math.PI;
   const adj=[];for(let i=0;i<L.length;i++)for(let j=0;j<L.length;j++){if(i==j)continue;const A=L[i].R,B=L[j].R;
@@ -3606,6 +3623,7 @@ function qsV5Rules(L,log){const E=1e-6,ov=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.ma
 function qsV5Build(M,fam,main){const L5=M.L5;if(!L5||!PCSYNC)return null;const PC=PCSYNC,A0=S.alt0,dx=-M.sh0.dx,dy=-M.sh0.dy,log=[];
   const r3=v=>Math.round(v*1000)/1000;
   const L=L5.leaves.map(l=>{const c=Object.assign({},l);c.R=l.R.map(r3);c.x=l.x?l.x.slice():l.x;c.pred=qsV5Pred(c);return c;});
+  qsV5Snap(L,fam,M,log);
   const EXT=qsV5Rules(L,log),PR=L.concat(EXT);
   const W=(u,v)=>{const p=L5.XY(u,v);return [p[0]+dx,p[1]+dy];},Wd=(u,v)=>L5.XY(u,v),zW=z=>z+L5.Z0-A0;
   const env=(u,v)=>{let z=-Infinity;for(const l of PR){const R=l.R;if(u>R[0]&&u<R[1]&&v>R[2]&&v<R[3]){const q=l.pred(u,v);if(q>z)z=q;}}return z;};
