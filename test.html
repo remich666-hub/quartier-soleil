@@ -3610,16 +3610,28 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
 /* ===== the light of the studied house spreads over the whole model: every surface (ground, walls, roofs, trees) takes a warm
    tint and a fine screen grain that fade with the distance to the house. Geometry, shadows and the sun computations are untouched. ===== */
 (function(){
-  const QSU={uQsC:{value:new THREE.Vector2(0,0)},uQsR:{value:120},uQsK:{value:0}};
-  const VS_DECL='varying vec3 vQsG;\n',FS_DECL='uniform vec2 uQsC;uniform float uQsR;uniform float uQsK;varying vec3 vQsG;\nfloat qsH3(vec3 p){p=fract(p*vec3(.1031,.1030,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}\n';
+  const QSU={uQsC:{value:new THREE.Vector2(0,0)},uQsR:{value:120},uQsK:{value:0},uQsD0:{value:80},uQsD1:{value:250},uQsOn:{value:1}};
+  const VS_DECL='varying vec3 vQsG;\n',FS_DECL='uniform vec2 uQsC;uniform float uQsR;uniform float uQsK;uniform float uQsD0;uniform float uQsD1;uniform float uQsOn;varying vec3 vQsG;\nfloat qsH3(vec3 p){p=fract(p*vec3(.1031,.1030,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}\n';
+  /* the dissolve: opaque near the house, then the grain decides which surface points stay (an organic, slowly wavy outline),
+     until only the sky and the haze remain. Each point is kept or dropped (no blending): cheap, no sorting, shadows untouched. */
+  const FS_DIS=`
+  { vec2 rel=vQsG.xy-uQsC;float an=atan(rel.y,rel.x);
+    float wob=1.0+0.13*sin(3.0*an+1.3)+0.07*sin(5.0*an-0.7)+0.05*sin(9.0*an+2.1);
+    float al=1.0-smoothstep(uQsD0,uQsD1,length(rel)/wob);
+    float cdD=length(cameraPosition-vQsG),lodD=log2(max(cdD*0.0028,0.02)/0.02);
+    vec3 pd=vQsG/(0.02*exp2(floor(lodD)));
+    #ifndef QS_KEEP
+    if(uQsOn>0.5&&qsH3(floor(pd)+vec3(17.0,-5.0,3.0))>al)discard;
+    #endif
+  }
+`;
   const FS_BODY=`
   { float d=length(vQsG.xy-uQsC)/uQsR;
     vec3 warm=vec3(1.0,0.66,0.50),pink=vec3(0.97,0.62,0.72),lav=vec3(0.76,0.74,0.98);
     vec3 tint=d<0.6?mix(warm,pink,d/0.6):mix(pink,lav,clamp((d-0.6)/1.4,0.0,1.0));
     float a=uQsK*0.2*exp(-d*1.9);
-    /* the grain lives on the surfaces (world-space dots, 40 cm cells) and in the light: lit faces carry more of it, shade less */
-    /* cell size follows the distance to the camera (two power-of-two levels blended), so a dot stays ~2-3 px on screen
-       while staying attached to its surface */
+    /* the grain lives on the surfaces and in the light: lit faces carry more of it, shade less; its cell size follows the
+       distance to the camera (two power-of-two levels blended), so a dot stays ~2-3 px on screen while attached to its surface */
     float lum=dot(gl_FragColor.rgb,vec3(0.3,0.59,0.11)),cd=length(cameraPosition-vQsG);
     float lod=log2(max(cd*0.0028,0.02)/0.02),l0=floor(lod),lt=fract(lod);
     float c0=0.02*exp2(l0),c1=c0*2.0;
@@ -3629,19 +3641,40 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     float dots=mix(d0,d1,lt);
     gl_FragColor.rgb=mix(gl_FragColor.rgb,tint,clamp(a+dots*0.32,0.0,0.6)); }
 `;
-  const patch=m=>{if(!m||m._qsGlow||!m.isMeshLambertMaterial)return;m._qsGlow=1;const prev=m.onBeforeCompile,pk=m.customProgramCacheKey;
-    m.onBeforeCompile=(sh,r)=>{if(prev)prev.call(m,sh,r);Object.assign(sh.uniforms,QSU);
-      sh.vertexShader=VS_DECL+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n{vec4 qw=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nqw=instanceMatrix*qw;\n#endif\nqw=modelMatrix*qw;vQsG=qw.xyz;}');
-      sh.fragmentShader=FS_DECL+sh.fragmentShader.replace('#include <dithering_fragment>','#include <dithering_fragment>'+FS_BODY);};
-    m.customProgramCacheKey=()=>(pk?pk.call(m):'')+'|qsglow';m.needsUpdate=true;};
+  const VS_POS='#include <project_vertex>\n{vec4 qw=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nqw=instanceMatrix*qw;\n#endif\nqw=modelMatrix*qw;vQsG=qw.xyz;}';
+  const inject=(m,sh,keep)=>{Object.assign(sh.uniforms,QSU);if(keep)sh.fragmentShader='#define QS_KEEP\n'+sh.fragmentShader;
+    sh.vertexShader=VS_DECL+sh.vertexShader.replace('#include <project_vertex>',VS_POS);
+    let f=FS_DECL+sh.fragmentShader;const glow=m.isMeshLambertMaterial;
+    f=f.replace('#include <premultiplied_alpha_fragment>',FS_DIS+'#include <premultiplied_alpha_fragment>');
+    if(glow)f=f.replace('#include <dithering_fragment>','#include <dithering_fragment>'+FS_BODY);
+    sh.fragmentShader=f;};
+  const OK=m=>m&&(m.isMeshLambertMaterial||m.isMeshBasicMaterial||m.isLineBasicMaterial)&&!m.isShaderMaterial;
+  const patch=(m,keep)=>{if(!OK(m)||m._qsGlow)return;m._qsGlow=1;const prev=m.onBeforeCompile,pk=m.customProgramCacheKey;
+    m.onBeforeCompile=(sh,r)=>{if(prev)prev.call(m,sh,r);inject(m,sh,keep);};
+    m.customProgramCacheKey=()=>(pk?pk.call(m):'')+(keep?'|qskeep':'|qsglow');m.needsUpdate=true;};
+  /* obstacles to the chosen window keep their full body: a clone of their material that skips the dissolve */
+  const keepClones=new Map(),kept=new Set();
+  const keepMat=m=>{if(!OK(m))return m;if(m._qsKeepClone)return m;let c=keepClones.get(m);if(!c){c=m.clone();c._qsKeepClone=1;patch(c,true);keepClones.set(m,c);}return c;};
+  const setKeep=objs=>{kept.forEach(o=>{if(o.userData._qsOrig){o.material=o.userData._qsOrig;delete o.userData._qsOrig;}});kept.clear();
+    objs.forEach(o=>{if(!o.isMesh||o.isInstancedMesh)return;const orig=o.material;o.userData._qsOrig=orig;o.material=Array.isArray(orig)?orig.map(keepMat):keepMat(orig);kept.add(o);});};
+  let winKey='';
+  const findBlockers=async()=>{try{const w=S.win;if(!w||!w.pos||!S.obstacles)return;const key=[w.pos.x,w.pos.y,w.pos.z].map(v=>v.toFixed(1)).join(',');if(key===winKey)return;winKey=key;
+      const hit=new Set(),rc=new THREE.Raycaster();rc.far=2000;
+      for(let mo=1;mo<=12;mo++){for(let t=240;t<=1320;t+=30){const sp=sunPos(localToInstant(S.year,mo,15,Math.floor(t/60),t%60),S.lat,S.lon);if(sp.alt<=0.01)continue;const v=sunVec(sp);if(v.dot(w.normal)<=0.02)continue;
+          rc.set(w.pos,v);const h=rc.intersectObjects(S.obstacles,false);if(h.length)hit.add(h[0].object);}
+        await new Promise(r=>setTimeout(r,0));if(key!==winKey)return;}
+      const top=o=>{let x=o;while(x&&!S.meshes.includes(x))x=x.parent;return x;};const keepObjs=new Set();
+      hit.forEach(o=>{const b=top(o);if(b){family(b).forEach(f=>{keepObjs.add(f);f.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal)keepObjs.add(c);});});}});
+      setKeep([...keepObjs]);}catch(e){console.warn('blockers',e);}};
+  setInterval(()=>{if(S.win&&S.win.pos)findBlockers();else if(kept.size){setKeep([]);winKey='';}},1500);
   /* the studied building keeps its own colours (it is the light) */
   const isHouse=m=>{try{if(m===PART_HI.roof||m===PART_HI.wall||m===PART_HI.wallT)return true;for(const k in matCache)if(k.startsWith('T:')&&matCache[k].includes(m))return true;}catch(e){}return false;};
-  const sweep=()=>{try{scene.traverse(o=>{if(!o.isMesh)return;const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(m&&!isHouse(m))patch(m);});});}catch(e){}};
+  const sweep=()=>{try{scene.traverse(o=>{if(!o.isMesh&&!o.isLine)return;const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(m&&!isHouse(m)&&!m._qsKeepClone)patch(m,false);});});}catch(e){}};
   setInterval(sweep,600);
-  try{const _add=scene.add.bind(scene);scene.add=function(...a){const r=_add(...a);a.forEach(o=>{try{o.traverse(c=>{if(c.isMesh){const ms=Array.isArray(c.material)?c.material:[c.material];ms.forEach(m=>{if(m&&!isHouse(m))patch(m);});}});}catch(e){}});return r;};}catch(e){}
+  try{const _add=scene.add.bind(scene);scene.add=function(...a){const r=_add(...a);a.forEach(o=>{try{o.traverse(c=>{if(c.isMesh||c.isLine){const ms=Array.isArray(c.material)?c.material:[c.material];ms.forEach(m=>{if(m&&!isHouse(m)&&!m._qsKeepClone)patch(m,false);});}});}catch(e){}});return r;};}catch(e){}
   /* centre on the studied building; strength follows the hour (softer at night) */
   setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent){const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
-      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(55,Math.max(sz.x,sz.y)*2.8);}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;}
+      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(55,Math.max(sz.x,sz.y)*2.8);const hs=Math.max(sz.x,sz.y)/2;QSU.uQsD0.value=hs+70;QSU.uQsD1.value=hs+240;}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;QSU.uQsD0.value=80;QSU.uQsD1.value=250;}
     const up=sun.position.z-sun.target.position.z>0;QSU.uQsK.value=(typeof photoMode!=='undefined'&&photoMode)?0:(up?1:0.6);}catch(e){}},400);
   window.__QSU=QSU;
 })();
@@ -3676,9 +3709,11 @@ async function qsHouseFirst(){
   const veil=document.createElement('div');veil.id='qsVeil';veil.innerHTML='<div class="orb"></div>';view.appendChild(veil);
   let token=0;
   const sig=()=>{try{let n=0,v=0;scene.traverse(o=>{n++;if(o.visible)v++;});return n+'/'+v+'/'+(S.meshes?S.meshes.length:0)+'/'+(window.QV4&&QV4.used?QV4.used.size:0)+'/'+(groundMat.map?1:0);}catch(e){return '';}};
+  /* the studied house's final (laser) roof must be in before the veil lifts */
+  const houseDone=()=>{try{const m=S.target||S.building;if(!m||!window.QV4||!QV4.used)return true;return family(m).some(o=>QV4.used.has(o))||(QV4.tried&&family(m).some(o=>QV4.tried.has&&QV4.tried.has(o)));}catch(e){return true;}};
   const settle=async t=>{const t0=performance.now();let last=sig(),still=performance.now();
     while(t===token&&performance.now()-t0<8000){await new Promise(r=>setTimeout(r,250));const s2=sig();if(s2!==last){last=s2;still=performance.now();}
-      else if(performance.now()-still>1200&&!S.loading)break;}
+      else if(performance.now()-still>1200&&!S.loading&&houseDone())break;}
     if(t===token)veil.classList.remove('on');};
   try{const _load=load;load=async function(...a){const t=++token;veil.classList.add('on');try{return await _load.apply(this,a);}finally{settle(t);}};}catch(e){console.warn('veil',e);}
 })();
