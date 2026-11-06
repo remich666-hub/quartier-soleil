@@ -3627,8 +3627,8 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
 /* ===== the light of the studied house spreads over the whole model: every surface (ground, walls, roofs, trees) takes a warm
    tint and a fine screen grain that fade with the distance to the house. Geometry, shadows and the sun computations are untouched. ===== */
 (function(){
-  const QSU={uQsC:{value:new THREE.Vector2(0,0)},uQsR:{value:120},uQsK:{value:0},uQsD0:{value:80},uQsD1:{value:250},uQsOn:{value:1},uQsAir:{value:new THREE.Color(0xf1e6ee)},uScanR:{value:1e6},uScanC:{value:new THREE.Color(0xff8a5c)}};
-  const VS_DECL='uniform vec2 uQsC;varying vec3 vQsG;varying vec3 vQsM;\n',FS_DECL='uniform vec2 uQsC;uniform float uQsR;uniform float uQsK;uniform float uQsD0;uniform float uQsD1;uniform float uQsOn;uniform vec3 uQsAir;uniform float uScanR;uniform vec3 uScanC;varying vec3 vQsG;varying vec3 vQsM;\nfloat qsH3(vec3 p){p=fract(p*vec3(.1031,.1030,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}\n';
+  const QSU={uQsC:{value:new THREE.Vector2(0,0)},uQsR:{value:120},uQsK:{value:0},uQsD0:{value:80},uQsD1:{value:250},uQsOn:{value:1},uQsAir:{value:new THREE.Color(0xf1e6ee)},uScanR:{value:1e6},uScanC:{value:new THREE.Color(0xff8a5c)},uQsL0:{value:300},uQsL1:{value:600},uQsLine:{value:new THREE.Color(0x7a80b8)},uQsLA:{value:0.7}};
+  const VS_DECL='uniform vec2 uQsC;varying vec3 vQsG;varying vec3 vQsM;\n',FS_DECL='uniform vec2 uQsC;uniform float uQsR;uniform float uQsK;uniform float uQsD0;uniform float uQsD1;uniform float uQsOn;uniform vec3 uQsAir;uniform float uScanR;uniform vec3 uScanC;uniform float uQsL0;uniform float uQsL1;uniform vec3 uQsLine;uniform float uQsLA;varying vec3 vQsG;varying vec3 vQsM;\nfloat qsH3(vec3 p){p=fract(p*vec3(.1031,.1030,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}\n';
   /* the dissolve: opaque near the house, then the grain decides which surface points stay (an organic, slowly wavy outline),
      until only the sky and the haze remain. Each point is kept or dropped (no blending): cheap, no sorting, shadows untouched. */
   /* away from the house the model fades smoothly into the air (no grain): opaque near, the sky's colour far, then gone */
@@ -3637,7 +3637,13 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     if(b<22.0){ float k=1.0-b/22.0; float cz=step(fract(vQsG.z/1.0),0.07); float cr=step(fract(r/3.0),0.05);
       float line=max(step(b,0.7),max(cz,cr)*k*k); gl_FragColor.rgb=mix(gl_FragColor.rgb,uScanC,clamp(line*(0.35+0.65*k),0.0,1.0)); } }
   #ifndef QS_KEEP
+  #ifdef QS_LINE
+  /* the edges outlive the faces: as the volumes fade away from the house, their edges take over (a wireframe), then fade in turn */
+  if(uQsOn>0.5){ float g=smoothstep(uQsD0,mix(uQsD0,uQsD1,0.6),vQsM.x); float f=smoothstep(uQsL0,uQsL1,vQsM.x); if(f>0.985)discard;
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,uQsLine,g); gl_FragColor.a=mix(gl_FragColor.a,uQsLA,g)*(1.0-f); }
+  #else
   if(uQsOn>0.5){ float f=smoothstep(uQsD0,uQsD1,vQsM.x); if(f>0.985)discard; gl_FragColor.rgb=mix(gl_FragColor.rgb,uQsAir,0.35*f); gl_FragColor.a*=1.0-f; }
+  #endif
   #endif
 `;
   /* a soft warm light around the house, no dots */
@@ -3648,16 +3654,17 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     gl_FragColor.rgb=mix(gl_FragColor.rgb,tint,uQsK*0.18*exp(-d*1.9)); }
 `;
   const VS_POS='#include <project_vertex>\n{vec4 qw=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nqw=instanceMatrix*qw;\n#endif\nqw=modelMatrix*qw;vQsG=qw.xyz;vec2 rl=qw.xy-uQsC;float an=atan(rl.y,rl.x);float wob=1.0+0.13*sin(3.0*an+1.3)+0.07*sin(5.0*an-0.7)+0.05*sin(9.0*an+2.1);vQsM=vec3(length(rl)/wob,log2(max(length(cameraPosition-qw.xyz)*0.0028,0.02)/0.02),0.0);}';
-  const inject=(m,sh,keep)=>{Object.assign(sh.uniforms,QSU);if(keep)sh.fragmentShader='#define QS_KEEP\n'+sh.fragmentShader;
+  const isEdge=m=>{try{return !!(m&&m.isLineBasicMaterial&&edgeLines&&edgeLines.material===m);}catch(e){return false;}};
+  const inject=(m,sh,keep)=>{Object.assign(sh.uniforms,QSU);if(keep)sh.fragmentShader='#define QS_KEEP\n'+sh.fragmentShader;if(m._qsEdge)sh.fragmentShader='#define QS_LINE\n'+sh.fragmentShader;
     sh.vertexShader=VS_DECL+sh.vertexShader.replace('#include <project_vertex>',VS_POS);
     let f=FS_DECL+sh.fragmentShader;const glow=m.isMeshLambertMaterial;
     if(glow)f=f.replace('#include <premultiplied_alpha_fragment>',FS_BODY+'#include <premultiplied_alpha_fragment>');
     f=f.replace('#include <premultiplied_alpha_fragment>',FS_DIS+'#include <premultiplied_alpha_fragment>');
     sh.fragmentShader=f;};
   const OK=m=>m&&(m.isMeshLambertMaterial||m.isMeshBasicMaterial||m.isLineBasicMaterial)&&!m.isShaderMaterial&&m.fog!==false; /* sky things (sun path) stay out */
-  const patch=(m,keep)=>{if(!OK(m)||m._qsGlow)return;m._qsGlow=1;if(!keep)m.transparent=true;const prev=m.onBeforeCompile,pk=m.customProgramCacheKey;
+  const patch=(m,keep)=>{if(!OK(m)||m._qsGlow)return;m._qsGlow=1;if(isEdge(m))m._qsEdge=1;if(!keep)m.transparent=true;const prev=m.onBeforeCompile,pk=m.customProgramCacheKey;
     m.onBeforeCompile=(sh,r)=>{if(prev)prev.call(m,sh,r);inject(m,sh,keep);};
-    m.customProgramCacheKey=()=>(pk?pk.call(m):'')+(keep?'|qskeep':'|qsglow');m.needsUpdate=true;};
+    m.customProgramCacheKey=()=>(pk?pk.call(m):'')+(keep?'|qskeep':'|qsglow')+(m._qsEdge?'|edge':'');m.needsUpdate=true;};
   /* obstacles to the chosen window keep their full body: a clone of their material that skips the dissolve */
   const keepClones=new Map(),kept=new Set();
   const keepMat=m=>{if(!OK(m))return m;if(m._qsKeepClone)return m;let c=keepClones.get(m);if(!c){c=m.clone();c._qsKeepClone=1;patch(c,true);keepClones.set(m,c);}return c;};
@@ -3683,8 +3690,8 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   try{const _add=scene.add.bind(scene);scene.add=function(...a){const r=_add(...a);a.forEach(o=>{try{o.traverse(c=>{if(c.isMesh||c.isLine){const ms=Array.isArray(c.material)?c.material:[c.material];ms.forEach(m=>{if(m&&!isHouse(m)&&!m._qsKeepClone)patch(m,false);});}});}catch(e){}});return r;};}catch(e){}
   /* centre on the studied building; strength follows the hour (softer at night) */
   setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent){const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
-      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(55,Math.max(sz.x,sz.y)*2.8);const hs=Math.max(sz.x,sz.y)/2;QSU.uQsD0.value=hs+25;QSU.uQsD1.value=hs+210;}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;QSU.uQsD0.value=80;QSU.uQsD1.value=250;}
-    const up=sun.position.z-sun.target.position.z>0;QSU.uQsK.value=(typeof photoMode!=='undefined'&&photoMode)?0:(up?1:0.6);}catch(e){}},400);
+      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(55,Math.max(sz.x,sz.y)*2.8);const hs=Math.max(sz.x,sz.y)/2;QSU.uQsD0.value=hs+15;QSU.uQsD1.value=hs+120;QSU.uQsL0.value=hs+170;QSU.uQsL1.value=hs+460;}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;QSU.uQsD0.value=60;QSU.uQsD1.value=170;QSU.uQsL0.value=220;QSU.uQsL1.value=520;}
+    const up=sun.position.z-sun.target.position.z>0;QSU.uQsLine.value.set(up?0x7a80b8:0xc9cbf2);QSU.uQsLA.value=up?0.7:0.6;QSU.uQsK.value=(typeof photoMode!=='undefined'&&photoMode)?0:(up?1:0.6);}catch(e){}},400);
   window.__QSU=QSU;
 })();
 /* ===== the house first: once the buildings are in, only the studied house shows while its laser roof is computed
@@ -3779,7 +3786,7 @@ async function qsHouseFirst(){
     await drawHouse(t);if(t!==token)return;
     veil.classList.remove('on');await sleep(1300);if(t!==token)return;
     /* 3. the scan, paced on the roof queue */
-    const R1=u.uQsD1.value+30,T=6000,MAX=9000,s0=performance.now();let p=0,last=s0;const swp=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},100);
+    const R1=Math.max(u.uQsD1.value+30,u.uQsL1.value),T=6000,MAX=9000,s0=performance.now();let p=0,last=s0;const swp=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},100);
     while(t===token&&p<1){await sleep(16);const now=performance.now(),dt=Math.min(64,now-last);last=now;const q=Q(),slow=q&&q.busy&&now-s0<MAX;p=Math.min(1,p+dt/T*(slow?0.45:1));
       const e=p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;u.uScanR.value=e*R1;}
     clearInterval(swp);if(t!==token)return;u.uScanR.value=1e6;soloShadows(false);try{sunPath.visible=true;}catch(e){}};
