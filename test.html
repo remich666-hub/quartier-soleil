@@ -3532,7 +3532,8 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
   document.head.appendChild(st);
   try{const g=document.createElement('div');g.id='qsGrain';(document.getElementById('view')||document.body).appendChild(g);}catch(e){}
   /* façades: plain paper, only a whisper of the floors (no drawn windows) */
-  try{const c=wallTex.image,g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.fillStyle='rgba(60,70,130,0.035)';g.fillRect(0,c.height-2,c.width,2);wallTex.needsUpdate=true;}catch(e){}
+  try{const c=wallTex.image,g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.fillStyle='rgba(60,70,130,0.035)';g.fillRect(0,c.height-2,c.width,2);wallTex.needsUpdate=true;
+    let n=0;const up=()=>{try{scene.traverse(o=>{const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(m&&m.map&&m.map.image===c&&!m.map._qs){m.map.needsUpdate=true;m.map._qs=1;}});});}catch(e){}if(++n<40)setTimeout(up,1500);};up();}catch(e){}
   /* neighbours: white lavender, matte */
   try{Object.assign(USAGE,{'Résidentiel':[0xf6f7fd,0xe9ebf6],'Commercial et services':[0xf5f6fc,0xe6e9f5],'Industriel':[0xf2f4fa,0xe3e6f2],'Religieux':[0xf6f5fb,0xe8e6f3],'Agricole':[0xf5f5fa,0xe6e6f1],'Sportif':[0xf4f5fb,0xe4e7f3]});
     for(const k in matCache){const m=matCache[k];if(!k.startsWith('T:')&&Array.isArray(m)){const u=USAGE[k];if(u){m[0].color.set(u[1]);m[1].color.set(u[0]);}else{m[0].color.set(0xe6e8f4);m[1].color.set(0xf3f4fb);}}}}catch(e){}
@@ -3567,7 +3568,8 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
     hemi.color=lerpC(0x4a5294,0xdfe4ff,day);hemi.groundColor=lerpC(0x2a2f5c,0xe7dcf2,day);  /* shadows take this lavender fill */
     if(day<0.05)hemi.intensity=Math.max(hemi.intensity,0.55);
     scene.fog=new THREE.FogExp2(skyUni.horizon.value.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.0011);
-    try{groundMat.color.copy(day>0.05?lin(0xeef0f9):lin(0x262c55));}catch(e){}};}catch(e){console.warn('model sky',e);}
+    try{groundMat.color.copy(day>0.05?lin(0xeef0f9):lin(0x262c55));}catch(e){}
+    try{const em=lin(0x6a2a3c).multiplyScalar(1-day);[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(m=>m&&m.emissive&&m.emissive.copy(em));for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(m=>m.emissive&&m.emissive.copy(em));}catch(e){}};}catch(e){console.warn('model sky',e);}
 })();
 
 /* ===== Quartier Soleil v5: the v4 roof model, own copy (Toit Soleil untouched), faster and returning its rectangles ===== */
