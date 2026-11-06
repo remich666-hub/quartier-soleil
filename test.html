@@ -3000,9 +3000,14 @@ function qsV4One(fam){
      const l1=((t[4]-t[7])*(x-t[6])+(t[6]-t[3])*(y-t[7]))/d,l2=((t[7]-t[1])*(x-t[6])+(t[0]-t[6])*(y-t[7]))/d,l3=1-l1-l2;if(l1<-1e-4||l2<-1e-4||l3<-1e-4)continue;z=Math.max(z,l1*t[2]+l2*t[5]+l3*t[8]);}return z;};
    (OUT||[]).forEach(poly=>poly.forEach((R0,ri)=>{const R=R0.slice(0,-1),n=R.length;let ar=0;for(let k=0,q=n-1;k<n;q=k++)ar+=(R[q][0]-R[k][0])*(R[q][1]+R[k][1]);const sg=(ar>0?1:-1)*(ri?-1:1);
      for(let k=0;k<n;k++){const a=R[k],b=R[(k+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<0.02)continue;const nx=sg*(b[1]-a[1])/L,ny=-sg*(b[0]-a[0])/L,m=Math.max(1,Math.ceil(L/0.25));
-       let prev=null;for(let s2=0;s2<=m;s2++){const t=s2/m,x=a[0]+(b[0]-a[0])*t,y=a[1]+(b[1]-a[1])*t;let z=roofAt(x-nx*0.02,y-ny*0.02);if(!isFinite(z))z=roofAt(x-nx*0.15,y-ny*0.15);
-         if(prev&&isFinite(z)&&isFinite(prev.z)){const mx=(prev.x+x)/2,my=(prev.y+y)/2,own=tallAt(mx-nx*0.3,my-ny*0.3)||blockAt(mx-nx*0.3,my-ny*0.3)||main,zg=own.userData.zBase-SINK;
-           quad([prev.x,prev.y],[x,y],zg,zg,prev.z,z,nx,ny,own);}prev={x,y,z};}}}));}
+       const zAt=t=>{const x=a[0]+(b[0]-a[0])*t,y=a[1]+(b[1]-a[1])*t;let z=roofAt(x-nx*0.02,y-ny*0.02);if(!isFinite(z))z=roofAt(x-nx*0.15,y-ny*0.15);return {x,y,z,t};};
+       const S=[];for(let s2=0;s2<=m;s2++)S.push(zAt(s2/m));
+       /* where the roof jumps (a tower over a lower roof), the jump is found to 1 cm so the wall top rises straight, not on a slant */
+       const S2=[S[0]];for(let k2=1;k2<S.length;k2++){let A=S[k2-1],B=S[k2];if(isFinite(A.z)&&isFinite(B.z)&&Math.abs(A.z-B.z)>0.3){let lo=A,hi=B;
+           for(let it=0;it<10&&(hi.t-lo.t)*L>0.01;it++){const M=zAt((lo.t+hi.t)/2);if(isFinite(M.z)&&Math.abs(M.z-lo.z)<Math.abs(M.z-hi.z))lo=M;else hi=M;}
+           const e=0.0005;S2.push(Object.assign(zAt(lo.t),{}),zAt(Math.min(hi.t,lo.t+e*2)));}S2.push(B);}
+       let prev=null;S2.forEach(cur=>{if(prev&&isFinite(cur.z)&&isFinite(prev.z)&&Math.hypot(cur.x-prev.x,cur.y-prev.y)>1e-4){const mx=(prev.x+cur.x)/2,my=(prev.y+cur.y)/2,own=tallAt(mx-nx*0.3,my-ny*0.3)||blockAt(mx-nx*0.3,my-ny*0.3)||main,zg=own.userData.zBase-SINK;
+           quad([prev.x,prev.y],[cur.x,cur.y],zg,zg,prev.z,cur.z,nx,ny,own);}prev=cur;});}}));}
   if(!P.length)return false;
   /* swap: old laser pans and IGN roof triangles out, blocks cut at their new wall top, new pans and walls in */
   const goneObs=new Set();
