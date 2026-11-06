@@ -2921,7 +2921,7 @@ function qsV4One(fam){
   const tallAt=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
   const Mpolys=M.pieces.map(pc=>pc.P.map(q=>({x:q[0],y:q[1]})));
   const PCx=PCSYNC, ringP=r=>[r.map(p=>[p.x,p.y])];
-  let famU=null;try{famU=PCx.union(...fam.map(o=>ringP(o.userData.rings[0])));}catch(e){famU=null;}
+  let famU=null;try{famU=qsUnion(fam.map(o=>ringP(o.userData.rings[0])));}catch(e){famU=null;}
   /* roof pans: clipped to the footprints, and cut where a higher piece (a tower, an upper storey) stands over them */
   const drawn=[]; /* {poly:[[x,y]...] outer ring (IGN), holes, zf} */
   const Pm=M.pieces.map(pc=>pc.P.map(([x,y])=>[x+dx,y+dy]));
@@ -2933,14 +2933,15 @@ function qsV4One(fam){
   /* the walls stand under the roof edge: the building outline is the outline of its roof, squared (walls parallel or
      perpendicular to the main axis within 12°; a real slant or a rounded corner stays), and the pans are clipped / extended to it */
   let OUT=null;
-  try{const U0=PCx.union(...drawn.map(d=>[d.outer,...d.holes]));const mr=main.userData.rings[0];let th=0,best=0;
+  try{const U0=qsUnion(drawn.map(d=>[d.outer,...d.holes]));const mr=main.userData.rings[0];let th=0,best=0;
     for(let k=0;k<mr.length;k++){const a=mr[k],b=mr[(k+1)%mr.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L>best){best=L;th=Math.atan2(b.y-a.y,b.x-a.x);}}
     const sq=U0.map(poly=>poly.map(R=>qsSquare(qsSquare(R.slice(0,-1),th),th))); /* twice: the second pass clears what the first leaves */
     const st=(P,key)=>{let ok=0,tot=0;P.forEach(poly=>poly.forEach(R=>{const n=R.length;for(let k=0;k<n;k++){const a=R[k],b=R[(k+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);let d=((Math.atan2(b[1]-a[1],b[0]-a[0])-th)%(Math.PI/2)+Math.PI/2)%(Math.PI/2);d=Math.min(d,Math.PI/2-d);tot+=L;if(d<0.052)ok+=L;}}));return tot?ok/tot:1;};
     const ar=P=>P.reduce((s,poly)=>s+poly.reduce((t,R,i)=>{let a=0;for(let k=0,j=R.length-1;k<R.length;j=k++)a+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);return t+(i?-1:1)*Math.abs(a/2);},0),0);
     const A0u=ar(U0.map(p=>p.map(R=>R.slice(0,-1)))),A1u=ar(sq);
     QV4.sq=QV4.sq||[];QV4.sq.push({before:+st(U0.map(p=>p.map(R=>R.slice(0,-1)))).toFixed(2),after:+st(sq).toFixed(2),dA:+((A1u-A0u)/A0u).toFixed(3)});
-    OUT=Math.abs(A1u-A0u)<0.04*A0u?PCx.union(...sq.map(poly=>poly.map(R=>R.concat([R[0]])))):U0;}catch(e){console.warn('v4 outline',e);OUT=null;}
+    OUT=Math.abs(A1u-A0u)<0.04*A0u?qsUnion(sq.map(poly=>poly.map(R=>R.concat([R[0]])))):U0;}catch(e){console.warn('v4 outline',e);OUT=null;}
+  if(!OUT||!OUT.length)OUT=famU; /* never without an outline: the cadastral footprint at worst */
   if(OUT){const D2=[];drawn.forEach(d=>{let parts=[];try{parts=PCx.intersection([d.outer,...d.holes],OUT);}catch(e){parts=[[d.outer,...d.holes]];}
       parts.forEach(poly=>{const outer=poly[0].slice(0,-1).length>=3&&poly[0][0][0]===poly[0][poly[0].length-1][0]?poly[0].slice(0,-1):poly[0];if(outer.length>=3)D2.push({outer,holes:poly.slice(1).map(h=>h.slice(0,-1)),zf:d.zf,n:d.n});});});
     /* the strips of the outline the laser roof does not reach: to the nearest pan, its slope carried on */
@@ -3341,6 +3342,11 @@ function qsCoplanar(D){const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;
     const dir=L[0].dir;let sw=0,mx=0,my=0;pts.forEach(p=>{sw+=p.w;mx+=p.w*p.q[0];my+=p.w*p.q[1];});mx/=sw;my/=sw;let zm=0;pts.forEach(p=>zm+=p.w*p.z);zm/=sw;
     let pl;if(!(dir[0]||dir[1]))pl=[0,0,zm];else{const [ux,uy]=dir;let suu=0,suz=0;pts.forEach(p=>{const t=(p.q[0]-mx)*ux+(p.q[1]-my)*uy;suu+=p.w*t*t;suz+=p.w*t*(p.z-zm);});const k=suu>1e-6?suz/suu:0;pl=[k*ux,k*uy,zm-k*(ux*mx+uy*my)];}
     L.forEach(d=>{d.pl=pl.slice();const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const n=Math.hypot(a,b,1);d.n=[-a/n,-b/n,1/n];});});}
+
+/* polygon union that survives the clipping library's precision failures: retried on coordinates rounded to the millimetre */
+function qsUnion(list){const PC=PCSYNC;try{return PC.union(...list);}catch(e){}
+  const r=v=>Math.round(v*1000)/1000,L2=list.map(poly=>poly.map(R=>R.map(([x,y])=>[r(x),r(y)])));try{return PC.union(...L2);}catch(e){}
+  const r2=v=>Math.round(v*100)/100;return PC.union(...list.map(poly=>poly.map(R=>R.map(([x,y])=>[r2(x),r2(y)]))));}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
