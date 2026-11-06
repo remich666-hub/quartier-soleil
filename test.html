@@ -3046,7 +3046,7 @@ function qsV4One(fam){
 function qsFoldRoofs(){ if(!QV4.rings.length)return; const rg=QV4.rings;
   const inB=(x,y)=>rg.some(r=>pointInPoly(x,y,r));
   (S.roofSetMeshes||[]).forEach(m=>{const pa=m.geometry.attributes.position,A=pa.array,ix=m.geometry.index?m.geometry.index.array:null,nt=(ix?ix.length:pa.count)/3;let ch=false;
-    for(let t=0;t<nt;t++){const v=[0,1,2].map(k=>ix?ix[t*3+k]:t*3+k);if(A[v[0]*3+2]<-100)continue;const cx=(A[v[0]*3]+A[v[1]*3]+A[v[2]*3])/3,cy=(A[v[0]*3+1]+A[v[1]*3+1]+A[v[2]*3+1])/3;if(inB(cx,cy)){v.forEach(q=>{A[q*3+2]=-200;});ch=true;}}
+    for(let t=0;t<nt;t++){const v=[0,1,2].map(k=>ix?ix[t*3+k]:t*3+k);if(A[v[0]*3+2]<-100)continue;const cx=(A[v[0]*3]+A[v[1]*3]+A[v[2]*3])/3,cy=(A[v[0]*3+1]+A[v[1]*3+1]+A[v[2]*3+1])/3,nin=v.filter(q=>inB(A[q*3],A[q*3+1])).length;if(inB(cx,cy)||nin>=2){ /* centre inside, or two corners: an overhanging IGN facet goes too */v.forEach(q=>{A[q*3+2]=-200;});ch=true;}}
     if(ch){pa.needsUpdate=true;m.geometry.computeBoundingSphere();}});
   (S.roofEdgeParts||[]).forEach(A=>{for(let q=0;q+5<A.length;q+=6){if(A[q+2]>-100&&inB((A[q]+A[q+3])/2,(A[q+1]+A[q+4])/2)){A[q+2]=-200;A[q+5]=-200;}}});}
 
