@@ -3230,6 +3230,10 @@ function qsWeld(D,OUT){const tol=0.25,reps=[];let nid=0;
   const snap=q=>{let best=null,bd=tol;reps.forEach(r=>{const dd=Math.hypot(r.x-q[0],r.y-q[1]);if(dd<bd){bd=dd;best=r;}});
     if(!best)return add(q[0],q[1],false);if(!best.fixed){best.x=(best.x*best.n+q[0])/(best.n+1);best.y=(best.y*best.n+q[1])/(best.n+1);best.n++;}return best;};
   D.forEach(d=>{d.rings=[d.outer,...d.holes].map(R=>R.map(snap));});
+  /* a pan corner within 25 cm of the outline goes onto it (no strip of missing roof along a wall) */
+  const OS=[];(OUT||[]).forEach(poly=>poly.forEach(R=>{for(let k=0;k+1<R.length;k++)OS.push([R[k],R[k+1]]);}));
+  reps.forEach(r=>{if(r.fixed)return;let best=null,bd=0.25;OS.forEach(([a,b])=>{const ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2<1e-6)return;const t=Math.max(0,Math.min(1,((r.x-a[0])*ex+(r.y-a[1])*ey)/L2));
+    const px=a[0]+ex*t,py=a[1]+ey*t,dd=Math.hypot(px-r.x,py-r.y);if(dd<bd){bd=dd;best=[px,py];}});if(best){r.x=best[0];r.y=best[1];r.fixed=true;}});
   const segD=(r,a,b)=>{const ex=b.x-a.x,ey=b.y-a.y,L2=ex*ex+ey*ey;if(L2<1e-6)return null;const t=((r.x-a.x)*ex+(r.y-a.y)*ey)/L2;if(t<=0.02||t>=0.98)return null;
     const d=Math.hypot(a.x+ex*t-r.x,a.y+ey*t-r.y);return d<0.12?t:null;};
   const area=R=>{let s=0;for(let k=0,q=R.length-1;k<R.length;q=k++)s+=(R[q].x-R[k].x)*(R[q].y+R[k].y);return Math.abs(s/2);};
