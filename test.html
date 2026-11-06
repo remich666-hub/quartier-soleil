@@ -2914,7 +2914,7 @@ function qsV4Model(fam){
   const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.userData.rings[0]))-Math.abs(areaOf(p.userData.rings[0])))[0];
   const R=roofCells(main); if(!R||R.cells.length<16)return null;
   const ud=main.userData, area=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0), big=(ud.floors||0)>=3||(ud.h||0)>9.5||area>800;
-  const run=o=>{try{const M=(window.__qsOld?roofModelV4:qsModel5)(R,Object.assign({big},o));if(M&&M.TT){QV4.TT=QV4.TT||{};for(const k in M.TT)QV4.TT[k]=(QV4.TT[k]||0)+M.TT[k];}return M&&M.cells.length?Object.assign(M,{sh0:o.noShift?{dx:0,dy:0}:R.sh}):null;}catch(e){return null;}};
+  const run=o=>{try{const M=(window.__qsOld?roofModelV4:qsModel5)(R,Object.assign({big,green:orthoGreen()},o));if(M&&M.TT){QV4.TT=QV4.TT||{};for(const k in M.TT)QV4.TT[k]=(QV4.TT[k]||0)+M.TT[k];}return M&&M.cells.length?Object.assign(M,{sh0:o.noShift?{dx:0,dy:0}:R.sh}):null;}catch(e){return null;}};
   let M=run({}); if(!M||(!big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
   if(!M||M.rms>0.3){const M3=run({big:false,lam:4,kinks:true});if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
   if(!M||M.rms>0.6)return null; /* a model that explains the laser badly: the current roofs stay */
@@ -3412,7 +3412,9 @@ function qsModel5(R,opt){opt=opt||{};
   const t=[Math.cos(Ad),Math.sin(Ad)],n=[-t[1],t[0]];const U=(x,y)=>x*t[0]+y*t[1],V=(x,y)=>x*n[0]+y*n[1],XY=(u,v)=>[u*t[0]+v*n[0],u*t[1]+v*n[1]];
   let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;const rUV=rings.map(rg=>rg.map(p=>[U(...p),V(...p)]));rUV.forEach(rg=>rg.forEach(p=>{u0=Math.min(u0,p[0]);u1=Math.max(u1,p[0]);v0=Math.min(v0,p[1]);v1=Math.max(v1,p[1]);}));u0-=2;u1+=2;v0-=2;v1+=2;
   const g=big?1.0:0.5;const NU=Math.round((u1-u0)/g),NV=Math.round((v1-v0)/g);const H=[];
-  for(let i=0;i<NU;i++){H.push([]);for(let j=0;j<NV;j++){const [x,y]=XY(u0+(i+.5)*g,v0+(j+.5)*g);const z=Zl(x,y);let h=z==null?0:z-Z0;if(!nearRing(x,y,1.5))h=Math.min(h,0);H[i].push(h);}}
+  for(let i=0;i<NU;i++){H.push([]);for(let j=0;j<NV;j++){const [x,y]=XY(u0+(i+.5)*g,v0+(j+.5)*g);const z=Zl(x,y);let h=z==null?0:z-Z0;if(!nearRing(x,y,1.5))h=Math.min(h,0);else if(opt.green&&h>2&&opt.green(x,y)>12)h=NaN;H[i].push(h);}}
+  /* foliage over a roof (green on the photo): unknown for the fit; elsewhere filled from its known neighbours */
+  const HR=H.map(r=>r.slice());for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){if(HR[i][j]===HR[i][j])continue;let s=0,c=0;for(let rr=1;rr<=4&&!c;rr++)for(let a=-rr;a<=rr;a++)for(let b=-rr;b<=rr;b++){const v=HR[i+a]&&HR[i+a][j+b];if(v!=null&&v===v){s+=v;c++;}}H[i][j]=c?s/c:0;}
   const mask=H.map(r=>r.map(h=>h>2?1:0)),maskD=(i,j)=>{for(let a=-2;a<=2;a++)for(let c=-2;c<=2;c++){const ii=i+a,jj=j+c;if(ii>=0&&jj>=0&&ii<NU&&jj<NV&&mask[ii][jj])return 1;}return 0;};
   tk('grid');
   /* candidate lines */
@@ -3442,9 +3444,9 @@ function qsModel5(R,opt){opt=opt||{};
   const dedupe=(arr,lo,hi,gap)=>{arr=arr.filter(x=>x>lo+0.5&&x<hi-0.5).sort((a,b)=>a-b);const out=[];arr.forEach(x=>{if(!out.length||x-out[out.length-1]>gap)out.push(x);});return [lo,...out,hi];};
   let CU=dedupe(cu,u0,u1,0.7),CV=dedupe(cv,v0,v1,0.7);for(let gp=1;(CU.length>10||CV.length>10)&&gp<4;gp+=0.5){CU=dedupe(cu,u0,u1,gp);CV=dedupe(cv,v0,v1,gp);}
   /* fitting */
-  const pts=[];for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)pts.push([u0+(i+.5)*g,v0+(j+.5)*g,H[i][j]]);
+  const pts=[];for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)pts.push([u0+(i+.5)*g,v0+(j+.5)*g,HR[i][j]]);
   /* fitting on the grid itself (typed arrays, no per-point allocation): same models, same order, same solver as v4 */
-  const PZ=new Float64Array(NU*NV);for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)PZ[i*NV+j]=H[i][j];
+  const PZ=new Float64Array(NU*NV);for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)PZ[i*NV+j]=HR[i][j];
   const rngOf=Rc=>[Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1)];
   const ptsIn=Rc=>{const [i0,i1,j0,j1]=rngOf(Rc),out=[];for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)out.push(pts[i*NV+j]);return out;};
   const solveN=(Mx,bb,np)=>{for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
@@ -3452,14 +3454,14 @@ function qsModel5(R,opt){opt=opt||{};
   const fitM=(I,feat,np)=>{const f=new Float64Array(np);
     const pass=x=>{const Mx=[...Array(np)].map(()=>Array(np).fill(0)),bb=Array(np).fill(0);let n=0;
       for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const v=v0+(j+.5)*g,z=PZ[i*NV+j];feat(u,v,f);
-        if(x){let pz=0;for(let a=0;a<np;a++)pz+=f[a]*x[a];if(!(Math.abs(z-pz)<0.5))continue;}n++;
+        if(z!==z)continue;if(x){let pz=0;for(let a=0;a<np;a++)pz+=f[a]*x[a];if(!(Math.abs(z-pz)<0.5))continue;}n++;
         for(let a=0;a<np;a++){bb[a]+=f[a]*z;const fa=f[a],Ma=Mx[a];for(let c=0;c<np;c++)Ma[c]+=fa*f[c];}}}return {Mx,bb,n};};
     const p0=pass(null);let x=solveN(p0.Mx,p0.bb,np);const p1=pass(x);if(p1.n>np+3)x=solveN(p1.Mx,p1.bb,np);return x;};
-  const costI=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const d=Math.abs(PZ[i*NV+j]-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
+  const costI=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const d=Math.abs(zz-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
   const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){r=leafFit0(Rc);LFC.set(key,r);}return r;};
-  const leafFit0=Rc=>{const I=rngOf(Rc),none={type:'none',pred:()=>0,cost:0,cr:0,R:Rc,np:0};const nP=(I[1]-I[0]+1)*(I[3]-I[2]+1);if(I[1]<I[0]||I[3]<I[2])return none;
-    let n2=0,zmax=-1e9;const hi=[];for(let i=I[0];i<=I[1];i++)for(let j=I[2];j<=I[3];j++){const z=PZ[i*NV+j];if(z>2)n2++;if(z>1)hi.push(z);if(z>zmax)zmax=z;}
-    const occ=n2/nP;const cands=[{type:'none',pred:()=>0,np:0}];
+  const leafFit0=Rc=>{const I=rngOf(Rc),none={type:'none',pred:()=>0,cost:0,cr:0,R:Rc,np:0};if(I[1]<I[0]||I[3]<I[2])return none;
+    let nP=0,n2=0,zmax=-1e9;const hi=[];for(let i=I[0];i<=I[1];i++)for(let j=I[2];j<=I[3];j++){const z=PZ[i*NV+j];if(z!==z)continue;nP++;if(z>2)n2++;if(z>1)hi.push(z);if(z>zmax)zmax=z;}
+    if(!nP)return none;const occ=n2/nP;const cands=[{type:'none',pred:()=>0,np:0}];
     if(occ>0.3){hi.sort((x,y)=>x-y);const md=hi.length?hi[hi.length>>1]:0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
       const su=fitM(I,(u,v,f)=>{f[0]=1;f[1]=u-Rc[0];},2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
       const sv=fitM(I,(u,v,f)=>{f[0]=1;f[1]=v-Rc[2];},2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
@@ -3499,7 +3501,7 @@ function qsModel5(R,opt){opt=opt||{};
   }else{const sol=solve(0,CU.length-1,0,CV.length-1);IX=sol.leaves.filter(l=>l.type!='none').map(l=>[CU.indexOf(l.R[0]),CU.indexOf(l.R[1]),CV.indexOf(l.R[2]),CV.indexOf(l.R[3])]);}
   tk('dp');if(!IX.length||IX.some(ix=>ix.some(k=>k<0)))return null;
   const inside=(Rc,u,v)=>u>=Rc[0]&&u<Rc[1]&&v>=Rc[2]&&v<Rc[3];
-  const SAT=new Float64Array((NU+1)*(NV+1));for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)SAT[(i+1)*(NV+1)+j+1]=Math.min(Math.abs(H[i][j]),CL)+SAT[i*(NV+1)+j+1]+SAT[(i+1)*(NV+1)+j]-SAT[i*(NV+1)+j];
+  const SAT=new Float64Array((NU+1)*(NV+1));for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)SAT[(i+1)*(NV+1)+j+1]=(HR[i][j]===HR[i][j]?Math.min(Math.abs(HR[i][j]),CL):0)+SAT[i*(NV+1)+j+1]+SAT[(i+1)*(NV+1)+j]-SAT[i*(NV+1)+j];
   const c0In=Rc=>{const i0=Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),i1=Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),j0=Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),j1=Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1);if(i1<i0||j1<j0)return 0;const W=NV+1;return SAT[(i1+1)*W+j1+1]-SAT[i0*W+j1+1]-SAT[(i1+1)*W+j0]+SAT[i0*W+j0];};
   const ALL=SAT[NU*(NV+1)+NV];
   const total=(A,B)=>{const ls=IX.map(ix=>leafFit([A[ix[0]],A[ix[1]],B[ix[2]],B[ix[3]]]));let s=ALL;ls.forEach(l=>{s+=l.cr-c0In(l.R);});return {s,ls};};
@@ -3519,7 +3521,7 @@ function qsModel5(R,opt){opt=opt||{};
     if(!bm)break;IX.length=0;bm.IX.forEach(x=>IX.push(x));bm.U.forEach((v,q)=>CUr[q]=v);bm.V.forEach((v,q)=>CVr[q]=v);cur=bm.c;refine();}
   tk('merge');const leaves=cur.ls.filter(l=>l.type!='none'&&(l.R[1]-l.R[0])>=1&&(l.R[3]-l.R[2])>=1);if(!leaves.length)return null;
   /* quality: median |laser - model| over the building */
-  const ds=[];pts.forEach(p=>{const lf=leaves.find(l=>inside(l.R,p[0],p[1]));const m=lf?lf.pred(p[0],p[1]):0;const [x,y]=XY(p[0],p[1]);if((p[2]>2||m>2)&&nearRing(x,y,1))ds.push(Math.abs(p[2]-m));});ds.sort((a,b)=>a-b);
+  const ds=[];pts.forEach(p=>{const lf=leaves.find(l=>inside(l.R,p[0],p[1]));const m=lf?lf.pred(p[0],p[1]):0;const [x,y]=XY(p[0],p[1]);if(p[2]===p[2]&&(p[2]>2||m>2)&&nearRing(x,y,1))ds.push(Math.abs(p[2]-m));});ds.sort((a,b)=>a-b);
   const rms=ds.length?ds[ds.length>>1]:9;
   /* ---- the model in the page's format: pieces (outline + roofZ), pans (planes, tris on the energy grid), cells, verts */
   const s=R.s, cells=[], pans=[], verts=[], pieces=[];
@@ -3718,13 +3720,14 @@ function qsWorker(){if(QW.failed)return null;if(QW.w)return QW.w;
     QW.w=w;return w;}catch(e){QW.failed=true;return null;}}
 function qsWorkerMain(){ /* runs inside the worker */
   const mkAt=o=>{if(!o)return null;const {f,W,R,res}=o,ok=v=>v>-500&&v<9000;return {R,res,W,at:(x,y)=>{const i=Math.floor((x+R)/res),j=Math.floor((R-y)/res);if(i<0||j<0||i>=W||j>=W)return null;const v=f[j*W+i];return ok(v)?v:null;}};};
-  let F=null,C=null;
+  let F=null,C=null,GD=null;
   self.onmessage=e=>{const m=e.data;
-    if(m.kind==='data'){if(m.mnh!==undefined){S.lidarR={mnh:mkAt(m.mnh)};F=mkAt(m.F);C=mkAt(m.C);}if(m.ortho!==undefined)S.rawOrtho=m.ortho?{raw:{width:m.ortho.width,height:m.ortho.height,getContext:()=>({getImageData:()=>({data:m.ortho.data})})},w:m.ortho.w,e:m.ortho.e,n:m.ortho.n,s:m.ortho.s}:null;return;}
+    if(m.kind==='data'){if(m.mnh!==undefined){S.lidarR={mnh:mkAt(m.mnh)};F=mkAt(m.F);C=mkAt(m.C);}if(m.ortho!==undefined)GD=null,S.rawOrtho=m.ortho?{raw:{width:m.ortho.width,height:m.ortho.height,getContext:()=>({getImageData:()=>({data:m.ortho.data})})},w:m.ortho.w,e:m.ortho.e,n:m.ortho.n,s:m.ortho.s}:null;return;}
     const t0=performance.now(),inF=(x,y)=>F&&Math.abs(x)<F.R-2&&Math.abs(y)<F.R-2;
     const R=Object.assign({},m.R,{Z:(x,y)=>{let z=inF(x,y)?F.at(x,y):null;if(z==null&&C)z=C.at(x,y);return z;}});
     const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0}))});
-    const run=o=>{try{const M=qsModel5(R,Object.assign({big:m.big},o));return M&&M.cells.length?pack(M,o):null;}catch(err){return null;}};
+    const ro=S.rawOrtho,green=ro?((x,y)=>{const W=ro.raw.width,H=ro.raw.height,mpp=(ro.e-ro.w)/W,d=GD||(GD=ro.raw.getContext().getImageData().data);const px=Math.round((x-ro.w)/mpp),py=Math.round((ro.n-y)/mpp);if(px<0||py<0||px>=W||py>=H)return -99;const k=(py*W+px)*4;return 2*d[k+1]-d[k]-d[k+2];}):null;
+    const run=o=>{try{const M=qsModel5(R,Object.assign({big:m.big,green},o));return M&&M.cells.length?pack(M,o):null;}catch(err){return null;}};
     let M=run({});if(!M||(!m.big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
     if(!M||M.rms>0.3){const M3=run({big:false,lam:4,kinks:true});if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
     self.postMessage({id:m.id,M,ms:performance.now()-t0});};}
