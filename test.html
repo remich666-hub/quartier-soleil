@@ -2981,8 +2981,8 @@ function qsV4One(fam){
   const EK=new Map();drawn.forEach(d=>(d.rings||[]).forEach(R=>{for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length];EK.set(a.id+'>'+b.id,{d,a,b});}}));
   drawn.forEach(d=>(d.rings||[]).forEach((R,ri)=>{let ar=0;for(let k=0,q=R.length-1;k<R.length;q=k++)ar+=(R[q].x-R[k].x)*(R[q].y+R[k].y);const sg=(ar>0?1:-1)*(ri?-1:1);
     for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.05)continue;let nx=sg*(b.y-a.y)/L,ny=-sg*(b.x-a.x)/L;
-      /* outward checked directly: the point just behind the wall lies in this pan */
-      {const px=(a.x+b.x)/2-nx*0.05,py=(a.y+b.y)/2-ny*0.05;if(!(inRing(px,py,d.outer)&&!d.holes.some(h=>inRing(px,py,h)))){nx=-nx;ny=-ny;}}
+      /* a pan twisted by the straightening can fool the turning sign: the outward side never lies in the pan itself */
+      {const px=(a.x+b.x)/2+nx*0.05,py=(a.y+b.y)/2+ny*0.05;if(inRing(px,py,d.outer)&&!d.holes.some(h=>inRing(px,py,h))){nx=-nx;ny=-ny;}}
       const za=d.vz.get(a.id),zb=d.vz.get(b.id),tw=EK.get(b.id+'>'+a.id),mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
       const under=tallAt(mx-nx*0.15,my-ny*0.15)||blockAt(mx-nx*0.15,my-ny*0.15)||main;let lo0,lo1;
       if(tw){const ta=tw.d.vz.get(a.id),tb=tw.d.vz.get(b.id);if((ta+tb)/2>=(za+zb)/2-0.05)continue; /* a ridge, a hip, a valley, or the higher side's wall */
