@@ -3753,6 +3753,7 @@ async function qsHouseFirst(){
         if(houseDone()&&(shown>=DR.stages.length)&&(DR.stages.some(x=>x.k==='merged')||performance.now()-s0>1500))break;
         if(performance.now()-s0>12000)break;await sleep(80);}
       if(t!==token)return;
+      {const w0=performance.now();while(t===token&&typeof QV4!=='undefined'&&QV4.busy&&performance.now()-w0<3500)await sleep(100);}if(t!==token)return;
       /* the solid house fills the drawing */
       hidden=false;houseMeshes().forEach(o=>o.visible=true);capShow('solid');await fadeTo(grp.children,0,700);await sleep(300);cap.classList.remove('on');
     }finally{clearInterval(keepHidden);clearInterval(keepSwept);hidden=false;houseMeshes().forEach(o=>o.visible=true);scene.remove(grp);grp.traverse(o=>{if(o.geometry)o.geometry.dispose();});if(typeof QW!=='undefined'){QW.onStage=null;QW.wantStages=null;}}};
@@ -3767,10 +3768,10 @@ async function qsHouseFirst(){
     await drawHouse(t);if(t!==token)return;
     veil.classList.remove('on');await sleep(1300);if(t!==token)return;
     /* 3. the scan, paced on the roof queue */
-    const R1=u.uQsD1.value+30,T=6000,MAX=9000,s0=performance.now();let p=0,last=s0;
+    const R1=u.uQsD1.value+30,T=6000,MAX=9000,s0=performance.now();let p=0,last=s0;const swp=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},100);
     while(t===token&&p<1){await sleep(16);const now=performance.now(),dt=Math.min(64,now-last);last=now;const q=Q(),slow=q&&q.busy&&now-s0<MAX;p=Math.min(1,p+dt/T*(slow?0.45:1));
       const e=p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;u.uScanR.value=e*R1;}
-    if(t!==token)return;u.uScanR.value=1e6;soloShadows(false);try{sunPath.visible=true;}catch(e){}};
+    clearInterval(swp);if(t!==token)return;u.uScanR.value=1e6;soloShadows(false);try{sunPath.visible=true;}catch(e){}};
   try{const _load=load;load=async function(...a){const t=++token;ol.innerHTML='';veil.classList.add('on');const u=U();if(u)u.uScanR.value=-1;soloShadows(false);
     try{return await _load.apply(this,a);}finally{run(t).catch(e=>{console.warn('scan',e);veil.classList.remove('on');const u2=U();if(u2)u2.uScanR.value=1e6;soloShadows(false);});}};}catch(e){console.warn('reveal',e);}
   /* the front's colour follows the hour */
