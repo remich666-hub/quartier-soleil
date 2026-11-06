@@ -397,19 +397,72 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
    the light spills out as a grainy halo on its own side only, and the window casts a patch of light below it */
 (function(){
   const cv=document.getElementById('hero3d'),stage=document.getElementById('stage');if(!cv||!stage)return;
-  const ctx=cv.getContext('2d');if(!ctx)return;
+  /* the light is computed per pixel on the GPU (a fragment shader); the CPU path below is only a fallback */
+  const GL=cv.getContext('webgl',{alpha:true,premultipliedAlpha:true,antialias:false,preserveDrawingBuffer:false});
+  const ctx=GL?null:cv.getContext('2d');if(!GL&&!ctx)return;
+  let PROG=null,UL={};
+  if(GL){
+    const FS=`precision highp float;
+uniform vec2 uRes;uniform float uD,uWW,uWH,uLI,uOR,uOH,uR,uLS,uPH0,uPI,uSun,uLit,uNt,uWallA;uniform vec4 uWin;uniform vec3 uTop,uBot,uLC,uLC2,uPatch,uPal,uWarm,uPink,uCold;uniform vec2 uL,uW;
+float hs(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
+float soft(float d,float s){return d>0.?0.5*exp(-d/s):1.-0.5*exp(d/s);}
+void main(){
+  vec2 P=vec2(gl_FragCoord.x,uRes.y-gl_FragCoord.y);
+  float t1=hs(P),t2=hs(P+vec2(171.3,-311.7)),t3=hs(P+vec2(-532.1,917.9));
+  float dl=length(P-uL),dlw=length(P-uW);
+  float ex=max(uWin.x-P.x,P.x-uWin.z),ey=max(uWin.y-P.y,P.y-uWin.w);
+  float d=(ex>0.||ey>0.)?length(max(vec2(ex,ey),0.)):max(ex,ey);
+  float u=dlw/uLS,w=uLI*exp(-u*u),s=0.35*uD+w*uWW*0.07;
+  float mW=d<-uWW*0.3?1.:soft(d,s);
+  bool sun=uSun>0.5;
+  if(mW>t1){
+    vec3 col=mix(uTop,uBot,clamp((P.y-uWin.y)/uWH,0.,1.));
+    float q=dl/uOR,qh=dl/uOH;
+    float hk=uLI*exp(-qh*qh*0.12)*(sun?0.85:0.45)*0.8;
+    vec3 hc=mix(uLC,vec3(255.,168.,196.),sun?smoothstep(1.,3.2,qh):0.);
+    if(sun&&qh>1.)col=mix(col,uPink,uLit*exp(-(qh-1.)*0.9)*0.2);
+    col=mix(col,hc,hk*(0.7+0.6*t2));
+    if(uLI>0.02&&q<2.5&&soft((q-1.)*uOR,uOR*0.22)>t3){
+      vec3 c=sun?mix(vec3(255.,248.,238.),uWarm,smoothstep(0.15,1.1,q)):mix(vec3(236.,240.,255.),uCold,smoothstep(0.3,1.1,q));
+      col=mix(col,c,sun?uLI:uNt);}
+    gl_FragColor=vec4(col/255.,1.);return;}
+  float an=atan(P.y-uW.y,P.x-uW.x);
+  float f=dlw/(uR*2.3)*(1.+0.13*sin(3.*an+uPH0)+0.07*sin(5.*an-uPH0*1.4));
+  float gl=(sun?1.05:0.65)*uLI*exp(-f*f*1.7);
+  vec3 gc=mix(uLC,uLC2,min(1.,f*1.6));
+  float pv=(P.y-uPatch.x)/(uPatch.y-uPatch.x),pvc=max(0.,pv),pm=0.;
+  if(uPI>0.01&&pv>-0.3&&pv<1.3){float pxl=uWin.x+uPatch.z*pvc-uWW*0.12*pvc,pxr=uWin.z+uPatch.z*pvc+uWW*0.12*pvc,ps=2.*uD+pvc*uWW*0.06;
+    float dp=max(max(pxl-P.x,P.x-pxr),max(uPatch.x-P.y,P.y-uPatch.y));pm=soft(dp,ps)*(1.-0.55*min(1.,pvc));}
+  vec2 n=(P-uRes*0.5)/(uRes*0.5);float ea=atan(n.y,n.x);
+  float er=length(n)*(1.+0.08*sin(3.*ea+uPH0)+0.05*sin(5.*ea-uPH0*1.3)+0.03*sin(8.*ea+uPH0*2.1));
+  float fe=(1.-smoothstep(0.3,0.82,er))*smoothstep(0.,min(uRes.x,uRes.y)*0.08,min(min(P.x,uRes.x-P.x),min(P.y,uRes.y-P.y)));
+  gl*=fe;pm*=fe;
+  float al=0.;vec3 col=gc;
+  if(gl>0.004)al=t2<gl*0.75?(0.3+0.35*gl)*uWallA:gl*0.4;
+  if(pm>0.001){if(pm*uPI>t3*0.9+0.05){float pa=(0.6+0.35*t2)*uPI*uWallA;if(pa>al){al=pa;col=uPal;}}
+    else{float pa=pm*uPI*0.22;if(pa>al){al=pa;col=uLC;}}}
+  gl_FragColor=vec4(col/255.*al,al);}`;
+    const sh=(t,src)=>{const o=GL.createShader(t);GL.shaderSource(o,src);GL.compileShader(o);if(!GL.getShaderParameter(o,GL.COMPILE_STATUS))console.warn(GL.getShaderInfoLog(o));return o;};
+    PROG=GL.createProgram();GL.attachShader(PROG,sh(GL.VERTEX_SHADER,'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}'));GL.attachShader(PROG,sh(GL.FRAGMENT_SHADER,FS));GL.linkProgram(PROG);GL.useProgram(PROG);
+    const vb=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,vb);GL.bufferData(GL.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),GL.STATIC_DRAW);
+    const lp=GL.getAttribLocation(PROG,'p');GL.enableVertexAttribArray(lp);GL.vertexAttribPointer(lp,2,GL.FLOAT,false,0,0);
+    for(const k of ['uRes','uD','uWW','uWH','uLI','uOR','uOH','uR','uLS','uPH0','uPI','uSun','uLit','uNt','uWallA','uWin','uTop','uBot','uLC','uLC2','uPatch','uPal','uWarm','uPink','uCold','uL','uW'])UL[k]=GL.getUniformLocation(PROG,k);
+  }
   const clockT=document.getElementById('clockT'),clockL=document.getElementById('clockL');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const dark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches;};
   let W=0,H=0,DPR=1,PW=0,PH=0,img=null,buf=null,T1=null,T2=null,T3=null,G={};
   function build(){
-    PW=cv.width;PH=cv.height;img=ctx.createImageData(PW,PH);buf=new Uint32Array(img.data.buffer);
+    PW=cv.width;PH=cv.height;if(GL){GL.viewport(0,0,PW,PH);}else{img=ctx.createImageData(PW,PH);buf=new Uint32Array(img.data.buffer);
     const n=PW*PH;T1=new Float32Array(n);T2=new Float32Array(n);T3=new Float32Array(n);
-    for(let i=0;i<n;i++){T1[i]=Math.random();T2[i]=Math.random();T3[i]=Math.random();}
-    const ww=Math.min(W*0.56,H*0.52),wh=ww*1.22,x0=(W-ww)/2,y0=H*0.07;
+    for(let i=0;i<n;i++){T1[i]=Math.random();T2[i]=Math.random();T3[i]=Math.random();}}
+    const ww=Math.min(SW*0.56,SH*0.52),wh=ww*1.22,x0=MX+(SW-ww)/2,y0=MY+SH*0.07;
     G={x0:x0*DPR,y0:y0*DPR,x1:(x0+ww)*DPR,y1:(y0+wh)*DPR,ww:ww*DPR,wh:wh*DPR};
   }
-  const resize=()=>{const r=stage.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);W=r.width;H=r.height;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);build();};
+  /* the canvas overflows the stage so the light spills past it into the hero, behind the text */
+  let SW=0,SH=0,MX=0,MY=0;
+  const resize=()=>{const r=stage.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);SW=r.width;SH=r.height;MX=Math.round(SW*0.22);MY=Math.round(SH*0.24);W=SW+2*MX;H=SH+2*MY;
+    Object.assign(cv.style,{inset:'auto',left:-MX+'px',top:-MY+'px',width:W+'px',height:H+'px',zIndex:'-1',pointerEvents:'none'});cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);build();};
   /* the sky by sun altitude (a: -1 deep night … 1 noon): pale lavender by day, rose and orange low, night blue */
   const K=[[-1,'#080c20','#141a3c'],[-.25,'#0f1430','#262050'],[-.08,'#2a3168','#d9758c'],[0,'#7d8be6','#ffa27e'],[.12,'#a6b6f6','#ffc9b6'],[.35,'#b7c5f8','#f9dbe8'],[1,'#c2cefa','#f6e4f0']];
   const hx=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
@@ -431,22 +484,29 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
     const mx=g.x0+g.ww*0.6,my=g.y0+g.wh*0.34;
     const warm=mix([255,112,52],[255,190,140],sm(0.1,0.7,a)),pink=[238,104,150],cold=[196,204,255];
     const LX=sunUp?sx:mx,LY=sunUp?sy:my,LI=sunUp?lit:nt*0.6,LC=sunUp?warm:cold,LC2=sunUp?pink:[170,160,240];
-    const SM=window.QS_SUN||1,SK=sunUp?1+(SM-1)*Math.exp(-Math.pow((dd-0.62)/0.3,2)):SM,OR=g.ww*(sunUp?0.2*SK:0.16*(1+(SK-1)*0.5)),R=g.ww*0.95,OH=g.ww*(sunUp?0.2:0.16)*(1+(SK-1)*0.35),LS=g.ww*0.36;
+    const SM=window.QS_SUN||1,SK=sunUp?1+(SM-1)*Math.exp(-Math.pow((dd-0.62)/0.3,2)):SM,OR=g.ww*(sunUp?0.2*SK:0.16*(1+(SK-1)*0.32)),R=g.ww*0.95,OH=g.ww*(sunUp?0.2:0.16)*(1+(SK-1)*0.35),LS=g.ww*0.36;
     const WCX=(g.x0+g.x1)/2,WCY=(g.y0+g.y1)/2,WX=WCX-(LX-WCX)*1.5,WY=WCY-(LY-WCY)*0.8,PH0=performance.now()*0.00012; /* the outline drifts slowly in real time, never with the hour (the night runs fast) */
     /* the patch the window casts below it, sheared away from the light */
-    const cx=(g.x0+g.x1)/2,py0=g.y1+H*D*0.035,py1=Math.min(PH-2,py0+H*D*0.2),sh=-(LX-cx)/(g.ww/2)*g.ww*0.6,PI=LI*(sunUp?0.75:0.5);
+    const cx=(g.x0+g.x1)/2,py0=g.y1+SH*D*0.035,py1=Math.min(PH-2,py0+SH*D*0.2),sh=-(LX-cx)/(g.ww/2)*g.ww*0.6,PI=LI*(sunUp?0.75:0.5);
     const core=[255,248,238],moonC=[236,240,255];
     const wallA=dk?1:0.85;
     /* the smooth fields are evaluated once per 2×2 block; the grain (the threshold test) stays per pixel */
     const pal=sunUp?[255,196,170]:[200,206,255];
-    for(let y=0;y<PH;y+=2){
-      const yc=y+0.5,sv=Math.max(0,Math.min(1,(yc-g.y0)/g.wh)),skyR=top[0]+(bot[0]-top[0])*sv,skyG=top[1]+(bot[1]-top[1])*sv,skyB=top[2]+(bot[2]-top[2])*sv;
+    if(GL){const U=UL,f1=(k,v)=>GL.uniform1f(U[k],v),f2=(k,a,b)=>GL.uniform2f(U[k],a,b),f3=(k,c)=>GL.uniform3f(U[k],c[0],c[1],c[2]);
+      f2('uRes',PW,PH);f1('uD',D);f1('uWW',g.ww);f1('uWH',g.wh);f1('uLI',LI);f1('uOR',OR);f1('uOH',OH);f1('uR',R);f1('uLS',LS);f1('uPH0',PH0);f1('uPI',PI);
+      f1('uSun',sunUp?1:0);f1('uLit',lit);f1('uNt',nt);f1('uWallA',wallA);GL.uniform4f(U.uWin,g.x0,g.y0,g.x1,g.y1);
+      f3('uTop',top);f3('uBot',bot);f3('uLC',LC);f3('uLC2',LC2);f3('uPatch',[py0,py1,sh]);f3('uPal',pal);f3('uWarm',warm);f3('uPink',pink);f3('uCold',cold);f2('uL',LX,LY);f2('uW',WX,WY);
+      GL.clearColor(0,0,0,0);GL.clear(GL.COLOR_BUFFER_BIT);GL.drawArrays(GL.TRIANGLES,0,3);
+    }else{
+    /* the smooth fields are evaluated once per block (4×4 on the open wall, 2×2 along the window's edge); the grain stays per pixel */
+    const nearL=g.x0-g.ww*0.65,nearR=g.x1+g.ww*0.65,nearT=g.y0-g.ww*0.65,nearB=g.y1+g.ww*0.65,deep=g.ww*0.3;
+    const blk=(x,y,bs)=>{
+      const yc=y+bs*0.5-0.5,sv=Math.max(0,Math.min(1,(yc-g.y0)/g.wh)),skyR=top[0]+(bot[0]-top[0])*sv,skyG=top[1]+(bot[1]-top[1])*sv,skyB=top[2]+(bot[2]-top[2])*sv;
       const inRowsWin=yc>g.y0-g.ww*0.3&&yc<g.y1+g.ww*0.3;
       const pv=(yc-py0)/(py1-py0),pvc=Math.max(0,pv),inPatchRow=PI>0.01&&pv>-0.3&&pv<1.3;
       const pxl=g.x0+sh*pvc-g.ww*0.12*pvc,pxr=g.x1+sh*pvc+g.ww*0.12*pvc,psoft=2*D+pvc*g.ww*0.06,pfade=1-0.55*Math.min(1,pvc);
-      const dy=yc-LY,dy2=dy*dy,dyw2=(yc-WY)*(yc-WY),fy=Math.min(yc,PH-yc),rows=y+1<PH?2:1;
-      for(let x=0;x<PW;x+=2){
-        const xc=x+0.5,dx=xc-LX,dl=Math.sqrt(dx*dx+dy2),dxw=xc-WX,dlw=Math.sqrt(dxw*dxw+dyw2);
+      const dy=yc-LY,dy2=dy*dy,dyw2=(yc-WY)*(yc-WY),fy=Math.min(yc,PH-yc),rows=Math.min(bs,PH-y);
+        const xc=x+bs*0.5-0.5,dx=xc-LX,dl=Math.sqrt(dx*dx+dy2),dxw=xc-WX,dlw=Math.sqrt(dxw*dxw+dyw2);
         let mW=0;
         if(inRowsWin){
           const ex=Math.max(g.x0-xc,xc-g.x1),ey=Math.max(g.y0-yc,yc-g.y1);
@@ -464,10 +524,10 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
         /* outside: halo + patch */
         let gl=0,gr=0,gg2=0,gb=0,pm=0;
         if(mW<0.999){
-          if(LI>0.01){const an=Math.atan2(yc-WY,dxw),f=dlw/(R*2.3)*(1+0.13*Math.sin(3*an+PH0)+0.07*Math.sin(5*an-PH0*1.4));gl=(sunUp?0.85:0.55)*LI*Math.exp(-f*f*1.7);if(gl>0.004){const c=Math.min(1,f*1.6);gr=LC[0]+(LC2[0]-LC[0])*c;gg2=LC[1]+(LC2[1]-LC[1])*c;gb=LC[2]+(LC2[2]-LC[2])*c;}else gl=0;}
+          if(LI>0.01){const an=Math.atan2(yc-WY,dxw),f=dlw/(R*2.3)*(1+0.13*Math.sin(3*an+PH0)+0.07*Math.sin(5*an-PH0*1.4));gl=(sunUp?1.05:0.65)*LI*Math.exp(-f*f*1.7);if(gl>0.004){const c=Math.min(1,f*1.6);gr=LC[0]+(LC2[0]-LC[0])*c;gg2=LC[1]+(LC2[1]-LC[1])*c;gb=LC[2]+(LC2[2]-LC[2])*c;}else gl=0;}
           if(inPatchRow){const d=Math.max(pxl-xc,xc-pxr,py0-yc,yc-py1);if(d<psoft*8)pm=soft(d,psoft)*pfade;}
         }
-        const nx=(xc-PW/2)/(PW/2),ny=(yc-PH/2)/(PH/2),ea=Math.atan2(ny,nx),er=Math.sqrt(nx*nx+ny*ny)*(1+0.08*Math.sin(3*ea+PH0)+0.05*Math.sin(5*ea-PH0*1.3)+0.03*Math.sin(8*ea+PH0*2.1)),fe=(1-sm(0.72,1.2,er))*sm(0,Math.min(PW,PH)*0.05,Math.min(xc,PW-xc,fy));gl*=fe;pm*=fe;const cols=x+1<PW?2:1;
+        const nx=(xc-PW/2)/(PW/2),ny=(yc-PH/2)/(PH/2),ea=Math.atan2(ny,nx),er=Math.sqrt(nx*nx+ny*ny)*(1+0.08*Math.sin(3*ea+PH0)+0.05*Math.sin(5*ea-PH0*1.3)+0.03*Math.sin(8*ea+PH0*2.1)),fe=(1-sm(0.3,0.82,er))*sm(0,Math.min(PW,PH)*0.08,Math.min(xc,PW-xc,fy));gl*=fe;pm*=fe;const cols=Math.min(bs,PW-x);
         for(let oy=0;oy<rows;oy++)for(let ox=0;ox<cols;ox++){
           const i=(y+oy)*PW+x+ox,t1=T1[i],t2=T2[i];
           if(mW>t1){
@@ -481,9 +541,13 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
             else{const pa=pm*PI*0.22;if(pa>al){al=pa;r=LC[0];g_=LC[1];b=LC[2];}}}
           buf[i]=al>0.004?px(r,g_,b,al*255):0;
         }
-      }
+    };
+    for(let y=0;y<PH;y+=4)for(let x=0;x<PW;x+=4){
+      const near=x+4>nearL&&x<nearR&&y+4>nearT&&y<nearB&&!(x>g.x0+deep&&x+4<g.x1-deep&&y>g.y0+deep&&y+4<g.y1-deep);
+      if(near){blk(x,y,2);if(x+2<PW)blk(x+2,y,2);if(y+2<PH){blk(x,y+2,2);if(x+2<PW)blk(x+2,y+2,2);}}else blk(x,y,4);
     }
     ctx.putImageData(img,0,0);
+    }
     /* the clock */
     const hh=Math.floor(hour)%24,mm=Math.floor((hour%1)*60/10)*10;if(clockT)clockT.textContent=String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
     const state=a>0.04?'sun':a>-0.12?'dusk':'night';if(clockL&&clockL._s!==state+(day<0.5)){clockL._s=state+(day<0.5);clockL.textContent=state==='sun'?'Soleil sur la fenêtre':state==='dusk'?(day<0.5?'Aube':'Crépuscule'):'Nuit';clockL.classList.toggle('on',state==='sun');}
