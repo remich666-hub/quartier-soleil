@@ -2952,13 +2952,16 @@ function qsV4One(fam){
         pts.push([x,y,z,t*L]);}
       const bays=L>=2.2?Math.max(1,Math.round(L/3.5)):0,U=d=>bays?d/L*bays*3.5:0.1;
       for(let i=0;i<m;i++){const p=pts[i],q=pts[i+1];if(!isFinite(p[2])||!isFinite(q[2]))continue;quad([p[0],p[1]],[q[0],q[1]],zb,zb,Math.max(zb,p[2]),Math.max(zb,q[2]),nx,ny,U(p[3]),U(q[3]),o.userData.zBase);}}});
-  const pieceAt=(x,y,not)=>M.pieces.find((o,k)=>o!==not&&pointInPoly(x,y,Mpolys[k]));
-  M.pieces.forEach(pc=>pc.edgeProfiles.forEach(ep=>{if(ep.outer)return;const L=Math.hypot(ep.b[0]-ep.a[0],ep.b[1]-ep.a[1])||1,nx=(ep.b[1]-ep.a[1])/L,ny=-(ep.b[0]-ep.a[0])/L;
-    for(let k=0;k<ep.prof.length-1;k++){const p=ep.prof[k],q=ep.prof[k+1],mx=(p[0]+q[0])/2,my=(p[1]+q[1])/2;
-      const o=pieceAt(mx+nx*0.3,my+ny*0.3,pc);if(!o)continue;const za=o.roofZ(p[0],p[1])-A0,zb=o.roofZ(q[0],q[1])-A0;if(Math.min(p[2]-A0-za,q[2]-A0-zb)<0.05)continue;
-      const A=[X(p[0]),Y(p[1])],B=[X(q[0]),Y(q[1])];if(!blockAt((A[0]+B[0])/2,(A[1]+B[1])/2))continue;
-      const bo=blockAt(A[0],A[1])||main,d0=Math.hypot(A[0]-X(ep.a[0]),A[1]-Y(ep.a[1])),d1=Math.hypot(B[0]-X(ep.a[0]),B[1]-Y(ep.a[1]));
-      quad(A,B,za,zb,p[2]-A0,q[2]-A0,nx,ny,d0,d1,bo.userData.zBase);}}));
+  /* inside the footprint: every piece edge that stands above what is drawn just beyond it gets its wall (a tower over a lower roof) */
+  M.pieces.forEach(pc=>pc.edgeProfiles.forEach(ep=>{const L=Math.hypot(ep.b[0]-ep.a[0],ep.b[1]-ep.a[1])||1;let nx=(ep.b[1]-ep.a[1])/L,ny=-(ep.b[0]-ep.a[0])/L;
+    if(pointInPoly((ep.a[0]+ep.b[0])/2+nx*0.2,(ep.a[1]+ep.b[1])/2+ny*0.2,Mpolys[M.pieces.indexOf(pc)])){nx=-nx;ny=-ny;} /* outward from the piece */
+    const sub=[];for(let k=0;k<ep.prof.length-1;k++){const p=ep.prof[k],q=ep.prof[k+1],l=Math.hypot(q[0]-p[0],q[1]-p[1]),m=Math.max(1,Math.ceil(l/0.25));for(let i=0;i<m;i++){const t0=i/m,t1=(i+1)/m;sub.push([p[0]+(q[0]-p[0])*t0,p[1]+(q[1]-p[1])*t0,p[2]+(q[2]-p[2])*t0,p[0]+(q[0]-p[0])*t1,p[1]+(q[1]-p[1])*t1,p[2]+(q[2]-p[2])*t1]);}}
+    sub.forEach(([x0,y0,z0,x1,y1,z1])=>{const A=[X(x0),Y(y0)],B=[X(x1),Y(y1)],mx=(A[0]+B[0])/2,my=(A[1]+B[1])/2,ox=mx+nx*0.3,oy=my+ny*0.3;
+      const bo=blockAt(ox,oy);if(!bo)return; /* beyond it is outside: the outline walls do it */
+      const zA=z0-A0,zB=z1-A0,below=(x,y,ze)=>{const v=drawnZ(x+nx*0.3,y+ny*0.3);return isFinite(v)?v:topAbs(bo);};
+      const la=below(A[0],A[1]),lb=below(B[0],B[1]);if(zA-la<0.05||zB-lb<0.05)return; /* beyond stands as high: its own walls close it */
+      const d0=Math.hypot(A[0]-X(ep.a[0]),A[1]-Y(ep.a[1])),d1=Math.hypot(B[0]-X(ep.a[0]),B[1]-Y(ep.a[1]));
+      quad(A,B,la,lb,zA,zB,nx,ny,d0,d1,bo.userData.zBase);});}));
   if(!P.length)return false;
   /* swap: old laser pans and IGN roof triangles out, blocks cut at their new wall top, new pans and walls in */
   const goneObs=new Set();
