@@ -3188,7 +3188,31 @@ function qsJoinPans(D,th){if(!D.length)return;
       const det=sxx*syy-sxy*sxy;if(Math.abs(det)<1e-6)return;const a=(sxz*syy-syz*sxy)/det,b=(syz*sxx-sxz*sxy)/det,c=sz/sw-a*mx-b*my;
       /* a refit that tilts the pan noticeably is refused (the laser slope stays the reference) */
       if(Math.hypot(a-d.pl[0],b-d.pl[1])>0.12)return;d.pl=[a,b,c];});}
-  D.forEach(d=>{const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const L=Math.hypot(a,b,1);d.n=[-a/L,-b/L,1/L];});}
+  D.forEach(d=>{const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const L=Math.hypot(a,b,1);d.n=[-a/L,-b/L,1/L];});
+  try{qsRidges(D);}catch(e){console.warn('v4 ridges',e);}}
+/* two pans that meet (a ridge, a hip, a valley) share the line where their planes cross: the dividing line cut by the laser model
+   (often a few degrees off) is replaced by that line, so the ridge runs level and parallel to the eaves and both pans start from it */
+function qsRidges(D){const PC=PCSYNC;if(!PC)return;
+  const area=R=>{let a=0;for(let k=0,j=R.length-1;k<R.length;j=k++)a+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);return Math.abs(a/2);};
+  const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2<1e-6)continue;
+    const t=((q[0]-a[0])*ex+(q[1]-a[1])*ey)/L2;if(t<-0.01||t>1.01)continue;if(Math.abs((q[0]-a[0])*ey-(q[1]-a[1])*ex)/Math.sqrt(L2)<0.06)return true;}return false;};
+  const shared=(d,e)=>{let L=0,dx=0,dy=0;const R=d.outer;for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],m=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+    if(onB(m,e)&&onB(a,e)&&onB(b,e)){const l=Math.hypot(b[0]-a[0],b[1]-a[1]);L+=l;dx=(b[0]-a[0])/l;dy=(b[1]-a[1])/l;}}return {L,dx,dy};};
+  for(let i=0;i<D.length;i++)for(let j=i+1;j<D.length;j++){const d=D[i],e=D[j],sh=shared(d,e);if(sh.L<1.0)continue;
+    const A=d.pl[0]-e.pl[0],B=d.pl[1]-e.pl[1],C=d.pl[2]-e.pl[2],g=Math.hypot(A,B);if(g<0.05)continue; /* same slope: no crossing line */
+    const lx=-B/g,ly=A/g;if(Math.abs(lx*sh.dx+ly*sh.dy)<0.94)continue; /* the crossing line far from the shared edge's direction: leave it */
+    /* the two pans meet there (not a step): heights at the shared edge within 60 cm */
+    let mx=0,my=0,n=0;d.outer.forEach(q=>{if(onB(q,e)){mx+=q[0];my+=q[1];n++;}});if(!n)continue;mx/=n;my/=n;if(Math.abs(A*mx+B*my+C)>0.6)continue;
+    const p0=[mx-(A*mx+B*my+C)*A/(g*g),my-(A*mx+B*my+C)*B/(g*g)],nx=A/g,ny=B/g,F=300;
+    const half=s=>[[[p0[0]-lx*F,p0[1]-ly*F],[p0[0]+lx*F,p0[1]+ly*F],[p0[0]+lx*F+s*nx*F,p0[1]+ly*F+s*ny*F],[p0[0]-lx*F+s*nx*F,p0[1]-ly*F+s*ny*F],[p0[0]-lx*F,p0[1]-ly*F]]];
+    let cx=0,cy=0;d.outer.forEach(q=>{cx+=q[0];cy+=q[1];});cx/=d.outer.length;cy/=d.outer.length;const sd=Math.sign((cx-p0[0])*nx+(cy-p0[1])*ny)||1;
+    let U,Pd,Pe;try{U=PC.union([d.outer,...d.holes],[e.outer,...e.holes]);Pd=PC.intersection(U,half(sd));Pe=PC.intersection(U,half(-sd));}catch(err){continue;}
+    const big=P=>P.map(poly=>({outer:poly[0].slice(0,-1),holes:poly.slice(1).map(h=>h.slice(0,-1))})).filter(x=>x.outer.length>=3).sort((x,y)=>area(y.outer)-area(x.outer));
+    const bd=big(Pd),be=big(Pe);if(!bd.length||!be.length)continue;
+    /* a crossing line that would hand most of a pan to its neighbour is not the ridge: leave it */
+    if(area(bd[0].outer)<0.5*area(d.outer)||area(be[0].outer)<0.5*area(e.outer))continue;
+    d.outer=bd[0].outer;d.holes=bd[0].holes;e.outer=be[0].outer;e.holes=be[0].holes;
+    bd.slice(1).concat(be.slice(1)).forEach((x,k)=>{if(area(x.outer)<0.3)return;const src=k<bd.length-1?d:e;D.push({outer:x.outer,holes:x.holes,zf:src.zf,n:src.n,pl:src.pl});});}}
 
 /* the main wall axis of a building: the direction of the longest edge of its main footprint */
 function qsAxis(main){const mr=main.userData.rings[0];let th=0,best=0;for(let k=0;k<mr.length;k++){const a=mr[k],b=mr[(k+1)%mr.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L>best){best=L;th=Math.atan2(b.y-a.y,b.x-a.x);}}return th;}
