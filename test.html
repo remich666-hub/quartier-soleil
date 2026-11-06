@@ -2967,7 +2967,7 @@ function qsV4One(fam){
      A ridge or a hip (the neighbouring pan as high) needs none. */
   const XL=[]; /* XL: wall lines off the outlines (a step between two roofs), for the windows */
   const GW=new Map(); /* wall pieces per block they stand on: a click on them selects that block (its storeys, its facades) */
-  const quad=(a,b,za0,zb0,za1,zb1,nx,ny,own)=>{const GP=GW.get(own)||(GW.set(own,[]),GW.get(own));if(za1-za0<0.03&&zb1-zb0<0.03)return;if((b[1]-a[1])*nx-(b[0]-a[0])*ny<0){[a,b]=[b,a];[za0,zb0]=[zb0,za0];[za1,zb1]=[zb1,za1];[ua,ub]=[ub,ua];}
+  const quad=(a,b,za0,zb0,za1,zb1,nx,ny,own)=>{const GP=GW.get(own)||(GW.set(own,[]),GW.get(own));if(za1-za0<0.03&&zb1-zb0<0.03)return;if((b[1]-a[1])*nx-(b[0]-a[0])*ny<0){[a,b]=[b,a];[za0,zb0]=[zb0,za0];[za1,zb1]=[zb1,za1];}
     const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]];
     [[0,1,2],[0,2,3]].forEach(q=>q.forEach(i=>{GP.push(t[i],[nx,ny]);}));};
   /* the outline segment a point lies on (for windows in line with the facade below) */
