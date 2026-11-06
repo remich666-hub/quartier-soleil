@@ -3668,7 +3668,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   /* the studied building keeps its own colours (it is the light) */
   const isHouse=m=>{try{if(m===PART_HI.roof||m===PART_HI.wall||m===PART_HI.wallT)return true;for(const k in matCache)if(k.startsWith('T:')&&matCache[k].includes(m))return true;}catch(e){}return false;};
   const sweep=()=>{try{scene.traverse(o=>{if(!o.isMesh&&!o.isLine)return;const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(m&&!isHouse(m)&&!m._qsKeepClone)patch(m,false);});});}catch(e){}};
-  setInterval(sweep,2500);
+  setInterval(sweep,2500);window.__qsSweep=sweep;
   try{const _add=scene.add.bind(scene);scene.add=function(...a){const r=_add(...a);a.forEach(o=>{try{o.traverse(c=>{if(c.isMesh||c.isLine){const ms=Array.isArray(c.material)?c.material:[c.material];ms.forEach(m=>{if(m&&!isHouse(m)&&!m._qsKeepClone)patch(m,false);});}});}catch(e){}});return r;};}catch(e){}
   /* centre on the studied building; strength follows the hour (softer at night) */
   setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent){const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
@@ -3736,7 +3736,7 @@ async function qsHouseFirst(){
       /* the vertical edges down to the eaves' foot are drawn by the footprint */});const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));const l=new THREE.LineSegments(g,lineMat(col,0));l.renderOrder=6;l.frustumCulled=false;return l;};
   const houseMeshes=()=>{try{const f=family(S.target||S.building);return f.flatMap(o=>[o,...o.children.filter(c=>c.isMesh)]);}catch(e){return [];}};
   const drawHouse=async t=>{const grp=new THREE.Group();scene.add(grp);const objs=[];let hidden=true;
-    const keepHidden=setInterval(()=>{if(hidden)houseMeshes().forEach(o=>o.visible=false);},60);
+    const keepHidden=setInterval(()=>{if(hidden)houseMeshes().forEach(o=>o.visible=false);},60),keepSwept=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},200);
     try{DR.stages=[];DR.tok=t;
       if(typeof QW!=='undefined'){QW.onStage=(fam,k,d)=>{if(DR.tok===t)DR.stages.push({k,d});};QW.wantStages=fam=>{try{const tf=family(S.target||S.building);return DR.tok===t&&fam.some(o=>tf.includes(o));}catch(e){return false;}};}
       /* footprint: the cadastral outline extruded to the building's height */
@@ -3746,15 +3746,16 @@ async function qsHouseFirst(){
       let shown=0,cur=null,pts=null;const s0=performance.now();
       while(t===token){
         if(DR.stages.length>shown){const st=DR.stages[shown++];
-          if(st.k==='laser'){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(st.d,3));pts=new THREE.Points(g,new THREE.PointsMaterial({color:0xe8678e,size:3,sizeAttenuation:false,transparent:true,opacity:0,fog:false,depthWrite:false}));pts.renderOrder=7;pts.frustumCulled=false;grp.add(pts);capShow('laser');await fadeTo([pts],0.95,500);}
-          else{const col=st.k==='rough'?0xd9a0b8:st.k==='refined'?0xf08a78:0xf0773a;const l=gridLines(st.d,col);grp.add(l);capShow(st.k);const fd=[fadeTo([l],st.k==='merged'?1:0.85,450)];if(cur)fd.push(fadeTo([cur],0,450));if(pts&&st.k!=='rough')fd.push(fadeTo([pts],st.k==='merged'?0:0.35,450));await Promise.all(fd);if(cur){grp.remove(cur);cur.geometry.dispose();}cur=l;}
+          if(st.k==='laser'){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(st.d,3));pts=new THREE.Points(g,new THREE.PointsMaterial({color:0xe8678e,size:3.5,sizeAttenuation:false,transparent:true,opacity:0,fog:false,depthWrite:false}));pts.renderOrder=7;pts.frustumCulled=false;grp.add(pts);capShow('laser');await fadeTo([pts],0.95,500);}
+          else{const col=st.k==='rough'?0xff9fc0:st.k==='refined'?0xff9a70:0xffb070;const l=gridLines(st.d,col);grp.add(l);capShow(st.k);const fd=[fadeTo([l],st.k==='merged'?1:0.85,450)];if(cur)fd.push(fadeTo([cur],0,450));if(pts&&st.k!=='rough')fd.push(fadeTo([pts],st.k==='merged'?0:0.35,450));await Promise.all(fd);if(cur){grp.remove(cur);cur.geometry.dispose();}cur=l;}
           await sleep(650);continue;}
         if(houseDone()&&(shown>=DR.stages.length)&&(DR.stages.some(x=>x.k==='merged')||performance.now()-s0>1500))break;
         if(performance.now()-s0>12000)break;await sleep(80);}
       if(t!==token)return;
       /* the solid house fills the drawing */
       hidden=false;houseMeshes().forEach(o=>o.visible=true);capShow('solid');await fadeTo(grp.children,0,700);await sleep(300);cap.classList.remove('on');
-    }finally{clearInterval(keepHidden);hidden=false;houseMeshes().forEach(o=>o.visible=true);scene.remove(grp);grp.traverse(o=>{if(o.geometry)o.geometry.dispose();});if(typeof QW!=='undefined'){QW.onStage=null;QW.wantStages=null;}}};
+    }finally{clearInterval(keepHidden);clearInterval(keepSwept);hidden=false;houseMeshes().forEach(o=>o.visible=true);scene.remove(grp);grp.traverse(o=>{if(o.geometry)o.geometry.dispose();});if(typeof QW!=='undefined'){QW.onStage=null;QW.wantStages=null;}}};
+  try{const _im=introMove;introMove=function(...a){const r=_im.apply(this,a);try{if(camTw&&camTw.b){const b=camTw.b;camTw.a={t:b.t.clone(),th:b.th+0.55,ph:Math.min(1.1,b.ph+0.22),d:b.d*1.45};cam.target.copy(camTw.a.t);cam.theta=camTw.a.th;cam.phi=camTw.a.ph;cam.dist=camTw.a.d;}}catch(e){}return r;};}catch(e){console.warn('intro',e);}
   let token=0;
   const run=async t=>{const u=U();if(!u)return;
     /* 1. the scene is built (the studied building known) */
