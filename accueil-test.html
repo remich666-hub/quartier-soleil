@@ -427,7 +427,7 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
         if(inRowsWin){
           const ex=Math.max(g.x0-xc,xc-g.x1),ey=Math.max(g.y0-yc,yc-g.y1);
           const d=ex>0||ey>0?Math.hypot(Math.max(ex,0),Math.max(ey,0)):Math.max(ex,ey);
-          if(d<-g.ww*0.3)mW=1;else if(d<g.ww*0.6){const u=dl/LS,w=LI*Math.exp(-u*u),s=0.35*D+w*g.ww*0.07;mW=soft(d,s);}
+          if(d<-g.ww*0.3)mW=1;else if(d<0)mW=1; /* a sharp window: the grain lives in the light, never on its edge */
         }
         /* inside: sky + haze + disc */
         let wr=0,wg=0,wb=0,hk=0,mD=0,dr=0,dg=0,db=0;
