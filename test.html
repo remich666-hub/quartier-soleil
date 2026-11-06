@@ -2948,7 +2948,7 @@ function qsV4One(fam){
     for(let k=0;k<n;k++){const a=r[k],b=r[(k+1)%n],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.05)continue;let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;if(area>0){nx=-nx;ny=-ny;}
       if(pointInPoly((a.x+b.x)/2+nx*0.2,(a.y+b.y)/2+ny*0.2,r)){nx=-nx;ny=-ny;} /* outward */
       const m=Math.max(1,Math.ceil(L/0.25)),pts=[];for(let i=0;i<=m;i++){const t=i/m,x=a.x+(b.x-a.x)*t,y=a.y+(b.y-a.y)*t;let z=drawnZ(x-nx*0.05,y-ny*0.05);
-        const nb=fam.find(q=>q!==o&&pointInPoly(x+nx*0.3,y+ny*0.3,q.userData.rings[0]));if(nb&&topAbs(nb)>=z-0.05)z=-Infinity; /* behind a taller neighbour's wall */
+        if(fam.some(q=>q!==o&&pointInPoly(x+nx*0.3,y+ny*0.3,q.userData.rings[0])))z=-Infinity; /* an edge shared with another part of the building: inside, the steps between pieces close it */
         pts.push([x,y,z,t*L]);}
       const bays=L>=2.2?Math.max(1,Math.round(L/3.5)):0,U=d=>bays?d/L*bays*3.5:0.1;
       for(let i=0;i<m;i++){const p=pts[i],q=pts[i+1];if(!isFinite(p[2])||!isFinite(q[2]))continue;quad([p[0],p[1]],[q[0],q[1]],zb,zb,Math.max(zb,p[2]),Math.max(zb,q[2]),nx,ny,U(p[3]),U(q[3]),o.userData.zBase);}}});
