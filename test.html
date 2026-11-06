@@ -3336,20 +3336,27 @@ function qsCoplanar(D){const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;
     const t=((q[0]-a[0])*ex+(q[1]-a[1])*ey)/L2;if(t<-0.01||t>1.01)continue;if(Math.abs((q[0]-a[0])*ey-(q[1]-a[1])*ex)/Math.sqrt(L2)<0.08)return true;}return false;};
   const z=(d,q)=>d.pl[0]*q[0]+d.pl[1]*q[1]+d.pl[2];
   const area=R=>{let s=0;for(let k=0,j=R.length-1;k<R.length;j=k++)s+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);return Math.abs(s/2);};
-  const par=D.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i]));
+  const par=D.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i])),side=[];
   for(let i=0;i<D.length;i++)for(let j=i+1;j<D.length;j++){const d=D[i],e=D[j];if(!d.dir||!e.dir)continue;
     const flat=v=>!(v.dir[0]||v.dir[1]);if(flat(d)!==flat(e))continue;if(!flat(d)&&d.dir[0]*e.dir[0]+d.dir[1]*e.dir[1]<0.99)continue;
     const sh=d.outer.filter(q=>onB(q,e)).concat(e.outer.filter(q=>onB(q,d)));if(sh.length<2)continue;
     let span=0,sa=null,sb=null;sh.forEach(a=>sh.forEach(b=>{const l=Math.hypot(a[0]-b[0],a[1]-b[1]);if(l>span){span=l;sa=a;sb=b;}}));if(span<1.0)continue;
     /* one slope continued: the two pans meet on a level line (one above the other down the slope). Side by side (their common
        edge running down the slope) they are two roofs, each keeps its own height: a step between them stays */
-    if(!flat(d)&&Math.abs(((sb[0]-sa[0])*d.dir[0]+(sb[1]-sa[1])*d.dir[1])/span)>0.3)continue;
+    if(!flat(d)&&Math.abs(((sb[0]-sa[0])*d.dir[0]+(sb[1]-sa[1])*d.dir[1])/span)>0.3){if(!flat(d))side.push([i,j]);continue;}
     if(sh.some(q=>Math.abs(z(d,q)-z(e,q))>0.3))continue;par[f(i)]=f(j);}
   const G=new Map();D.forEach((d,i)=>{const r=f(i);if(!G.has(r))G.set(r,[]);G.get(r).push(d);});
   G.forEach(L=>{if(L.length<2)return;const pts=[];L.forEach(d=>{const w=area(d.outer)/d.outer.length;d.outer.forEach(q=>pts.push({q,z:z(d,q),w}));});
     const dir=L[0].dir;let sw=0,mx=0,my=0;pts.forEach(p=>{sw+=p.w;mx+=p.w*p.q[0];my+=p.w*p.q[1];});mx/=sw;my/=sw;let zm=0;pts.forEach(p=>zm+=p.w*p.z);zm/=sw;
     let pl;if(!(dir[0]||dir[1]))pl=[0,0,zm];else{const [ux,uy]=dir;let suu=0,suz=0;pts.forEach(p=>{const t=(p.q[0]-mx)*ux+(p.q[1]-my)*uy;suu+=p.w*t*t;suz+=p.w*t*(p.z-zm);});const k=suu>1e-6?suz/suu:0;pl=[k*ux,k*uy,zm-k*(ux*mx+uy*my)];}
-    L.forEach(d=>{d.pl=pl.slice();const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const n=Math.hypot(a,b,1);d.n=[-a/n,-b/n,1/n];});});}
+    L.forEach(d=>{d.pl=pl.slice();const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const n=Math.hypot(a,b,1);d.n=[-a/n,-b/n,1/n];});});
+  /* two roofs side by side running down the same way are built alike: one pitch (their mean, weighted by area), each kept at its
+     own mean height, so the step between them is the same all along */
+  const sp=D.map((_,i)=>i),g=i=>sp[i]===i?i:(sp[i]=g(sp[i]));side.forEach(([i,j])=>{sp[g(i)]=g(j);});
+  const SG=new Map();D.forEach((d,i)=>{const r=g(i);if(!SG.has(r))SG.set(r,[]);SG.get(r).push(d);});
+  SG.forEach(L=>{if(L.length<2)return;let sw=0,sk=0;L.forEach(d=>{const w=area(d.outer);sk+=w*(d.pl[0]*d.dir[0]+d.pl[1]*d.dir[1]);sw+=w;});const k=sk/sw;
+    L.forEach(d=>{let cx=0,cy=0;d.outer.forEach(q=>{cx+=q[0];cy+=q[1];});cx/=d.outer.length;cy/=d.outer.length;const zc=z(d,[cx,cy]),[ux,uy]=d.dir;
+      d.pl=[k*ux,k*uy,zc-k*(ux*cx+uy*cy)];const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const n=Math.hypot(a,b,1);d.n=[-a/n,-b/n,1/n];});});}
 
 /* polygon union that survives the clipping library's precision failures: retried on coordinates rounded to the millimetre */
 function qsUnion(list){const PC=PCSYNC;try{return PC.union(...list);}catch(e){}
