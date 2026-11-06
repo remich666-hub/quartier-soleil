@@ -3562,21 +3562,29 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
   /* markers and lines in the hero's orange */
   try{marker.material.color.set(0xf0773a);facadeLine.material.color.set(0xf0773a);markerArrow.setColor(new THREE.Color(0xf0773a));}catch(e){}
   /* a soft halo of warm light on the ground around the studied building, on the sun's side */
-  const haloTex=(()=>{const N=512,c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d'),h=N/2;
-    const base=g.createRadialGradient(h,h,0,h,h,h);base.addColorStop(0,'rgba(255,170,120,.55)');base.addColorStop(0.4,'rgba(245,140,160,.22)');base.addColorStop(0.75,'rgba(190,180,250,.07)');base.addColorStop(1,'rgba(190,180,250,0)');
+  const haloTex=(()=>{const N=1024,c=document.createElement('canvas');c.width=c.height=N;const g=c.getContext('2d'),h=N/2;
+    const base=g.createRadialGradient(h,h,0,h,h,h);base.addColorStop(0,'rgba(255,175,130,.42)');base.addColorStop(0.18,'rgba(250,150,150,.26)');base.addColorStop(0.5,'rgba(215,170,235,.1)');base.addColorStop(1,'rgba(190,185,250,0)');
     g.fillStyle=base;g.fillRect(0,0,N,N);
-    const col=r=>r<0.3?[255,150,100]:r<0.6?[244,120,150]:[170,165,245];
-    for(let k=0;k<70000;k++){const a=Math.random()*6.283,u=Math.random(),r=Math.sqrt(u);const p=Math.pow(1-r,1.6);if(Math.random()>p)continue;
-      const x=h+Math.cos(a)*r*h,y=h+Math.sin(a)*r*h,c3=col(r);g.fillStyle=`rgba(${c3[0]},${c3[1]},${c3[2]},${(0.35+0.6*(1-r)).toFixed(2)})`;const s=Math.random()<0.25?2:1.3;g.fillRect(x,y,s,s);}
-    const t=new THREE.CanvasTexture(c);t.anisotropy=4;return t;})();
-  const halo=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:haloTex,transparent:true,depthWrite:false,opacity:0.5,fog:false,polygonOffset:true,polygonOffsetFactor:-8,polygonOffsetUnits:-30}));
-  halo.renderOrder=2;halo.visible=false;halo.raycast=()=>{};scene.add(halo);
-  const placeHalo=()=>{try{const m=S.building||S.target;if(!m||!m.parent||(typeof photoMode!=='undefined'&&photoMode)){halo.visible=false;return;}
+    for(let k=0;k<260000;k++){const a=Math.random()*6.283,r=Math.sqrt(Math.random());const p=Math.exp(-r*3.2);if(Math.random()>p)continue;
+      const x=h+Math.cos(a)*r*h,y=h+Math.sin(a)*r*h,cc=r<0.15?[255,150,100]:r<0.4?[245,125,150]:[175,165,245];
+      g.fillStyle=`rgba(${cc[0]},${cc[1]},${cc[2]},${(0.3+0.55*Math.exp(-r*2.5)).toFixed(2)})`;g.fillRect(x,y,1.6,1.6);}
+    const t=new THREE.CanvasTexture(c);t.anisotropy=8;return t;})();
+  /* the halo is draped on the terrain (a grid following the ground), so it never sinks below a slope */
+  const haloMat=new THREE.MeshBasicMaterial({map:haloTex,transparent:true,depthWrite:false,opacity:0.9,fog:false,polygonOffset:true,polygonOffsetFactor:-8,polygonOffsetUnits:-30});
+  let halo=null,haloKey='';
+  const placeHalo=()=>{try{const m=S.building||S.target;if(!m||!m.parent||(typeof photoMode!=='undefined'&&photoMode)){if(halo)halo.visible=false;return;}
     const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
     const d=sun.position.clone().sub(sun.target.position);const up=d.z>0;d.z=0;if(d.lengthSq()>0)d.normalize();
-    const R=Math.max(90,Math.max(sz.x,sz.y)*4.2);halo.scale.set(R,R,1);halo.position.set(c.x+d.x*R*0.18,c.y+d.y*R*0.18,box.min.z+0.45);
-    halo.material.opacity=up?0.85:0.4;halo.material.color.set(up?0xffffff:0x9aa3ff);halo.visible=true;}catch(e){}};
+    const R=Math.max(150,Math.max(sz.x,sz.y)*7),cx=c.x+d.x*R*0.06,cy=c.y+d.y*R*0.06;
+    const key=[Math.round(cx),Math.round(cy),Math.round(R)].join(',');
+    if(key!==haloKey){haloKey=key;if(halo){scene.remove(halo);halo.geometry.dispose();}
+      const n=48,P=[],U=[],I=[];for(let y=0;y<=n;y++)for(let x=0;x<=n;x++){const u=x/n,v=y/n,X=cx+(u-0.5)*2*R,Y=cy+(v-0.5)*2*R;P.push(X,Y,terrainZ(X,Y)+0.42);U.push(u,v);}
+      for(let y=0;y<n;y++)for(let x=0;x<n;x++){const a=y*(n+1)+x;I.push(a,a+1,a+n+1,a+1,a+n+2,a+n+1);}
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));g.setIndex(I);
+      halo=new THREE.Mesh(g,haloMat);halo.renderOrder=2;halo.raycast=()=>{};halo.frustumCulled=false;scene.add(halo);}
+    halo.visible=true;haloMat.opacity=up?0.9:0.45;haloMat.color.set(up?0xffffff:0x9aa3ff);}catch(e){}};
   setInterval(placeHalo,700);
+  try{const sc=sun.shadow.camera;sc.left=-300;sc.right=300;sc.top=300;sc.bottom=-300;sc.updateProjectionMatrix();sun.shadow.bias=-0.0003;sun.shadow.normalBias=0.08;}catch(e){}
   /* edges: a fine lavender line, like an architect's model */
   setInterval(()=>{try{if(edgeLines&&!edgeLines._qs){edgeLines.material.color.set(0x8f95c0);edgeLines.material.opacity=0.3;edgeLines._qs=1;}}catch(e){}},1000);
   /* the air: the hero's sky, lavender shadows (a pastel fill), and a haze that dissolves the far city */
