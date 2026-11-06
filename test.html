@@ -2884,20 +2884,20 @@ const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0,log:[],done:[]};
 ['pointerdown','pointermove','wheel','touchstart','keydown'].forEach(k=>addEventListener(k,e=>{if(k!=='pointermove'||e.buttons)QV4.last=performance.now();},{passive:true,capture:true}));
 const qsSleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function qsV4(){
-  const T=S.T; QV4.T=T; QV4.rings=[]; QV4.done=[]; QV4.used=new Set(); QV4.wdbg=[]; QV4.wskip=[]; QV4.relax=[]; QV4.sq=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
+  const T=S.T; QV4.T=T; QV4.times=[]; QV4.rings=[]; QV4.done=[]; QV4.used=new Set(); QV4.wdbg=[]; QV4.wskip=[]; QV4.relax=[]; QV4.sq=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
   for(let i=0;i<400&&!(S.lidarBuilt&&S.lidarR&&S.lidarR.mnh&&S.T&&S.T.lidarBuilt);i++){await qsSleep(100);if(S.T!==T)return;}
   if(S.T!==T||!S.lidarBuilt)return;
   await qsSleep(400); /* let the scene settle (vegetation, edges) */
   const seen=new Set(), list=[];
   S.meshes.forEach(m=>{const u=m.userData;if(!u||!u.rings||!u.lidar||u.monu||u.church)return;const g=u.gid||m.uuid;if(seen.has(g))return;seen.add(g);
-    const fam=family(m).filter(o=>o.userData.rings);let d=1e9;fam.forEach(o=>o.userData.rings[0].forEach(p=>{d=Math.min(d,Math.hypot(p.x,p.y));}));if(d<=50)list.push({fam,d});});
+    const fam=family(m).filter(o=>o.userData.rings);let d=1e9;fam.forEach(o=>o.userData.rings[0].forEach(p=>{d=Math.min(d,Math.hypot(p.x,p.y));}));if(d<=30)list.push({fam,d});});
   list.sort((a,b)=>a.d-b.d);
   for(const it of list){
     while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;} /* the user is moving the camera: wait */
     await qsSleep(16); if(S.T!==T)return;
     if(it.fam.some(o=>!o.parent))continue; /* rebuilt meanwhile */
     if(it.fam.some(o=>QV4.used.has(o)))continue; /* a block already rebuilt with another group (an annex linked to two): once only */
-    const t0=performance.now(); try{if(qsV4One(it.fam)){QV4.n++;it.fam.forEach(o=>QV4.used.add(o));}}catch(e){console.error('v4 quartier',e);} QV4.ms+=performance.now()-t0;
+    const t0=performance.now(); try{if(qsV4One(it.fam)){QV4.n++;it.fam.forEach(o=>QV4.used.add(o));}}catch(e){console.error('v4 quartier',e);} QV4.ms+=performance.now()-t0;(QV4.times=QV4.times||[]).push([Math.round(performance.now()-t0),it.fam.length,Math.round(it.fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0))]);
   }
 }
 function qsV4Model(fam){
