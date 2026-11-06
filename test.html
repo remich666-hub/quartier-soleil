@@ -3702,10 +3702,19 @@ async function qsHouseFirst(){
 #qsVeil.on{opacity:1;transition:none}
 #qsVeil .orb{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 40% 38%,#fff6ec,#ffb48a 45%,rgba(240,110,150,.0) 72%);filter:blur(1px);animation:qsBreath 2.4s cubic-bezier(.45,0,.55,1) infinite alternate}
 @keyframes qsBreath{from{transform:scale(.88);opacity:.75}to{transform:scale(1.08);opacity:1}}
-@media (prefers-reduced-motion:reduce){#qsVeil .orb{animation:none}}`;
+@media (prefers-reduced-motion:reduce){#qsVeil .orb{animation:none}}
+#qsLoadTxt{position:absolute;left:max(18px,env(safe-area-inset-left,0px));top:calc(env(safe-area-inset-top,0px) + 76px);z-index:1;color:#fff;
+  font:500 13px/1.45 "Instrument Sans",system-ui,sans-serif;text-shadow:0 1px 12px rgba(20,24,60,.35);max-width:70vw}
+#qsLoadTxt b{display:block;font-family:"Instrument Serif",Georgia,serif;font-weight:400;font-size:30px;line-height:1.1;margin-bottom:8px;letter-spacing:-.01em}
+#qsLoadTxt ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+#qsLoadTxt li{opacity:.6;transition:opacity .4s}#qsLoadTxt li.cur{opacity:1}#qsLoadTxt li.ok::before{content:"✓  ";}#qsLoadTxt li.cur::before{content:"·  ";}`;
   document.head.appendChild(st);
   const view=document.getElementById('view');if(!view)return;
-  const veil=document.createElement('div');veil.id='qsVeil';veil.innerHTML='<div id="qsHeroStage" style="position:relative;width:min(80vw,380px);aspect-ratio:1/1.02;max-width:100%"><canvas id="qsHeroCv"></canvas></div>';view.appendChild(veil);
+  const veil=document.createElement('div');veil.id='qsVeil';veil.innerHTML='<div id="qsHeroStage" style="position:absolute;inset:0"><canvas id="qsHeroCv"></canvas></div><div id="qsLoadTxt"><b>Chargement</b><ol></ol></div>';view.appendChild(veil);
+  const ol=veil.querySelector('ol');
+  const step=txt=>{if(!txt)return;txt=txt.replace(/…$/,'');const lis=[...ol.children];if(lis.length&&lis[lis.length-1].dataset.t===txt)return;lis.forEach(l=>{l.classList.remove('cur');l.classList.add('ok');});
+    const li=document.createElement('li');li.dataset.t=txt;li.textContent=txt;li.className='cur';ol.appendChild(li);while(ol.children.length>7)ol.removeChild(ol.firstChild);};
+  try{const st0=document.getElementById('status');new MutationObserver(()=>{if(veil.classList.contains('on')){const t=st0.textContent.trim();if(t&&!/^Quartier chargé/.test(t))step(t);}}).observe(st0,{childList:true,characterData:true,subtree:true});}catch(e){}
   const U=()=>window.__QSU;const Q=()=>(typeof QV4!=='undefined'?QV4:null);
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const houseDone=()=>{try{const m=S.target||S.building,q=Q();if(!m||!q||!q.used)return !!m;return family(m).some(o=>q.used.has(o)||(q.tried&&q.tried.has(o)));}catch(e){return true;}};
@@ -3716,7 +3725,9 @@ async function qsHouseFirst(){
   let token=0;
   const run=async t=>{const u=U();if(!u)return;
     /* 1. the house's final roof, at most 8 s after the scene is built */
+    step('Toit de votre bâtiment, mesuré au laser…');
     const t0=performance.now();while(t===token&&performance.now()-t0<8000&&(S.loading||!houseDone()))await sleep(120);if(t!==token)return;
+    step('Prêt');await sleep(350);
     /* 2. the house alone */
     u.uScanR.value=-1;soloShadows(true);veil.classList.remove('on');await sleep(1500);if(t!==token)return;
     /* 3. the scan, paced on the roof queue */
@@ -3724,7 +3735,7 @@ async function qsHouseFirst(){
     while(t===token&&p<1){await sleep(16);const now=performance.now(),dt=Math.min(64,now-last);last=now;const q=Q(),slow=q&&q.busy&&now-s0<MAX;p=Math.min(1,p+dt/T*(slow?0.45:1));
       const e=p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;u.uScanR.value=e*R1;}
     if(t!==token)return;u.uScanR.value=1e6;soloShadows(false);};
-  try{const _load=load;load=async function(...a){const t=++token;veil.classList.add('on');const u=U();if(u)u.uScanR.value=-1;soloShadows(false);
+  try{const _load=load;load=async function(...a){const t=++token;ol.innerHTML='';veil.classList.add('on');const u=U();if(u)u.uScanR.value=-1;soloShadows(false);
     try{return await _load.apply(this,a);}finally{run(t).catch(e=>{console.warn('scan',e);veil.classList.remove('on');const u2=U();if(u2)u2.uScanR.value=1e6;soloShadows(false);});}};}catch(e){console.warn('reveal',e);}
   /* the front's colour follows the hour */
   setInterval(()=>{try{const u=U();if(!u)return;const up=sun.position.z-sun.target.position.z>0;u.uScanC.value.set(up?0xff8a5c:0xff7a8a);}catch(e){}},1000);
@@ -3797,12 +3808,12 @@ void main(){
     PW=cv.width;PH=cv.height;if(GL){GL.viewport(0,0,PW,PH);}else{img=ctx.createImageData(PW,PH);buf=new Uint32Array(img.data.buffer);
     const n=PW*PH;T1=new Float32Array(n);T2=new Float32Array(n);T3=new Float32Array(n);
     for(let i=0;i<n;i++){T1[i]=Math.random();T2[i]=Math.random();T3[i]=Math.random();}}
-    const ww=Math.min(SW*0.56,SH*0.52),wh=ww*1.22,x0=MX+(SW-ww)/2,y0=MY+SH*0.07;
+    const ww=SW,wh=SH,x0=MX,y0=MY; /* the screen is the window */
     G={x0:x0*DPR,y0:y0*DPR,x1:(x0+ww)*DPR,y1:(y0+wh)*DPR,ww:ww*DPR,wh:wh*DPR};
   }
   /* the canvas overflows the stage so the light spills past it into the hero, behind the text */
   let SW=0,SH=0,MX=0,MY=0;
-  const resize=()=>{const r=stage.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);SW=r.width;SH=r.height;MX=Math.round(SW*0.22);MY=Math.round(SH*0.24);W=SW+2*MX;H=SH+2*MY;
+  const resize=()=>{const r=stage.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);SW=r.width;SH=r.height;MX=0;MY=0;W=SW+2*MX;H=SH+2*MY;
     Object.assign(cv.style,{inset:'auto',left:-MX+'px',top:-MY+'px',width:W+'px',height:H+'px',zIndex:'-1',pointerEvents:'none'});cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);build();};
   /* the sky by sun altitude (a: -1 deep night … 1 noon): pale lavender by day, rose and orange low, night blue */
   const K=[[-1,'#080c20','#141a3c'],[-.25,'#0f1430','#262050'],[-.08,'#2a3168','#d9758c'],[0,'#7d8be6','#ffa27e'],[.12,'#a6b6f6','#ffc9b6'],[.35,'#b7c5f8','#f9dbe8'],[1,'#c2cefa','#f6e4f0']];
