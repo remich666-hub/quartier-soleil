@@ -3571,6 +3571,7 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
     try{groundMat.color.copy(day>0.05?lin(0xeef0f9):lin(0x262c55));}catch(e){}
     try{const em=lin(0x6a2a3c).multiplyScalar(1-day);[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(m=>m&&m.emissive&&m.emissive.copy(em));for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(m=>m.emissive&&m.emissive.copy(em));}catch(e){}};}catch(e){console.warn('model sky',e);}
 })();
+try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}catch(e){}
 
 /* ===== Quartier Soleil v5: the v4 roof model, own copy (Toit Soleil untouched), faster and returning its rectangles ===== */
 function qsModel5(R,opt){opt=opt||{};
