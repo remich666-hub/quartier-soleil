@@ -3566,11 +3566,11 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
     else{skyUni.top.value.copy(lerpC(0x080c20,0x080c20,0));skyUni.horizon.value.copy(lerpC(0x1a1f45,0x1a1f45,0));}
     skyUni.ground.value.copy(skyUni.horizon.value);
     const day=Math.max(0,Math.min(1,alt/0.2));
-    hemi.color=lerpC(0x4a5294,0xdfe4ff,day);hemi.groundColor=lerpC(0x2a2f5c,0xe7dcf2,day);  /* shadows take this lavender fill */
-    if(day<0.05)hemi.intensity=Math.max(hemi.intensity,0.55);
+    hemi.color=lerpC(0x4a5294,0xc3cbff,day);hemi.groundColor=lerpC(0x2a2f5c,0xd9c8ec,day);  /* shadows take this lavender fill */
+    hemi.intensity=day>0.05?0.58:Math.max(hemi.intensity,0.55);if(day>0.05)sun.intensity=Math.max(sun.intensity,1.05);
     scene.fog=new THREE.FogExp2(skyUni.horizon.value.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.0005);
     try{groundMat.color.copy(day>0.05?lin(0xeef0f9):lin(0x262c55));}catch(e){}
-    try{const em=lin(0x6a2a3c).multiplyScalar(1-day);[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(m=>m&&m.emissive&&m.emissive.copy(em));for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(m=>m.emissive&&m.emissive.copy(em));}catch(e){}};}catch(e){console.warn('model sky',e);}
+    try{const em=lin(0x4a1f2c).multiplyScalar(1-day);[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(m=>m&&m.emissive&&m.emissive.copy(em));for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(m=>m.emissive&&m.emissive.copy(em));}catch(e){}};}catch(e){console.warn('model sky',e);}
 })();
 try{window.__wt=wallTex;window.__scene=scene;}catch(e){}
 try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}catch(e){}
