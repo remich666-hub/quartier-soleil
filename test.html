@@ -2884,9 +2884,9 @@ const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0,log:[],done:[]};
 ['pointerdown','pointermove','wheel','touchstart','keydown'].forEach(k=>addEventListener(k,e=>{if(k!=='pointermove'||e.buttons)QV4.last=performance.now();},{passive:true,capture:true}));
 const qsSleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function qsV4(){
-  const T=S.T; QV4.T=T; QV4.times=[]; QV4.rings=[]; QV4.done=[]; QV4.used=new Set(); QV4.wdbg=[]; QV4.wskip=[]; QV4.relax=[]; QV4.sq=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
+  const T=S.T; QV4.T=T; QV4.busy=true; QV4.times=[]; QV4.rings=[]; QV4.done=[]; QV4.used=new Set(); QV4.wdbg=[]; QV4.wskip=[]; QV4.relax=[]; QV4.sq=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
   for(let i=0;i<400&&!(S.lidarBuilt&&S.lidarR&&S.lidarR.mnh&&S.T&&S.T.lidarBuilt);i++){await qsSleep(100);if(S.T!==T)return;}
-  if(S.T!==T||!S.lidarBuilt)return;
+  if(S.T!==T||!S.lidarBuilt){if(S.T===T)QV4.busy=false;return;}
   await qsSleep(400); /* let the scene settle (vegetation, edges) */
   const legacy0=window.__qsOld||window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4';
   /* v5: the fit runs in the worker, so the radius and the size limit can grow (50 m, 2000 m²); the address's own building always,
@@ -2898,7 +2898,7 @@ async function qsV4(){
     if(fam.some(o=>own.has(o)))d=-1;if((d<=RMAX&&ar<=AMAX)||(d<0&&ar<=4000))list.push({fam,d});});
   list.sort((a,b)=>a.d-b.d);QV4.pri=[];QV4.tried=new Set();
   /* then the blocks the user selects further away, on demand (setHi below), until the address changes */
-  while(S.T===T){const it=QV4.pri.shift()||list.shift();if(!it){await qsSleep(250);continue;}
+  while(S.T===T){const it=QV4.pri.shift()||list.shift();QV4.busy=!!it;if(!it){await qsSleep(250);continue;}
     while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;} /* the user is moving the camera: wait */
     await qsSleep(16); if(S.T!==T)return;
     if(it.fam.some(o=>!o.parent))continue; /* rebuilt meanwhile */
@@ -3497,7 +3497,10 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
 (function(){
   const PALE=new THREE.Color(0xe9ebf2).convertSRGBToLinear(),PALE2=new THREE.Color(0xdfe2ec).convertSRGBToLinear(),TRUNK=new THREE.Color(0xd2d5df).convertSRGBToLinear();
   const vegMat=new THREE.MeshLambertMaterial({color:PALE}),vegMatD=new THREE.MeshLambertMaterial({color:PALE,side:THREE.DoubleSide}),trunkMat=new THREE.MeshLambertMaterial({color:TRUNK});
-  const lotMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xf2a988).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-20});
+  const lotTex=(()=>{const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d'),r=g.createRadialGradient(128,128,0,128,128,128);
+    r.addColorStop(0,'rgba(255,190,160,1)');r.addColorStop(0.45,'rgba(250,175,190,.75)');r.addColorStop(0.8,'rgba(215,195,250,.3)');r.addColorStop(1,'rgba(215,195,250,0)');g.fillStyle=r;g.fillRect(0,0,256,256);return new THREE.CanvasTexture(c);})();
+  const lotMat=new THREE.MeshLambertMaterial({map:lotTex,transparent:true,depthWrite:false,emissive:new THREE.Color(0x000000),emissiveMap:lotTex,polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-20});
+  lotMat._qsGlow=1; /* the parcel keeps its own wash (no fade into the air) */
   const plainMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xe6e8f3).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
   try{ROOF.tuile.color.set(0xdcdde6);ROOF.ardoise.color.set(0xc9ccd8);ROOF.zinc.color.set(0xd6d8e2);ROOF.autre.color.set(0xdfe1e9);}catch(e){}
   const swap=(m,mat)=>{if(m&&m.material!==mat){m.material=mat;if(m.isInstancedMesh&&m.instanceColor)m.instanceColor=null;}};
@@ -3516,6 +3519,9 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
       if(pid===lotKey)return;if(lotMesh){scene.remove(lotMesh);lotMesh.geometry.dispose();lotMesh=null;}lotKey=pid;if(!pid)return;
       const P=[],N=[];L.PL.filter(p=>set.has(p.id)).forEach(p=>{const r=p.r.map(q=>new THREE.Vector2(q.x,q.y));let tr;try{tr=THREE.ShapeUtils.triangulateShape(r,[]);}catch(e){return;}drapeTris(tr.map(t=>t.map(k=>[r[k].x,r[k].y])),0.32,P,N);});
       if(!P.length)return;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+      {const pos=g.getAttribute('position'),bb=new THREE.Box3().setFromBufferAttribute(pos),cx=(bb.min.x+bb.max.x)/2,cy=(bb.min.y+bb.max.y)/2,R=Math.max(bb.max.x-bb.min.x,bb.max.y-bb.min.y)*0.62+4;
+        const hb=new THREE.Box3();family(m).forEach(o=>hb.expandByObject(o));const hc=hb.getCenter(new THREE.Vector3()),ox=(hc.x+cx)/2,oy=(hc.y+cy)/2,uv=[];
+        for(let k=0;k<pos.count;k++)uv.push((pos.getX(k)-ox)/(2*R)+0.5,(pos.getY(k)-oy)/(2*R)+0.5);g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));}
       lotMesh=new THREE.Mesh(g,lotMat);lotMesh.receiveShadow=true;lotMesh.renderOrder=1;lotMesh.raycast=()=>{};scene.add(lotMesh);}catch(e){console.warn('lot',e);}};
   try{const _hi=setHi;setHi=function(m,on){_hi(m,on);if(on&&m)showLot(m);};}catch(e){}
   setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent)showLot(m);else if(lotMesh&&!m){scene.remove(lotMesh);lotMesh=null;lotKey=null;}}catch(e){}},1500);
@@ -3600,6 +3606,7 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
     hemi.intensity=day>0.05?0.58:0.42;if(day>0.05)sun.intensity=Math.max(sun.intensity,1.05);
     scene.fog=new THREE.FogExp2(skyUni.horizon.value.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.0005);
     try{groundMat.color.copy(day>0.05?lin(0xe2e4f1):lin(0x262c55));}catch(e){}
+    try{lotMat.emissive.setRGB(0.55,0.32,0.36).multiplyScalar(1-day);lotMat.opacity=day>0.05?0.9:0.55;}catch(e){}
     try{const em=lin(0x8a3a2c).multiplyScalar(1-day);[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(m=>m&&m.emissive&&m.emissive.copy(em));for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(m=>m.emissive&&m.emissive.copy(em));}catch(e){}};}catch(e){console.warn('model sky',e);}
 })();
 try{window.__wt=wallTex;window.__scene=scene;window.__cam=cam;window.__drive=()=>{clearInterval(window.__dv);window.__dv=setInterval(()=>{try{frame(performance.now());}catch(e){}},60);};}catch(e){}
@@ -3619,7 +3626,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   /* away from the house the model fades smoothly into the air (no grain): opaque near, the sky's colour far, then gone */
   const FS_DIS=`
   #ifndef QS_KEEP
-  if(uQsOn>0.5){ float f=smoothstep(uQsD0,uQsD1,vQsM.x); if(f>0.985)discard; gl_FragColor.rgb=mix(gl_FragColor.rgb,uQsAir,f*f*(3.0-2.0*f)); }
+  if(uQsOn>0.5){ float f=smoothstep(uQsD0,uQsD1,vQsM.x); if(f>0.985)discard; gl_FragColor.rgb=mix(gl_FragColor.rgb,uQsAir,0.35*f); gl_FragColor.a*=1.0-f; }
   #endif
 `;
   /* a soft warm light around the house, no dots */
@@ -3637,7 +3644,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     f=f.replace('#include <premultiplied_alpha_fragment>',FS_DIS+'#include <premultiplied_alpha_fragment>');
     sh.fragmentShader=f;};
   const OK=m=>m&&(m.isMeshLambertMaterial||m.isMeshBasicMaterial||m.isLineBasicMaterial)&&!m.isShaderMaterial;
-  const patch=(m,keep)=>{if(!OK(m)||m._qsGlow)return;m._qsGlow=1;const prev=m.onBeforeCompile,pk=m.customProgramCacheKey;
+  const patch=(m,keep)=>{if(!OK(m)||m._qsGlow)return;m._qsGlow=1;if(!keep)m.transparent=true;const prev=m.onBeforeCompile,pk=m.customProgramCacheKey;
     m.onBeforeCompile=(sh,r)=>{if(prev)prev.call(m,sh,r);inject(m,sh,keep);};
     m.customProgramCacheKey=()=>(pk?pk.call(m):'')+(keep?'|qskeep':'|qsglow');m.needsUpdate=true;};
   /* obstacles to the chosen window keep their full body: a clone of their material that skips the dissolve */
@@ -3662,7 +3669,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   try{const _add=scene.add.bind(scene);scene.add=function(...a){const r=_add(...a);a.forEach(o=>{try{o.traverse(c=>{if(c.isMesh||c.isLine){const ms=Array.isArray(c.material)?c.material:[c.material];ms.forEach(m=>{if(m&&!isHouse(m)&&!m._qsKeepClone)patch(m,false);});}});}catch(e){}});return r;};}catch(e){}
   /* centre on the studied building; strength follows the hour (softer at night) */
   setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent){const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
-      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(55,Math.max(sz.x,sz.y)*2.8);const hs=Math.max(sz.x,sz.y)/2;QSU.uQsD0.value=hs+70;QSU.uQsD1.value=hs+240;}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;QSU.uQsD0.value=80;QSU.uQsD1.value=250;}
+      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(55,Math.max(sz.x,sz.y)*2.8);const hs=Math.max(sz.x,sz.y)/2;QSU.uQsD0.value=hs+25;QSU.uQsD1.value=hs+210;}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;QSU.uQsD0.value=80;QSU.uQsD1.value=250;}
     const up=sun.position.z-sun.target.position.z>0;QSU.uQsK.value=(typeof photoMode!=='undefined'&&photoMode)?0:(up?1:0.6);}catch(e){}},400);
   window.__QSU=QSU;
 })();
@@ -3700,8 +3707,8 @@ async function qsHouseFirst(){
   /* the studied house's final (laser) roof must be in before the veil lifts */
   const houseDone=()=>{try{const m=S.target||S.building;if(!m||!window.QV4||!QV4.used)return true;return family(m).some(o=>QV4.used.has(o))||(QV4.tried&&family(m).some(o=>QV4.tried.has&&QV4.tried.has(o)));}catch(e){return true;}};
   const settle=async t=>{const t0=performance.now();let last=sig(),still=performance.now();
-    while(t===token&&performance.now()-t0<8000){await new Promise(r=>setTimeout(r,250));const s2=sig();if(s2!==last){last=s2;still=performance.now();}
-      else if(performance.now()-still>1200&&!S.loading&&houseDone())break;}
+    while(t===token&&performance.now()-t0<9000){await new Promise(r=>setTimeout(r,250));const s2=sig();if(s2!==last){last=s2;still=performance.now();}
+      else if(performance.now()-still>1200&&!S.loading&&houseDone()&&!(window.QV4&&QV4.busy))break;}
     if(t===token)veil.classList.remove('on');};
   try{const _load=load;load=async function(...a){const t=++token;veil.classList.add('on');try{return await _load.apply(this,a);}finally{settle(t);}};}catch(e){console.warn('veil',e);}
 })();
