@@ -3786,10 +3786,12 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   fsScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),fsMat));
   let rt=null;const sz=new THREE.Vector2(),cc=new THREE.Color();let tagged=new Set(),aWin=0;
   const R0=renderer.render.bind(renderer);
-  const tag=objs=>{const nx=new Set();objs.forEach(o=>{if(o.isMesh)nx.add(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal)nx.add(c);});});
+  const tag=objs=>{const nx=new Set();objs.forEach(o=>{if(o.isMesh)nx.add(o);o.children.forEach(c=>{if(c.isMesh)nx.add(c);});});
     tagged.forEach(o=>{if(!nx.has(o))o.layers.disable(LH);});nx.forEach(o=>o.layers.enable(LH));tagged=nx;};
   const draw=c=>{
-    const w=S.win,b=(w&&w.obj)||S.building||S.addrTarget;if(!b||!b.parent||cam.mode==='window'){if(tagged.size)tag([]);return;}
+    const w=S.win,b=(w&&w.obj)||S.building||S.addrTarget;if(!b||!b.parent){if(tagged.size)tag([]);window.__qsMini&&window.__qsMini.hide();return;}
+    if(cam.mode==='window'){tag(family(b));if(window.__qsMini)window.__qsMini.draw(R0,b,LH);return;}
+    window.__qsMini&&window.__qsMini.hide();
     const fam=family(b);tag(fam);if(b._qsClipFor!==b.uuid+fam.length){ /* the ground along the footprint (the lowest point of it): the outline stops where the walls leave the ground */
       let fill=null;scene.traverse(o=>{if(!fill&&o.isMesh&&o.userData&&o.userData.fill)fill=o;});let z=1e9;const rc=new THREE.Raycaster(),dn=new THREE.Vector3(0,0,-1);
       if(fill)fam.forEach(o=>{const r=o.userData&&o.userData.rings&&o.userData.rings[0];if(!r)return;r.forEach((p,i)=>{const q=r[(i+1)%r.length];[0,0.5].forEach(t=>{const x=p.x+(q.x-p.x)*t,y=p.y+(q.y-p.y)*t;rc.set(new THREE.Vector3(x,y,200),dn);const h=rc.intersectObject(fill,false)[0];if(h)z=Math.min(z,h.point.z);});});});
@@ -3815,6 +3817,93 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
 }catch(e){console.warn('outline',e);}})();
 /* windows only on the studied house: the ground-floor window bands of the other buildings are never drawn */
 (()=>{try{const hide=()=>{try{groundBands.forEach(m=>{m.visible=false;});}catch(e){}};const _b=buildGroundFloors;buildGroundFloors=function(...a){const r=_b.apply(this,a);hide();return r;};hide();setInterval(hide,1000);}catch(e){console.warn('bands',e);}})();
+
+/* ===== The window flow: flying into the window and back, the house in miniature over the window view (turn it, touch another
+   window to move there, touch the roof or the button to go back to the model), and a hint only when nothing has been touched ===== */
+(()=>{try{
+  const st=document.createElement('style');st.textContent=`
+  #qsFade{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:30;background:var(--qs-fade,#f3effa);transition:opacity .22s cubic-bezier(.65,0,.35,1)}
+  #qsFade.on{opacity:1}
+  #qsMiniBox{position:fixed;top:calc(env(safe-area-inset-top,0px) + 76px);right:max(12px,env(safe-area-inset-right,0px));width:min(36vw,190px);aspect-ratio:1;border-radius:18px;
+    box-shadow:0 10px 30px rgba(40,40,90,.28),inset 0 0 0 1px rgba(255,255,255,.55);z-index:25;touch-action:none;cursor:grab;overflow:hidden}
+  #qsMiniBox[hidden]{display:none}
+  #qsBack{position:fixed;right:max(12px,env(safe-area-inset-right,0px));top:calc(env(safe-area-inset-top,0px) + 76px + min(36vw,190px) + 10px);z-index:25;
+    font:500 14px/1 'Instrument Sans',system-ui,sans-serif;padding:10px 14px;border-radius:999px;border:0;background:rgba(255,255,255,.92);color:#2a2650;box-shadow:0 6px 18px rgba(40,40,90,.22)}
+  #qsBack[hidden]{display:none}
+  #qsSee{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 150px);z-index:25;
+    font:500 15px/1 'Instrument Sans',system-ui,sans-serif;padding:12px 18px;border-radius:999px;border:0;color:#fff;background:linear-gradient(135deg,#f0773a,#e8608a);box-shadow:0 8px 22px rgba(230,100,90,.35)}
+  #qsSee[hidden]{display:none}
+  #qsHint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 206px);width:max-content;max-width:calc(100vw - 32px);z-index:24;text-align:center;pointer-events:none;
+    background:rgba(255,255,255,.9);color:#2a2650;border-radius:16px;padding:10px 16px;box-shadow:0 8px 22px rgba(40,40,90,.18);opacity:0;transition:opacity .5s cubic-bezier(.65,0,.35,1)}
+  #qsHint.on{opacity:1}#qsHint b{display:block;font:600 15px/1.3 'Instrument Sans',system-ui,sans-serif}#qsHint small{font:400 12px/1.3 'Instrument Sans',system-ui,sans-serif;opacity:.7}
+  #winHint{display:none!important}`;
+  document.head.appendChild(st);
+  const mk=(tag,id,html)=>{const e=document.createElement(tag);e.id=id;if(html)e.innerHTML=html;document.body.appendChild(e);return e;};
+  const fadeEl=mk('div','qsFade'),box=mk('div','qsMiniBox'),back=mk('button','qsBack','← Maquette'),see=mk('button','qsSee','Voir depuis la fenêtre'),hint=mk('div','qsHint','<b>Touchez votre fenêtre</b><small>Vous pourrez ajuster l\'étage et la façade ensuite.</small>');
+  box.hidden=true;back.hidden=true;see.hidden=true;back.type='button';see.type='button';
+  const isDay=()=>{try{return sun.position.z-sun.target.position.z>0;}catch(e){return true;}};
+  const fade=(mid)=>new Promise(res=>{fadeEl.style.setProperty('--qs-fade',isDay()?'#f3effa':'#1d2048');fadeEl.classList.add('on');
+    setTimeout(()=>{try{mid&&mid();}catch(e){console.warn(e);}requestAnimationFrame(()=>{fadeEl.classList.remove('on');setTimeout(res,240);});},230);});
+  const wrap=(th,ref)=>{while(th-ref>Math.PI)th-=2*Math.PI;while(th-ref<-Math.PI)th+=2*Math.PI;return th;};
+  /* 1. the flight: the camera turns to face the façade, comes down to the window and stops just in front of it; a short veil, then the view from inside */
+  let busy=false,back0=null;const _set=setMode;
+  setMode=function(mode){
+    if(busy)return;
+    if(mode==='window'&&cam.mode==='orbit'&&S.win&&S.win.pos){
+      const n=S.win.normal;back0={t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist};busy=true;
+      camTw={t0:performance.now(),dur:1300,ease:'quint',a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:S.win.pos.clone(),th:wrap(Math.atan2(n.x,n.y),cam.theta),ph:0.08,d:3.2},
+        onEnd:()=>{fade(()=>{_set('window');}).then(()=>{busy=false;});}};
+      return;}
+    if(mode==='orbit'&&cam.mode==='window'){busy=true;
+      fade(()=>{_set('orbit');const w=S.win;if(w&&w.pos){const n=w.normal;cam.target.copy(w.pos);cam.theta=Math.atan2(n.x,n.y);cam.phi=0.08;cam.dist=3.2;applyCam();
+        const b=back0||{t:w.pos.clone(),th:cam.theta,ph:0.55,d:45};
+        camTw={t0:performance.now()+120,dur:1150,ease:'quint',a:{t:cam.target.clone(),th:cam.theta,ph:cam.phi,d:cam.dist},b:{t:b.t.clone(),th:wrap(b.th,cam.theta),ph:b.ph,d:b.d}};}}).then(()=>{busy=false;});
+      return;}
+    return _set(mode);};
+  back.addEventListener('click',()=>setMode('orbit'));
+  see.addEventListener('click',()=>{hint.classList.remove('on');setMode('window');});
+  /* 2. the house in miniature: only the studied house (its own layer), turned by the finger, drawn in a corner of the same canvas */
+  const mc=new THREE.PerspectiveCamera(30,1,0.5,3000);let mth=null,boxKey='',ctr=new THREE.Vector3(),rad=10;const LM=9;
+  const mark=new THREE.Mesh(new THREE.SphereGeometry(0.55,16,12),new THREE.MeshBasicMaterial({color:0xf0773a,fog:false,toneMapped:false,depthTest:false}));
+  mark.layers.set(LM);mark.renderOrder=10;scene.add(mark);
+  const cc=new THREE.Color();
+  const placeCam=()=>{const ph=0.5,d=rad*3.3;mc.position.set(ctr.x+d*Math.cos(ph)*Math.sin(mth),ctr.y+d*Math.cos(ph)*Math.cos(mth),ctr.z+d*Math.sin(ph));mc.up.set(0,0,1);mc.lookAt(ctr);mc.updateMatrixWorld();};
+  window.__qsMini={hide(){box.hidden=true;back.hidden=true;mark.visible=false;},
+    draw(R0,b,LH){const w=S.win;if(!w||!w.pos){this.hide();return;}box.hidden=false;back.hidden=false;
+      const fam=family(b),key=b.uuid+fam.length;if(key!==boxKey){const bb=new THREE.Box3();fam.forEach(o=>bb.expandByObject(o));bb.getCenter(ctr);const sz=bb.getSize(new THREE.Vector3());rad=Math.max(4,Math.max(sz.x,sz.y,sz.z)/2);boxKey=key;mth=null;}
+      if(mth===null)mth=Math.atan2(w.normal.x,w.normal.y)+0.6; /* first seen from the window's side, a little turned */
+      mark.position.copy(w.pos);mark.visible=true;
+      const cr=renderer.domElement.getBoundingClientRect(),rr=box.getBoundingClientRect();if(!rr.width)return;
+      const x=rr.left-cr.left,y=cr.bottom-rr.bottom,W=rr.width,H=rr.height;mc.aspect=W/H;mc.updateProjectionMatrix();placeCam();
+      mc.layers.set(LH);mc.layers.enable(LM);
+      const au=renderer.autoClear,su=renderer.shadowMap.autoUpdate,sn=renderer.shadowMap.needsUpdate,ca=renderer.getClearAlpha(),bg=scene.background;renderer.getClearColor(cc);
+      renderer.autoClear=false;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=false;scene.background=null;
+      renderer.setScissorTest(true);renderer.setScissor(x,y,W,H);renderer.setViewport(x,y,W,H);renderer.setClearColor(isDay()?0xeef0fb:0x232750,1);renderer.clear(true,true,false);
+      R0(scene,mc);
+      const sz=new THREE.Vector2();renderer.getSize(sz);renderer.setScissorTest(false);renderer.setViewport(0,0,sz.x,sz.y);renderer.setClearColor(cc,ca);scene.background=bg;
+      renderer.autoClear=au;renderer.shadowMap.autoUpdate=su;renderer.shadowMap.needsUpdate=sn;}};
+  /* turn it, or touch it: a wall moves the window there (the same rules as on the model), the roof goes back to the model */
+  let pd=null;
+  box.addEventListener('pointerdown',e=>{pd={x:e.clientX,y:e.clientY,x0:e.clientX,moved:false,id:e.pointerId};try{box.setPointerCapture(e.pointerId);}catch(_){}e.stopPropagation();});
+  box.addEventListener('pointermove',e=>{if(!pd||e.pointerId!==pd.id)return;const dx=e.clientX-pd.x;if(Math.abs(e.clientX-pd.x0)>6)pd.moved=true;mth-=dx*0.012;pd.x=e.clientX;});
+  box.addEventListener('pointerup',e=>{if(!pd||e.pointerId!==pd.id)return;const was=pd;pd=null;if(was.moved)return;
+    const rr=box.getBoundingClientRect(),nx=((e.clientX-rr.left)/rr.width)*2-1,ny=-((e.clientY-rr.top)/rr.height)*2+1;
+    const rc=new THREE.Raycaster();rc.layers.set(7);rc.setFromCamera(new THREE.Vector2(nx,ny),mc);const h=rc.intersectObjects(scene.children,true)[0];
+    if(!h){return;}if(Math.abs(h.face.normal.clone().transformDirection(h.object.matrixWorld).z)>=0.3){setMode('orbit');return;}
+    /* a wall: run the model's own pick as if the finger had touched this point on the big view, seen from the miniature's camera */
+    fade(()=>{const sv={p:camera.position.clone(),q:camera.quaternion.clone(),pm:camera.projectionMatrix.clone(),pi:camera.projectionMatrixInverse.clone()},lay=ray.layers.mask;
+      camera.position.copy(mc.position);camera.quaternion.copy(mc.quaternion);camera.updateMatrixWorld(true);camera.projectionMatrix.copy(mc.projectionMatrix);camera.projectionMatrixInverse.copy(mc.projectionMatrixInverse);ray.layers.set(7);
+      const cr=renderer.domElement.getBoundingClientRect();
+      try{pick({clientX:cr.left+(nx+1)/2*cr.width,clientY:cr.top+(1-ny)/2*cr.height});}catch(err){console.warn('mini pick',err);}
+      ray.layers.mask=lay;camera.position.copy(sv.p);camera.quaternion.copy(sv.q);camera.projectionMatrix.copy(sv.pm);camera.projectionMatrixInverse.copy(sv.pi);camTw=null;
+      if(S.win&&S.win.pos){const n=S.win.normal;cam.baseYaw=Math.atan2(n.x,n.y);cam.yaw=0;cam.pitch=0.05;}setFov();applyCam();update();});});
+  /* 3. "see from the window" next to the chosen window on the model; the hint only if nothing was touched for a while */
+  let touched=false,shownFor='';renderer.domElement.addEventListener('pointerdown',()=>{touched=true;hint.classList.remove('on');});
+  setInterval(()=>{try{const orbit=cam.mode==='orbit',veil=document.getElementById('qsVeil');const loading=veil&&veil.classList.contains('on');
+    see.hidden=!(orbit&&S.win&&S.win.pos&&!busy&&!loading);
+    const key=S.label||'';if(key!==shownFor){shownFor=key;touched=false;hint.classList.remove('on');hint._t=performance.now();}
+    if(!touched&&orbit&&!loading&&S.building&&performance.now()-(hint._t||0)>6000)hint.classList.add('on');}catch(e){}},300);
+}catch(e){console.warn('window flow',e);}})();
 
 /* ===== the loading veil plays the home page's window (copy of home-hero.js, own ids) ===== */
 window.QS_SUN=window.QS_SUN||3;
