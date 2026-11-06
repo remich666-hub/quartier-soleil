@@ -2370,7 +2370,7 @@ async function load(q,at){
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
     try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
-    S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} S.T.scene=performance.now(); loadOrtho(g.lat,g.lon); loadLot(g.lat,g.lon);
+    S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} S.T.scene=performance.now(); await qsHouseFirst(); loadOrtho(g.lat,g.lon); loadLot(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
@@ -3583,7 +3583,7 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
       const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));g.setIndex(I);
       halo=new THREE.Mesh(g,haloMat);halo.renderOrder=2;halo.raycast=()=>{};halo.frustumCulled=false;scene.add(halo);}
     halo.visible=true;haloMat.opacity=up?0.9:0.45;haloMat.color.set(up?0xffffff:0x9aa3ff);}catch(e){}};
-  setInterval(placeHalo,700);
+  /* replaced by the global glow below */
   try{const sc=sun.shadow.camera;sc.left=-300;sc.right=300;sc.top=300;sc.bottom=-300;sc.updateProjectionMatrix();sun.shadow.bias=-0.0003;sun.shadow.normalBias=0.08;}catch(e){}
   /* edges: a fine lavender line, like an architect's model */
   setInterval(()=>{try{if(edgeLines&&!edgeLines._qs){edgeLines.material.color.set(0x8f95c0);edgeLines.material.opacity=0.3;edgeLines._qs=1;}}catch(e){}},1000);
@@ -3602,6 +3602,53 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
 })();
 try{window.__wt=wallTex;window.__scene=scene;window.__cam=cam;window.__drive=()=>{clearInterval(window.__dv);window.__dv=setInterval(()=>{try{frame(performance.now());}catch(e){}},60);};}catch(e){}
 try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}catch(e){}
+/* ===== no aerial-photo option: the model is the plan ===== */
+(function(){
+  try{const b=document.getElementById('photoBtn');if(b)b.hidden=true;}catch(e){}
+  try{if(photoMode){photoMode=false;}localStorage.removeItem('qs-photo');}catch(e){}
+})();
+/* ===== the light of the studied house spreads over the whole model: every surface (ground, walls, roofs, trees) takes a warm
+   tint and a fine screen grain that fade with the distance to the house. Geometry, shadows and the sun computations are untouched. ===== */
+(function(){
+  const QSU={uQsC:{value:new THREE.Vector2(0,0)},uQsR:{value:120},uQsK:{value:0}};
+  const VS_DECL='varying vec2 vQsW;\n',FS_DECL='uniform vec2 uQsC;uniform float uQsR;uniform float uQsK;varying vec2 vQsW;\nfloat qsH(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}\n';
+  const FS_BODY=`
+  { float d=length(vQsW-uQsC)/uQsR;
+    vec3 warm=vec3(1.0,0.66,0.50),pink=vec3(0.97,0.62,0.72),lav=vec3(0.76,0.74,0.98);
+    vec3 tint=d<0.6?mix(warm,pink,d/0.6):mix(pink,lav,clamp((d-0.6)/1.4,0.0,1.0));
+    float a=uQsK*0.42*exp(-d*1.5);
+    float dots=step(qsH(floor(gl_FragCoord.xy)),uQsK*0.55*exp(-d*1.9));
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,tint,clamp(a+dots*0.38,0.0,0.85)); }
+`;
+  const patch=m=>{if(!m||m._qsGlow||!m.isMeshLambertMaterial)return;m._qsGlow=1;const prev=m.onBeforeCompile,pk=m.customProgramCacheKey;
+    m.onBeforeCompile=(sh,r)=>{if(prev)prev.call(m,sh,r);Object.assign(sh.uniforms,QSU);
+      sh.vertexShader=VS_DECL+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n{vec4 qw=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nqw=instanceMatrix*qw;\n#endif\nqw=modelMatrix*qw;vQsW=qw.xy;}');
+      sh.fragmentShader=FS_DECL+sh.fragmentShader.replace('#include <dithering_fragment>','#include <dithering_fragment>'+FS_BODY);};
+    m.customProgramCacheKey=()=>(pk?pk.call(m):'')+'|qsglow';m.needsUpdate=true;};
+  /* the studied building keeps its own colours (it is the light) */
+  const isHouse=m=>{try{if(m===PART_HI.roof||m===PART_HI.wall||m===PART_HI.wallT)return true;for(const k in matCache)if(k.startsWith('T:')&&matCache[k].includes(m))return true;}catch(e){}return false;};
+  const sweep=()=>{try{scene.traverse(o=>{if(!o.isMesh)return;const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(m&&!isHouse(m))patch(m);});});}catch(e){}};
+  setInterval(sweep,600);
+  try{const _add=scene.add.bind(scene);scene.add=function(...a){const r=_add(...a);a.forEach(o=>{try{o.traverse(c=>{if(c.isMesh){const ms=Array.isArray(c.material)?c.material:[c.material];ms.forEach(m=>{if(m&&!isHouse(m))patch(m);});}});}catch(e){}});return r;};}catch(e){}
+  /* centre on the studied building; strength follows the hour (softer at night) */
+  setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent){const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
+      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(70,Math.max(sz.x,sz.y)*3.5);}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;}
+    const up=sun.position.z-sun.target.position.z>0;QSU.uQsK.value=(typeof photoMode!=='undefined'&&photoMode)?0:(up?1:0.6);}catch(e){}},400);
+  window.__QSU=QSU;
+})();
+/* ===== the house first: once the buildings are in, only the studied house shows while its laser roof is computed
+   (at most 2.5 s); then the neighbours rise in a ripple from the house outwards, and the rest of the model follows ===== */
+async function qsHouseFirst(){
+  try{const t=S.target;if(!t||!window.QV4)return;const fam=family(t),hide=S.meshes.filter(m=>m&&m.parent&&!fam.includes(m)&&m.visible);
+    const extra=[edgeLines].concat(S.roofSetMeshes||[]).filter(o=>o&&o.visible);extra.forEach(o=>o.visible=false);
+    hide.forEach(m=>m.visible=false);
+    const t0=performance.now();while(performance.now()-t0<2500){const cur=S.target?family(S.target):fam;if(cur.some(o=>QV4.used&&QV4.used.has(o)))break;await new Promise(r=>setTimeout(r,80));}
+    extra.forEach(o=>o.visible=true);
+    const c=new THREE.Vector3();const box=new THREE.Box3();fam.forEach(o=>box.expandByObject(o));box.getCenter(c);
+    const ds=hide.map(m=>{const b=m.geometry&&(m.geometry.boundingSphere||(m.geometry.computeBoundingSphere(),m.geometry.boundingSphere));return [m,b?Math.hypot(b.center.x-c.x,b.center.y-c.y):0];});
+    const dmax=Math.max(1,...ds.map(d=>d[1])),T=1300,ease=x=>0.5-0.5*Math.cos(Math.PI*x),s0=performance.now();
+    await new Promise(res=>{const step=()=>{const e=(performance.now()-s0)/T;ds.forEach(([m,d])=>{if(!m.visible&&ease(Math.min(1,d/dmax))<=e)m.visible=true;});if(e<1)setTimeout(step,30);else{ds.forEach(([m])=>m.visible=true);res();}};step();});
+  }catch(e){console.warn('house first',e);try{S.meshes.forEach(m=>{if(m)m.visible=true;});if(edgeLines)edgeLines.visible=true;(S.roofSetMeshes||[]).forEach(o=>o.visible=true);}catch(_){}}}
 
 /* ===== Quartier Soleil v5: the v4 roof model, own copy (Toit Soleil untouched), faster and returning its rectangles ===== */
 function qsModel5(R,opt){opt=opt||{};
