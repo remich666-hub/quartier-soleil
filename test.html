@@ -2945,7 +2945,7 @@ function qsV4One(fam){
   const bands=o=>Math.max(o.userData.floors||1,Math.round(top.get(o)/2.9)), kOf=o=>bands(o)*3/top.get(o); /* the body's window rows (fitWallUVs) */
   const GP=[],GN=[],TP=[],TN=[],TU=[];
   const quad=(a,b,za0,zb0,za1,zb1,nx,ny,ua,ub,vz,k)=>{if(za1-za0<0.03&&zb1-zb0<0.03)return;if((b[1]-a[1])*nx-(b[0]-a[0])*ny<0){[a,b]=[b,a];[za0,zb0]=[zb0,za0];[za1,zb1]=[zb1,za1];[ua,ub]=[ub,ua];}
-    const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]],uu=[ua,ub,ub,ua],tall=Math.max(za1-za0,zb1-zb0)>=2.4;
+    const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]],uu=[ua,ub,ub,ua],tall=Math.min(za1-za0,zb1-zb0)>=2.4;
     [[0,1,2],[0,2,3]].forEach(q=>q.forEach(i=>{if(tall){TP.push(...t[i]);TN.push(nx,ny,0);TU.push(uu[i],(t[i][2]-vz)*k);}else{GP.push(...t[i]);GN.push(nx,ny,0);}}));};
   /* the outline segment a point lies on (for windows in line with the facade below) */
   const onRing=(x,y)=>{for(const o of fam){const r=o.userData.rings[0];for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length],ex=b.x-a.x,ey=b.y-a.y,L=Math.hypot(ex,ey);if(L<0.05)continue;const t=((x-a.x)*ex+(y-a.y)*ey)/(L*L);if(t<-0.01||t>1.01)continue;if(Math.abs((x-a.x)*ey-(y-a.y)*ex)/L<0.08)return {o,a,L,ex:ex/L,ey:ey/L};}}return null;};
