@@ -2935,7 +2935,7 @@ function qsV4One(fam){
   let OUT=null;
   try{const U0=PCx.union(...drawn.map(d=>[d.outer,...d.holes]));const mr=main.userData.rings[0];let th=0,best=0;
     for(let k=0;k<mr.length;k++){const a=mr[k],b=mr[(k+1)%mr.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L>best){best=L;th=Math.atan2(b.y-a.y,b.x-a.x);}}
-    const sq=U0.map(poly=>poly.map(R=>qsSquare(R.slice(0,-1),th)));
+    const sq=U0.map(poly=>poly.map(R=>qsSquare(qsSquare(R.slice(0,-1),th),th))); /* twice: the second pass clears what the first leaves */
     const st=(P,key)=>{let ok=0,tot=0;P.forEach(poly=>poly.forEach(R=>{const n=R.length;for(let k=0;k<n;k++){const a=R[k],b=R[(k+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);let d=((Math.atan2(b[1]-a[1],b[0]-a[0])-th)%(Math.PI/2)+Math.PI/2)%(Math.PI/2);d=Math.min(d,Math.PI/2-d);tot+=L;if(d<0.052)ok+=L;}}));return tot?ok/tot:1;};
     const ar=P=>P.reduce((s,poly)=>s+poly.reduce((t,R,i)=>{let a=0;for(let k=0,j=R.length-1;k<R.length;j=k++)a+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);return t+(i?-1:1)*Math.abs(a/2);},0),0);
     const A0u=ar(U0.map(p=>p.map(R=>R.slice(0,-1)))),A1u=ar(sq);
@@ -3149,7 +3149,7 @@ function qsSquare(R,th){R=qsDespike(R);const n=R.length;if(n<4)return R;const Q=
    G.forEach(g=>{if(g.E.length<2)return;const m=Math.atan2(g.s,g.c)/2;g.E.forEach(e=>{const sgn=Math.cos(Math.atan2(e.d[1],e.d[0])-m)>=0?1:-1;e.d=[sgn*Math.cos(m),sgn*Math.sin(m)];e.snap=true;});});}
   /* aligned walls: parallel edges whose lines pass within 30 cm of each other (a wall continued past a wing, the two halves of a
      facade) are set on one line, the mean of theirs weighted by length */
-  {const G=[];E.filter(e=>e.snap).forEach(e=>{const nx=-e.d[1],ny=e.d[0];let g=G.find(g=>Math.abs(g.nx*nx+g.ny*ny)>0.9999&&Math.abs(Math.sign(g.nx*nx+g.ny*ny)*(e.p[0]*nx+e.p[1]*ny)-g.o)<0.3);
+  {const G=[];E.filter(e=>e.snap).forEach(e=>{const nx=-e.d[1],ny=e.d[0];let g=G.find(g=>Math.abs(g.nx*nx+g.ny*ny)>0.9999&&Math.abs(Math.sign(g.nx*nx+g.ny*ny)*(e.p[0]*nx+e.p[1]*ny)-g.o)<0.4);
      const o=e.p[0]*nx+e.p[1]*ny;if(!g){g={nx,ny,o,w:0,s:0,E:[]};G.push(g);}const sg=Math.sign(g.nx*nx+g.ny*ny);g.s+=sg*o*e.L;g.w+=e.L;g.o=g.s/g.w;g.E.push(e);});
    G.forEach(g=>{if(g.E.length<2)return;g.E.forEach(e=>{const nx=-e.d[1],ny=e.d[0],sg=Math.sign(g.nx*nx+g.ny*ny),o=e.p[0]*nx+e.p[1]*ny,t=sg*g.o-o;e.p=[e.p[0]+nx*t,e.p[1]+ny*t];});});}
   const par=(e,f)=>e.snap&&f.snap&&Math.abs(e.d[0]*f.d[1]-e.d[1]*f.d[0])<1e-6&&e.d[0]*f.d[0]+e.d[1]*f.d[1]>0;
@@ -3158,7 +3158,7 @@ function qsSquare(R,th){R=qsDespike(R);const n=R.length;if(n<4)return R;const Q=
   for(let it=0;it<4*n;it++){let ch=false;const m=E.length;if(m<4)break;
     for(let i=0;i<E.length&&E.length>=4;i++){const e=E[i],f=E[(i+1)%E.length],g=E[(i+2)%E.length];
       if(par(e,f)&&off(e,f)<0.4){E=E.slice(i).concat(E.slice(0,i));E.splice(0,2,merge(e,f));ch=true;break;}
-      if(f.L<0.6&&par(e,g)&&off(e,g)<0.4){E=E.slice(i).concat(E.slice(0,i));E.splice(0,3,merge(e,g));ch=true;break;}}
+      if(f.L<0.6&&par(e,g)&&off(e,g)<0.5){E=E.slice(i).concat(E.slice(0,i));E.splice(0,3,merge(e,g));ch=true;break;}}
     if(!ch)break;}
   if(E.length<3)return R;
   const out=[];for(let i=0;i<E.length;i++){const e=E[i],f=E[(i+1)%E.length],cr=e.d[0]*f.d[1]-e.d[1]*f.d[0];
