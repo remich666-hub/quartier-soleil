@@ -2916,6 +2916,8 @@ function qsV4One(fam){
   const r=qsV4Model(fam); if(!r)return false; const {M,main}=r, A0=S.alt0, dx=-M.sh0.dx, dy=-M.sh0.dy, u=main.userData;
   const X=x=>x+dx, Y=y=>y+dy;
   const blockAt=(x,y)=>fam.find(o=>pointInPoly(x,y,o.userData.rings[0]));
+  /* the tallest block over a point (footprints overlap: a tower inside the outline of the main block) */
+  const tallAt=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
   const Mpolys=M.pieces.map(pc=>pc.P.map(q=>({x:q[0],y:q[1]})));
   const PCx=PCSYNC, ringP=r=>[r.map(p=>[p.x,p.y])];
   let famU=null;try{famU=PCx.union(...fam.map(o=>ringP(o.userData.rings[0])));}catch(e){famU=null;}
@@ -2955,7 +2957,7 @@ function qsV4One(fam){
     for(let s2=0;s2<m;s2++){const t0=s2/m,t1=(s2+1)/m,A=[a[0]+(b[0]-a[0])*t0,a[1]+(b[1]-a[1])*t0],B=[a[0]+(b[0]-a[0])*t1,a[1]+(b[1]-a[1])*t1];
       const zA=d.zf(A[0],A[1]),zB=d.zf(B[0],B[1]),cx=(A[0]+B[0])/2,cy=(A[1]+B[1])/2,ox=cx+nx*0.15,oy=cy+ny*0.15;
       const zo=drawnZ(ox,oy);if(isFinite(zo)&&zo>=Math.min(zA,zB)-0.05)continue; /* as high beyond: a ridge, a hip, or a taller part with its own wall */
-      const under=blockAt(cx-nx*0.15,cy-ny*0.15)||blockAt(ox,oy)||main, beyond=blockAt(ox,oy);
+      const under=tallAt(cx-nx*0.15,cy-ny*0.15)||blockAt(ox,oy)||main, beyond=blockAt(ox,oy);
       const zb=isFinite(zo)?zo:(beyond&&beyond!==under?topAbs(beyond):topAbs(under));
       /* a block whose outline this wall lies on already has its facade up to its own top: start above it (no doubled face) */
       let zr=zb;fam.forEach(o=>{const r=o.userData.rings[0];for(let q=0;q<r.length;q++){const u0=r[q],u1=r[(q+1)%r.length],ex=u1.x-u0.x,ey=u1.y-u0.y,LL=Math.hypot(ex,ey);if(LL<0.05)continue;const tt=((cx-u0.x)*ex+(cy-u0.y)*ey)/(LL*LL);if(tt<-0.01||tt>1.01)continue;if(Math.abs((cx-u0.x)*ey-(cy-u0.y)*ex)/LL<0.08){zr=Math.max(zr,topAbs(o));break;}}});
@@ -3036,6 +3038,7 @@ function qsWindows(main){const V=main.userData._v4;if(!V)return;const {fam,XL}=V
   const near=S.meshes.filter(m=>!fam.includes(m)&&m.geometry&&(m.geometry.boundingSphere||(m.geometry.computeBoundingSphere(),m.geometry.boundingSphere)).center.distanceTo(bs.center)<bs.radius+40);
   const around=objs.concat(near,S.roofSetMeshes||[]); around.forEach(o=>o.updateMatrixWorld(true));
   const ray=new THREE.Raycaster(),org=new THREE.Vector3(),dir=new THREE.Vector3(),down=new THREE.Vector3(0,0,-1);
+  const tallIn=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
   const inFam=(x,y)=>fam.find(o=>pointInPoly(x,y,o.userData.rings[0])&&!o.userData.rings.slice(1).some(h=>pointInPoly(x,y,h)));
   /* wall lines: every outline edge of the blocks, and the steps between two roofs that lie off the outlines */
   const lines=[];fam.forEach(o=>o.userData.rings.forEach(r=>{for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<2.2)continue;
@@ -3063,7 +3066,7 @@ function qsWindows(main){const V=main.userData._v4;if(!V)return;const {fam,XL}=V
   lines.forEach(l=>{const {a,b,L,nx,ny}=l,ex=(b.x-a.x)/L,ey=(b.y-a.y)/L,bays=Math.max(1,Math.round(L/3.5)),w=L/bays;
     for(let i=0;i<bays;i++){const ww=Math.min(1.3,w-0.5);if(ww<0.6)continue;const tc=i*w+w/2,t0=tc-ww/2,t1=tc+ww/2,pt=t=>[a.x+ex*t,a.y+ey*t],pm=pt(tc),[cx,cy]=pm;
       /* the levels of the window study, for the block behind this bay: same floor, storey height, count and lift above the street (placeMarker) */
-      const o=inFam(cx-nx*0.3,cy-ny*0.3)||main,ub=o.userData;let fb,sh,nF;try{fb=floorBase(ub);sh=storeyH(ub);nF=nFloors(ub);}catch(e){continue;}
+      const o=tallIn(cx-nx*0.3,cy-ny*0.3)||main,ub=o.userData;let fb,sh,nF;try{fb=floorBase(ub);sh=storeyH(ub);nF=nFloors(ub);}catch(e){continue;}
       const gz=groundAt({x:cx,y:cy},{x:nx,y:ny});
       const wt=Math.min(...[t0+0.1,tc,t1-0.1].map(t=>{const [x,y]=pt(t);return topAt(x-nx*0.06,y-ny*0.06);})); /* the wall top over this window (eave, gable slope) */
       for(let r=0;r<nF;r++){stat.cells++;
