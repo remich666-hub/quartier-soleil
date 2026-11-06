@@ -2880,11 +2880,11 @@ update(); if(!S.startPending)load($('addr').value); // an address handed over by
    Runs once the laser buildings are there, in the background, nearest first, and pauses while the camera is being moved.
    Visual only: the window study reads its horizon from the laser rasters, not from these meshes. */
 var RF=window.RF||{};
-const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0,log:[]};
+const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0,log:[],done:[]};
 ['pointerdown','pointermove','wheel','touchstart','keydown'].forEach(k=>addEventListener(k,e=>{if(k!=='pointermove'||e.buttons)QV4.last=performance.now();},{passive:true,capture:true}));
 const qsSleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function qsV4(){
-  const T=S.T; QV4.T=T; QV4.rings=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
+  const T=S.T; QV4.T=T; QV4.rings=[]; QV4.done=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
   for(let i=0;i<400&&!(S.lidarBuilt&&S.lidarR&&S.lidarR.mnh&&S.T&&S.T.lidarBuilt);i++){await qsSleep(100);if(S.T!==T)return;}
   if(S.T!==T||!S.lidarBuilt)return;
   await qsSleep(400); /* let the scene settle (vegetation, edges) */
@@ -2942,16 +2942,15 @@ function qsV4One(fam){
       [A,B,C].forEach(q=>{P.push(q[0],q[1],d.zf(q[0],q[1]));N.push(d.n[0],d.n[1],d.n[2]);});});});
   /* every roof edge stands on a wall: down to the roof drawn just beyond it, else to the facade top of the block under it.
      A ridge or a hip (the neighbouring pan as high) needs none. */
-  const bands=o=>Math.max(o.userData.floors||1,Math.round(top.get(o)/2.9)), kOf=o=>bands(o)*3/top.get(o); /* the body's window rows (fitWallUVs) */
-  const GP=[],GN=[],TP=[],TN=[],TU=[];
+  const GP=[],GN=[],XL=[]; /* XL: wall lines off the outlines (a step between two roofs), for the windows */
   const quad=(a,b,za0,zb0,za1,zb1,nx,ny,ua,ub,vz,k)=>{if(za1-za0<0.03&&zb1-zb0<0.03)return;if((b[1]-a[1])*nx-(b[0]-a[0])*ny<0){[a,b]=[b,a];[za0,zb0]=[zb0,za0];[za1,zb1]=[zb1,za1];[ua,ub]=[ub,ua];}
-    const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]],uu=[ua,ub,ub,ua],tall=Math.min(za1-za0,zb1-zb0)>=2.4;
-    [[0,1,2],[0,2,3]].forEach(q=>q.forEach(i=>{if(tall){TP.push(...t[i]);TN.push(nx,ny,0);TU.push(uu[i],(t[i][2]-vz)*k);}else{GP.push(...t[i]);GN.push(nx,ny,0);}}));};
+    const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]];
+    [[0,1,2],[0,2,3]].forEach(q=>q.forEach(i=>{GP.push(...t[i]);GN.push(nx,ny,0);}));};
   /* the outline segment a point lies on (for windows in line with the facade below) */
   const onRing=(x,y)=>{for(const o of fam){const r=o.userData.rings[0];for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length],ex=b.x-a.x,ey=b.y-a.y,L=Math.hypot(ex,ey);if(L<0.05)continue;const t=((x-a.x)*ex+(y-a.y)*ey)/(L*L);if(t<-0.01||t>1.01)continue;if(Math.abs((x-a.x)*ey-(y-a.y)*ex)/L<0.08)return {o,a,L,ex:ex/L,ey:ey/L};}}return null;};
   drawn.forEach(d=>{[d.outer,...d.holes].forEach(R=>{for(let e=0;e<R.length;e++){const a=R[e],b=R[(e+1)%R.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<0.05)continue;
     let nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;if(inRing(mx+nx*0.1,my+ny*0.1,d.outer)&&!d.holes.some(h=>inRing(mx+nx*0.1,my+ny*0.1,h))){nx=-nx;ny=-ny;} /* outward from this roof part */
-    const rs=onRing(mx,my),m=Math.max(1,Math.ceil(L/0.25));
+    const rs=onRing(mx,my),m=Math.max(1,Math.ceil(L/0.25)); if(!rs&&L>=2.2)XL.push({a:{x:a[0],y:a[1]},b:{x:b[0],y:b[1]},nx,ny});
     for(let s2=0;s2<m;s2++){const t0=s2/m,t1=(s2+1)/m,A=[a[0]+(b[0]-a[0])*t0,a[1]+(b[1]-a[1])*t0],B=[a[0]+(b[0]-a[0])*t1,a[1]+(b[1]-a[1])*t1];
       const zA=d.zf(A[0],A[1]),zB=d.zf(B[0],B[1]),cx=(A[0]+B[0])/2,cy=(A[1]+B[1])/2,ox=cx+nx*0.15,oy=cy+ny*0.15;
       const zo=drawnZ(ox,oy);if(isFinite(zo)&&zo>=Math.min(zA,zB)-0.05)continue; /* as high beyond: a ridge, a hip, or a taller part with its own wall */
@@ -2960,16 +2959,17 @@ function qsV4One(fam){
       /* a block whose outline this wall lies on already has its facade up to its own top: start above it (no doubled face) */
       let zr=zb;fam.forEach(o=>{const r=o.userData.rings[0];for(let q=0;q<r.length;q++){const u0=r[q],u1=r[(q+1)%r.length],ex=u1.x-u0.x,ey=u1.y-u0.y,LL=Math.hypot(ex,ey);if(LL<0.05)continue;const tt=((cx-u0.x)*ex+(cy-u0.y)*ey)/(LL*LL);if(tt<-0.01||tt>1.01)continue;if(Math.abs((cx-u0.x)*ey-(cy-u0.y)*ex)/LL<0.08){zr=Math.max(zr,topAbs(o));break;}}});
       const zlo=Math.min(zr,zA-0.03),zlo2=Math.min(zr,zB-0.03);
-      /* window grid: in line with the facade of the block below when the wall stands on its outline */
-      const bo=rs?rs.o:under,k=kOf(bo),uOf=P=>{if(!rs)return Math.hypot(P[0]-a[0],P[1]-a[1]);const tt=(P[0]-rs.a.x)*rs.ex+(P[1]-rs.a.y)*rs.ey,bays=rs.L>=2.2?Math.max(1,Math.round(rs.L/3.5)):0;return bays?tt/rs.L*bays*3.5:0.1;};
-      quad(A,B,zlo,zlo2,zA,zB,nx,ny,uOf(A),uOf(B),bo.userData.zBase,k);}}});});
+      quad(A,B,zlo,zlo2,zA,zB,nx,ny);}}});});
   if(!P.length)return false;
   /* swap: old laser pans and IGN roof triangles out, blocks cut at their new wall top, new pans and walls in */
   const goneObs=new Set();
   fam.forEach(o=>{[...o.children].forEach(c=>{if(c.userData.hiRoof)return;o.remove(c);goneObs.add(c);c.geometry.dispose();});
     if(o.userData.roofMesh){scene.remove(o.userData.roofMesh);goneObs.add(o.userData.roofMesh);o.userData.roofMesh=null;}
     const ud=o.userData,h=top.get(o),outer=ud.rings[0],holes=ud.rings.slice(1),shape=new THREE.Shape(outer);holes.forEach(hr=>shape.holes.push(new THREE.Path(hr)));
-    const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});fitWallUVs(geo,h,Math.max(ud.floors||1,Math.round(h/2.9))); /* a tower drawn taller than its IGN count keeps ~3 m storeys of windows */geo.computeBoundingBox();geo.computeBoundingSphere();
+    const geo=new THREE.ExtrudeGeometry(shape,{depth:h+SINK,bevelEnabled:false});
+    /* plain walls (V < 0 is plain in patchWall): the windows of these buildings are laid one by one by qsWindows */
+    {const uv=geo.attributes.uv,g1=geo.groups&&geo.groups[1];if(uv&&g1){for(let i=g1.start;i<g1.start+g1.count;i++)uv.setY(i,-1);uv.needsUpdate=true;}}
+    ud.v4done=true; ud._v4top=h; geo.computeBoundingBox();geo.computeBoundingSphere();
     o.geometry.dispose();o.geometry=geo;
     const eg=new THREE.EdgesGeometry(geo,25),arr=eg.attributes.position.array,off=new Float32Array(arr.length);for(let i=0;i<arr.length;i+=3){off[i]=arr[i];off[i+1]=arr[i+1];off[i+2]=Math.max(arr[i+2],SINK)+ud.zBase-SINK;}eg.dispose();ud.edgeArr=off;
     QV4.rings.push(...ud.rings.slice(0,1));});
@@ -2977,14 +2977,14 @@ function qsV4One(fam){
     const m=new THREE.Mesh(g,mat);m.castShadow=m.receiveShadow=true;m.position.z=-z0;if(gable)m.userData.gable=true;main.add(m);return m;};
   const roofM=mk(P,N,ROOF[u.roofKey||'autre']||ROOF.autre,false), adds=[roofM];
   if(GP.length)adds.push(mk(GP,GN,new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0],side:THREE.DoubleSide}),true));
-  /* storey-high wall pieces (a tower above the rest) carry the window grid of the facades */
-  if(TP.length){const m=mk(TP,TN,matsFor(u.usage,false)[1],true);m.geometry.setAttribute('uv',new THREE.Float32BufferAttribute(TU,2));adds.push(m);}
   /* edges: creases of the new roof (ridges, hips, outline) and of the upper walls, added to the main block's lines */
   const ex=[]; [roofM].forEach(m=>{const eg=new THREE.EdgesGeometry(m.geometry,15);ex.push(eg.attributes.position.array.slice());eg.dispose();});
   {let tot=main.userData.edgeArr.length;ex.forEach(a=>tot+=a.length);const all=new Float32Array(tot);all.set(main.userData.edgeArr);let o=main.userData.edgeArr.length;ex.forEach(a=>{all.set(a,o);o+=a.length;});main.userData.edgeArr=all;}
   main.userData.v4=M.v4.types.length;
   qsFoldRoofs(); try{if(typeof partsSync==='function')fam.forEach(o=>partsSync(o));}catch(e){}
   S.obstacles=(S.obstacles||[]).filter(o=>!goneObs.has(o)).concat(adds);
+  main.userData._v4={fam,XL}; QV4.done.push(main); try{qsWindows(main);}catch(e){console.error('v4 windows',e);}
+  try{if(S.gfWalls)buildGroundFloors(S.gfWalls);}catch(e){}
   rebuildEdges(); return true;}
 /* the IGN pitched roofs of these buildings live in shared meshes: their triangles are folded under the ground */
 function qsFoldRoofs(){ if(!QV4.rings.length)return; const rg=QV4.rings;
@@ -3011,6 +3011,62 @@ function qsCurErr(fam,R){
   const err=qsRms(R.cells.filter((c,i)=>i%2===0).map(c=>{org.set(c.x-R.sh.dx,c.y-R.sh.dy,400);qsRay.set(org,dn);qsRay.far=800;const h=qsRay.intersectObjects(objs,false);return h.length?(h[0].point.z+A0)-c.z:4;}));
   if(tmp){tmp.geometry.dispose();tmp.material.dispose();}
   return err;}
+
+/* ===== windows of the v4 buildings, laid one by one by rule (no texture grid that the roof or the ground could cut) =====
+   rows: the model's own storeys (a house on a slope: from its real floor, floorBase; otherwise the IGN height over its storey count);
+   bays: 3.5 m, a whole number per wall, as everywhere in the model. A window is drawn only if
+   1. its centre stands at least WIN_CLEAR above the ground in front of it,
+   2. the wall really stands over the whole window and 20 cm above it (horizontal rays: no window across a roof line, a gable or a gap),
+   3. there is air in front of it (no roof, block or neighbour against it). */
+const QS_WIN_MAT=(()=>{const c=document.createElement('canvas');c.width=52;c.height=60;const g=c.getContext('2d');
+  g.fillStyle='rgb(204,204,204)';g.fillRect(0,0,52,60);g.fillStyle='rgba(0,0,0,0.1)';g.fillRect(0,0,52,5); /* the wall texture's window: 20 % darker, lintel shade */
+  return new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),blending:THREE.MultiplyBlending,transparent:true,depthWrite:false,fog:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});})();
+function qsRows(o){const u=o.userData;let base=u.zBase,sh=0;
+  try{if(u.lidar&&u.facades&&nFloorsRaw(u)<=2){const off=floorBase(u)-u.zBase;if(off>=0.3||u._gl){base=u.zBase+off;sh=u._gl?u._glH:3;}}}catch(e){}
+  if(!sh){const b=u.floors||Math.max(1,Math.round(u.h/3));sh=u.h/b;}
+  return {base,sh};}
+function qsWindows(main){const V=main.userData._v4;if(!V)return;const {fam,XL}=V;
+  [...main.children].forEach(c=>{if(c.userData.winDecal){main.remove(c);c.geometry.dispose();}});
+  const objs=[];fam.forEach(o=>{objs.push(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal&&!c.userData.hiRoof)objs.push(c);});});
+  const bs=main.geometry.boundingSphere||(main.geometry.computeBoundingSphere(),main.geometry.boundingSphere);
+  const near=S.meshes.filter(m=>!fam.includes(m)&&m.geometry&&(m.geometry.boundingSphere||(m.geometry.computeBoundingSphere(),m.geometry.boundingSphere)).center.distanceTo(bs.center)<bs.radius+40);
+  const around=objs.concat(near,S.roofSetMeshes||[]); around.forEach(o=>o.updateMatrixWorld(true));
+  const ray=new THREE.Raycaster(),org=new THREE.Vector3(),dir=new THREE.Vector3(),down=new THREE.Vector3(0,0,-1);
+  const inFam=(x,y)=>fam.find(o=>pointInPoly(x,y,o.userData.rings[0])&&!o.userData.rings.slice(1).some(h=>pointInPoly(x,y,h)));
+  /* wall lines: every outline edge of the blocks, and the steps between two roofs that lie off the outlines */
+  const lines=[];fam.forEach(o=>o.userData.rings.forEach(r=>{for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<2.2)continue;
+    let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;if(inFam(mx+nx*0.1,my+ny*0.1)){nx=-nx;ny=-ny;}if(inFam(mx+nx*0.1,my+ny*0.1))continue; /* shared by two blocks: inside */
+    lines.push({a,b,L,nx,ny});}}));
+  XL.forEach(l=>lines.push(Object.assign({L:Math.hypot(l.b.x-l.a.x,l.b.y-l.a.y)},l)));
+  const maxTop=Math.max(...fam.map(o=>o.userData.zBase+(o.userData._v4top!=null?o.userData._v4top:o.userData.h)))+3;
+  const P=[],U=[],stat={cells:0,ground:0,wall:0,air:0,ok:0};
+  const wallAt=(x,y,z,nx,ny)=>{org.set(x+nx*1.0,y+ny*1.0,z);dir.set(-nx,-ny,0);ray.set(org,dir);ray.far=1.3;const h=ray.intersectObjects(objs,false);return h.length&&h[0].distance>0.85&&h[0].distance<1.15;};
+  const airAt=(x,y,z)=>{org.set(x,y,z+300);ray.set(org,down);ray.far=1000;const h=ray.intersectObjects(around,false);return !h.length||h[0].point.z<z;};
+  lines.forEach(l=>{const {a,b,L,nx,ny}=l,ex=(b.x-a.x)/L,ey=(b.y-a.y)/L,bays=Math.max(1,Math.round(L/3.5)),w=L/bays;
+    const o=inFam((a.x+b.x)/2-nx*0.3,(a.y+b.y)/2-ny*0.3)||main,{base,sh}=qsRows(o);
+    for(let i=0;i<bays;i++){const t0=i*w+w*44/140,t1=i*w+w*96/140,pt=t=>[a.x+ex*t,a.y+ey*t];
+      for(let r=0;r<12;r++){const zb=base+sh*(r+0.25),zt=base+sh*(r+0.75),zc=(zb+zt)/2;if(zt>maxTop)break;stat.cells++;
+        const [cx,cy]=pt((t0+t1)/2);
+        if(zc<groundAt({x:cx,y:cy},{x:nx,y:ny})+WIN_CLEAR){stat.ground++;continue;}
+        let ok=true;for(const t of [t0+0.08,(t0+t1)/2,t1-0.08]){const [x,y]=pt(t);for(const z of [zb-0.1,zc,zt+0.2])if(!wallAt(x,y,z,nx,ny)){ok=false;break;}if(!ok)break;}
+        if(!ok){stat.wall++;continue;}
+        for(const t of [t0,t1]){const [x,y]=pt(t);if(!airAt(x+nx*0.35,y+ny*0.35,zb-0.05)){ok=false;break;}}
+        if(!ok){stat.air++;continue;}
+        stat.ok++;const [x0,y0]=pt(t0),[x1,y1]=pt(t1),ox=nx*0.02,oy=ny*0.02;
+        const q=[[x0,y0,zb,0,0],[x1,y1,zb,1,0],[x1,y1,zt,1,1],[x0,y0,zb,0,0],[x1,y1,zt,1,1],[x0,y0,zt,0,1]];
+        q.forEach(v=>{P.push(v[0]+ox,v[1]+oy,v[2]);U.push(v[3],v[4]);});}}});
+  main.userData._v4.stat=stat;
+  if(!P.length)return;
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
+  const m=new THREE.Mesh(g,QS_WIN_MAT);m.position.z=-main.position.z;m.renderOrder=2;m.userData.winDecal=true;m.userData.hiRoof=true;m.raycast=()=>{};main.add(m);}
+/* the model's slope pass and ground-floor bands, kept consistent with these buildings: no texture grid laid back on their walls,
+   windows laid again when the ground data changes, ground-floor bands no higher than the wall as drawn */
+if(typeof slopeWalls==='function'){const _sw=slopeWalls;slopeWalls=function(m){const u=m&&m.userData;
+  if(u&&u.v4done){try{if(u.lidar&&u.facades&&nFloorsRaw(u)<=2){const off=floorBase(u)-u.zBase,sh=u._gl?u._glH:3,F=nFloors(u);u._swK=(off>=0.3||u._gl)?Math.round(off*20)+'|'+Math.round(sh*20)+'|'+F:0;}}catch(e){}}
+  return _sw(m);};}
+if(typeof applySlopeWalls==='function'){const _a=applySlopeWalls;applySlopeWalls=function(){_a();(QV4.done||[]).forEach(m=>{if(m.parent)try{qsWindows(m);}catch(e){}});};}
+if(typeof buildGroundFloors==='function'){const _g=buildGroundFloors;buildGroundFloors=function(w){const sw=[];S.meshes.forEach(m=>{const u=m.userData;if(u&&u.v4done&&u._v4top!=null){sw.push([u,u.h]);u.h=u._v4top;}});
+  try{return _g(w);}finally{sw.forEach(([u,h])=>u.h=h);}};}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
