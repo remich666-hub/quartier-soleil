@@ -3503,7 +3503,7 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
   const swap=(m,mat)=>{if(m&&m.material!==mat){m.material=mat;if(m.isInstancedMesh&&m.instanceColor)m.instanceColor=null;}};
   function flatten(){if(typeof photoMode!=='undefined'&&photoMode)return;
     try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
-    try{groundMat.color.copy(PALE2);if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}if(groundMat.map&&!photoMode){groundMat.map=null;groundMat.needsUpdate=true;}}catch(e){}
+    try{if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}if(groundMat.map&&!photoMode){groundMat.map=null;groundMat.needsUpdate=true;}}catch(e){}
     try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(o.material===poolMat||(o.isGroup||o.type==='Group'))o.visible=false;});}catch(e){}
     try{scene.traverse(o=>{if(o.material===poolMat)o.visible=false;});}catch(e){}}
   setInterval(flatten,1200);
@@ -3516,6 +3516,58 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
       lotMesh=new THREE.Mesh(g,lotMat);lotMesh.receiveShadow=true;lotMesh.renderOrder=1;lotMesh.raycast=()=>{};scene.add(lotMesh);}catch(e){console.warn('lot',e);}};
   try{const _hi=setHi;setHi=function(m,on){_hi(m,on);if(on&&m)showLot(m);};}catch(e){}
   setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent)showLot(m);else if(lotMesh&&!m){scene.remove(lotMesh);lotMesh=null;lotKey=null;}}catch(e){}},1500);
+})();
+/* ===== the model in the home page's language: a paper model standing in the hero's light ===== */
+(function(){
+  const lin=h=>new THREE.Color(h).convertSRGBToLinear();
+  /* panel: no beige, no black — glass, lavender insets, the warm gradient on actions */
+  const st=document.createElement('style');st.textContent=`
+.hintBox{background:color-mix(in srgb,#c9d3f6 30%,transparent)!important;color:var(--ink2)}
+button.primary{background:linear-gradient(100deg,var(--accent),var(--accent2))!important;color:#fff!important;border:0!important;box-shadow:0 8px 22px -10px color-mix(in srgb,var(--accent) 80%,transparent)}
+input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important}
+:root[data-theme="dark"] input[type=text]{background:rgba(255,255,255,.06)!important}
+/* the 3D view gets the home page's fine grain and a soft vignette of air at its edges */
+#qsGrain{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.07;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.05' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}`;
+  document.head.appendChild(st);
+  try{const g=document.createElement('div');g.id='qsGrain';(document.getElementById('view')||document.body).appendChild(g);}catch(e){}
+  /* façades: plain paper, only a whisper of the floors (no drawn windows) */
+  try{const c=wallTex.image,g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.fillStyle='rgba(60,70,130,0.035)';g.fillRect(0,c.height-2,c.width,2);wallTex.needsUpdate=true;}catch(e){}
+  /* neighbours: white lavender, matte */
+  try{Object.assign(USAGE,{'Résidentiel':[0xf6f7fd,0xe9ebf6],'Commercial et services':[0xf5f6fc,0xe6e9f5],'Industriel':[0xf2f4fa,0xe3e6f2],'Religieux':[0xf6f5fb,0xe8e6f3],'Agricole':[0xf5f5fa,0xe6e6f1],'Sportif':[0xf4f5fb,0xe4e7f3]});
+    for(const k in matCache){const m=matCache[k];if(!k.startsWith('T:')&&Array.isArray(m)){const u=USAGE[k];if(u){m[0].color.set(u[1]);m[1].color.set(u[0]);}else{m[0].color.set(0xe6e8f4);m[1].color.set(0xf3f4fb);}}}}catch(e){}
+  try{ROOF.tuile.color.set(0xe8e9f4);ROOF.ardoise.color.set(0xdcdfee);ROOF.zinc.color.set(0xe3e5f1);ROOF.autre.color.set(0xe9eaf4);}catch(e){}
+  /* the studied building: the warm light of the hero — peach walls, rosy roof */
+  const HW=lin(0xf6a585),HR=lin(0xee8aa0);
+  try{PART_HI.roof.color.copy(HR);PART_HI.wall.color.copy(HW);PART_HI.wallT.color.copy(HW);}catch(e){}
+  try{for(const k in matCache){if(k.startsWith('T:')){matCache[k][0].color.copy(HR);matCache[k][1].color.copy(HW);}}
+    const _m=matsFor;matsFor=function(u,t){const r=_m(u,t);if(t){r[0].color.copy(HR);r[1].color.copy(HW);}else if(!USAGE[u]&&!r._qs){r[0].color.set(0xe6e8f4);r[1].color.set(0xf3f4fb);r._qs=1;}return r;};}catch(e){}
+  /* markers and lines in the hero's orange */
+  try{marker.material.color.set(0xf0773a);facadeLine.material.color.set(0xf0773a);markerArrow.setColor(new THREE.Color(0xf0773a));}catch(e){}
+  /* a soft halo of warm light on the ground around the studied building, on the sun's side */
+  const haloTex=(()=>{const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d'),r=g.createRadialGradient(128,128,0,128,128,128);
+    r.addColorStop(0,'rgba(255,170,120,1)');r.addColorStop(0.35,'rgba(250,140,150,.55)');r.addColorStop(0.7,'rgba(200,180,250,.18)');r.addColorStop(1,'rgba(200,180,250,0)');g.fillStyle=r;g.fillRect(0,0,256,256);return new THREE.CanvasTexture(c);})();
+  const halo=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:haloTex,transparent:true,depthWrite:false,opacity:0.5,fog:false,polygonOffset:true,polygonOffsetFactor:-8,polygonOffsetUnits:-30}));
+  halo.renderOrder=2;halo.visible=false;halo.raycast=()=>{};scene.add(halo);
+  const placeHalo=()=>{try{const m=S.building||S.target;if(!m||!m.parent||(typeof photoMode!=='undefined'&&photoMode)){halo.visible=false;return;}
+    const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
+    const d=sun.position.clone().sub(sun.target.position);const up=d.z>0;d.z=0;if(d.lengthSq()>0)d.normalize();
+    const R=Math.max(60,Math.max(sz.x,sz.y)*3.2);halo.scale.set(R,R,1);halo.position.set(c.x+d.x*R*0.18,c.y+d.y*R*0.18,box.min.z+0.45);
+    halo.material.opacity=up?0.5:0.22;halo.material.color.set(up?0xffffff:0x9aa3ff);halo.visible=true;}catch(e){}};
+  setInterval(placeHalo,700);
+  /* edges: a fine lavender line, like an architect's model */
+  setInterval(()=>{try{if(edgeLines&&!edgeLines._qs){edgeLines.material.color.set(0x8f95c0);edgeLines.material.opacity=0.3;edgeLines._qs=1;}}catch(e){}},1000);
+  /* the air: the hero's sky, lavender shadows (a pastel fill), and a haze that dissolves the far city */
+  try{const _us=updateSky;updateSky=function(sp,wx){_us(sp,wx);const alt=sp.alt;
+    if(alt>0.1){const t=Math.min(1,(alt-0.1)/0.5);skyUni.top.value.copy(lerpC(0xa6b6f6,0xbccaf8,t));skyUni.horizon.value.copy(lerpC(0xffc9b6,0xf6e0ec,t));}
+    else if(alt>-0.12){const t=(alt+0.12)/0.22;skyUni.top.value.copy(lerpC(0x141a3c,0xa6b6f6,t));skyUni.horizon.value.copy(lerpC(0x262050,0xffb59a,t));}
+    else{skyUni.top.value.copy(lerpC(0x080c20,0x080c20,0));skyUni.horizon.value.copy(lerpC(0x1a1f45,0x1a1f45,0));}
+    skyUni.ground.value.copy(skyUni.horizon.value);
+    const day=Math.max(0,Math.min(1,alt/0.2));
+    hemi.color=lerpC(0x4a5294,0xdfe4ff,day);hemi.groundColor=lerpC(0x2a2f5c,0xe7dcf2,day);  /* shadows take this lavender fill */
+    if(day<0.05)hemi.intensity=Math.max(hemi.intensity,0.55);
+    scene.fog=new THREE.FogExp2(skyUni.horizon.value.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.0011);
+    try{groundMat.color.copy(day>0.05?lin(0xeef0f9):lin(0x262c55));}catch(e){}};}catch(e){console.warn('model sky',e);}
 })();
 
 /* ===== Quartier Soleil v5: the v4 roof model, own copy (Toit Soleil untouched), faster and returning its rectangles ===== */
