@@ -3961,6 +3961,7 @@ void main(){
 function qsModel5(R,opt){opt=opt||{};
   const TT={},tk=k=>{const n=performance.now();TT[k]=(TT[k]||0)+n-TT._;TT._=n;};TT._=performance.now();const t0=performance.now(), raw=S.rawOrtho, MH=S.lidarR&&S.lidarR.mnh, Zl=R.Z; if(!MH||!Zl)return null;
   const rings=R.rings.map(r=>r.map(p=>[p.x+(opt.noShift?0:R.sh.dx),p.y+(opt.noShift?0:R.sh.dy)])); if(!rings.length)return null;
+  const others=(R.others||[]).map(r=>r.map(p=>[p.x+(opt.noShift?0:R.sh.dx),p.y+(opt.noShift?0:R.sh.dy)]));
   const inPoly=(p,P)=>{let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const a=P[i],b=P[j];if((a[1]>p[1])!=(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;};
   const segD=(x,y,q,r2)=>{const dx=r2[0]-q[0],dy=r2[1]-q[1],L2=dx*dx+dy*dy||1;let t=((x-q[0])*dx+(y-q[1])*dy)/L2;t=Math.max(0,Math.min(1,t));return Math.hypot(x-q[0]-t*dx,y-q[1]-t*dy);};
   const nearRing=(x,y,dm)=>rings.some(rg=>inPoly([x,y],rg)||rg.some((q,i)=>segD(x,y,q,rg[(i+1)%rg.length])<dm));
@@ -3977,7 +3978,7 @@ function qsModel5(R,opt){opt=opt||{};
   const t=[Math.cos(Ad),Math.sin(Ad)],n=[-t[1],t[0]];const U=(x,y)=>x*t[0]+y*t[1],V=(x,y)=>x*n[0]+y*n[1],XY=(u,v)=>[u*t[0]+v*n[0],u*t[1]+v*n[1]];
   let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;const rUV=rings.map(rg=>rg.map(p=>[U(...p),V(...p)]));rUV.forEach(rg=>rg.forEach(p=>{u0=Math.min(u0,p[0]);u1=Math.max(u1,p[0]);v0=Math.min(v0,p[1]);v1=Math.max(v1,p[1]);}));u0-=2;u1+=2;v0-=2;v1+=2;
   const g=big?1.0:0.5;const NU=Math.round((u1-u0)/g),NV=Math.round((v1-v0)/g);const H=[];
-  for(let i=0;i<NU;i++){H.push([]);for(let j=0;j<NV;j++){const [x,y]=XY(u0+(i+.5)*g,v0+(j+.5)*g);const z=Zl(x,y);let h=z==null?0:z-Z0;if(!nearRing(x,y,1.5))h=Math.min(h,0);else if(opt.green&&h>2&&opt.green(x,y)>12)h=NaN;H[i].push(h);}}
+  for(let i=0;i<NU;i++){H.push([]);for(let j=0;j<NV;j++){const [x,y]=XY(u0+(i+.5)*g,v0+(j+.5)*g);const z=Zl(x,y);let h=z==null?0:z-Z0;if(!nearRing(x,y,1.5)||(others.length&&!rings.some(rg=>inPoly([x,y],rg))&&others.some(rg=>inPoly([x,y],rg))))h=Math.min(h,0);else if(opt.green&&h>2&&opt.green(x,y)>12)h=NaN;H[i].push(h);}}
   /* foliage over a roof (green on the photo): unknown for the fit; elsewhere filled from its known neighbours */
   const HR=H.map(r=>r.slice());for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){if(HR[i][j]===HR[i][j])continue;let s=0,c=0;for(let rr=1;rr<=4&&!c;rr++)for(let a=-rr;a<=rr;a++)for(let b=-rr;b<=rr;b++){const v=HR[i+a]&&HR[i+a][j+b];if(v!=null&&v===v){s+=v;c++;}}H[i][j]=c?s/c:0;}
   const mask=H.map(r=>r.map(h=>h>2?1:0)),maskD=(i,j)=>{for(let a=-2;a<=2;a++)for(let c=-2;c<=2;c++){const ii=i+a,jj=j+c;if(ii>=0&&jj>=0&&ii<NU&&jj<NV&&mask[ii][jj])return 1;}return 0;};
@@ -4302,6 +4303,9 @@ function qsWorkerData(){const w=qsWorker();if(!w)return;const L=S.lidarR||{},pk=
   if(QW.sent!==S.T||QW.sentH!==L.mnh){QW.sent=S.T;QW.sentH=L.mnh;QW.ortho=null;w.postMessage({kind:'data',mnh:pk(L.mnh),F:pk(S.mnsF||L.mnsFine),C:pk(L.mns)});}
   const ro=S.rawOrtho;if(ro&&ro.raw&&QW.ortho!==ro){QW.ortho=ro;let o=null;try{const W=ro.raw.width,H=ro.raw.height;o={width:W,height:H,data:ro.raw.getContext('2d').getImageData(0,0,W,H).data,w:ro.w,e:ro.e,n:ro.n,s:ro.s};}catch(e){}w.postMessage({kind:'data',ortho:o});}}
 /* the model of a group of blocks, computed in the worker; resolves to the same shape as qsV4Model (or null: the current roofs stay) */
+/* the neighbours' footprints next to a family: the laser over them belongs to them (a shared garage, a semi-detached house), never to this model */
+function qsOthers(fam){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;fam.forEach(o=>o.userData.rings&&o.userData.rings[0].forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
+  const out=[];S.meshes.forEach(m=>{if(fam.includes(m)||!m.userData.rings||m.userData.monu)return;const r=m.userData.rings[0];if(!r.some(p=>p.x>x0-3&&p.x<x1+3&&p.y>y0-3&&p.y<y1+3))return;out.push(r.map(p=>({x:p.x,y:p.y})));});return out;}
 function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.userData.rings[0]))-Math.abs(areaOf(p.userData.rings[0])))[0];
   const R=roofCells(main);if(!R||R.cells.length<16)return Promise.resolve(null);
   const ud=main.userData,area=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0),big=(ud.floors||0)>=3||(ud.h||0)>9.5||area>800;
@@ -4317,7 +4321,7 @@ function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.us
       const cur=qsCurErr(fam,R),mine=qsV4Err(M,R);QV4.log.push({x:Math.round(main.userData.rings[0][0].x),y:Math.round(main.userData.rings[0][0].y),cur:+cur.toFixed(2),v4:+mine.toFixed(2),types:M.v4.types.join(',')});
       res(mine<cur*0.8&&cur-mine>0.08?{M,main}:null);});
     const wantStages=!!(QW.onStage&&QW.wantStages&&QW.wantStages(fam));if(wantStages){(QW.fam||(QW.fam=new Map())).set(id,fam);}
-    w.postMessage({kind:'model',id,big,stages:wantStages,R:{rings:R.rings,sh:R.sh,s:R.s}});});}
+    const others=qsOthers(fam);w.postMessage({kind:'model',id,big,stages:wantStages,R:{rings:R.rings,sh:R.sh,s:R.s,others}});});}
 /* windows on the v5 walls: the wall lines, their top and bottom are known along them, so no ray is needed to find the wall;
    rays only for what stands in front (a neighbour, a wing in a corner). Same rules as before: the study's storeys, 3.5 m bays,
    lintel under the eave, sill above the ground in front. */
