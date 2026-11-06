@@ -2931,7 +2931,7 @@ function qsV4One(fam,pre){
   const tallAt=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
   let V5=(window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4')?null:qsV5Build(M,fam,main);QV4.v5log=QV4.v5log||[];
   /* a footprint the rectangles do not fit (an old town's slanted, irregular plots): the polygon method of v4, on the same fitted roof */
-  if(V5){const fit=qsV5Fit(V5.OUT,fam);if(fit<0.8){QV4.v5log.push({fallback:+fit.toFixed(2)});V5=null;}else QV4.v5log.push({n:V5.n,ext:V5.ext,fit:+fit.toFixed(2),log:V5.log});}
+  if(V5){const fit=qsV5Fit(V5.OUT,fam);if(fit<0.6){QV4.v5log.push({fallback:+fit.toFixed(2)});V5=null;}else QV4.v5log.push({n:V5.n,ext:V5.ext,fit:+fit.toFixed(2),log:V5.log});}
   if(!V5&&!M.pans&&M.L5)M.pans=qsPansFromLeaves(M);if(!V5&&!M.pans)return false;
   let drawn=[],OUT=null;
   if(V5){drawn=V5.drawn;OUT=V5.OUT;}else{
