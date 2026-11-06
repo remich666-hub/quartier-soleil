@@ -2988,7 +2988,11 @@ function qsV4One(fam){
       /* a neighbour only if it really lies on the other side (two pans folded onto the same side of an outline edge are not neighbours) */
       if(tw){const px=mx+nx*0.05,py=my+ny*0.05;if(!(inRing(px,py,tw.d.outer)&&!tw.d.holes.some(h=>inRing(px,py,h))))tw=null;}
       const under=tallAt(mx-nx*0.15,my-ny*0.15)||blockAt(mx-nx*0.15,my-ny*0.15)||main;let lo0,lo1;
-      if(tw){const ta=tw.d.vz.get(a.id),tb=tw.d.vz.get(b.id);if((ta+tb)/2>=(za+zb)/2-0.05)continue; /* a ridge, a hip, a valley, or the higher side's wall */
+      if(tw){const ta=tw.d.vz.get(a.id),tb=tw.d.vz.get(b.id),da=za-ta,db=zb-tb;
+        /* the two pans cross along the edge (each higher at one end): this side gets its wall where it is the higher one */
+        if((da>0.05)!==(db>0.05)&&Math.max(da,db)>0.05){const t=da/(da-db),X=[a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t],zc=za+(zb-za)*t;
+          if(da>0)quad([a.x,a.y],X,ta,zc,za,zc,nx,ny,under);else quad(X,[b.x,b.y],zc,tb,zc,zb,nx,ny,under);continue;}
+        if((ta+tb)/2>=(za+zb)/2-0.05)continue; /* a ridge, a hip, a valley, or the higher side's wall */
         lo0=Math.min(ta,za-0.03);lo1=Math.min(tb,zb-0.03);if(L>=2.2)XL.push({a:{x:a.x,y:a.y},b:{x:b.x,y:b.y},nx,ny});}
       else if(inOut(mx+nx*0.15,my+ny*0.15)){const zo=drawnZ(mx+nx*0.15,my+ny*0.15);if(isFinite(zo)&&zo>=Math.min(za,zb)-0.05)continue;if(isFinite(zo)){lo0=Math.min(zo,za-0.03);lo1=Math.min(zo,zb-0.03);}else continue;} /* a leftover gap inside: a step at most */
       else continue; /* an outline edge: its wall is built on the outline itself, below */
