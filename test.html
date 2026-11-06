@@ -2951,6 +2951,7 @@ function qsV4One(fam){
       D2.splice(bi,1);un.forEach(poly=>D2.push({outer:poly[0].slice(0,-1),holes:poly.slice(1).map(h=>h.slice(0,-1)),zf:d.zf,n:d.n}));});
     drawn.length=0;drawn.push(...D2);}
   qsJoinPans(drawn,qsAxis(main));
+  qsFill(drawn,OUT); /* the ridge lines moved: close again any strip left between the pans and the outline */
   qsWeld(drawn,OUT);
   const inOut=(x,y)=>!OUT||OUT.some(poly=>pointInPoly(x,y,poly[0].map(([a,b])=>({x:a,y:b})))&&!poly.slice(1).some(h=>pointInPoly(x,y,h.map(([a,b])=>({x:a,y:b})))));
   const inRing=(x,y,R)=>{let o=false;for(let i=0,j=R.length-1;i<R.length;j=i++){const [a,b]=R[i],[c,d]=R[j];if((b>y)!==(d>y)&&x<(c-a)*(y-b)/(d-b)+a)o=!o;}return o;};
@@ -2984,7 +2985,7 @@ function qsV4One(fam){
       const under=tallAt(mx-nx*0.15,my-ny*0.15)||blockAt(mx-nx*0.15,my-ny*0.15)||main;let lo0,lo1;
       if(tw){const ta=tw.d.vz.get(a.id),tb=tw.d.vz.get(b.id);if((ta+tb)/2>=(za+zb)/2-0.05)continue; /* a ridge, a hip, a valley, or the higher side's wall */
         lo0=Math.min(ta,za-0.03);lo1=Math.min(tb,zb-0.03);if(L>=2.2)XL.push({a:{x:a.x,y:a.y},b:{x:b.x,y:b.y},nx,ny});}
-      else if(inOut(mx+nx*0.15,my+ny*0.15)){const zo=drawnZ(mx+nx*0.15,my+ny*0.15);if(!isFinite(zo)||zo>=Math.min(za,zb)-0.05)continue;lo0=Math.min(zo,za-0.03);lo1=Math.min(zo,zb-0.03);} /* a leftover gap inside: a step at most */
+      else if(inOut(mx+nx*0.15,my+ny*0.15)){const zo=drawnZ(mx+nx*0.15,my+ny*0.15);if(isFinite(zo)&&zo>=Math.min(za,zb)-0.05)continue;if(isFinite(zo)){lo0=Math.min(zo,za-0.03);lo1=Math.min(zo,zb-0.03);}else lo0=lo1=under.userData.zBase-SINK;} /* a leftover gap inside: a step at most */
       else{lo0=lo1=under.userData.zBase-SINK;}
       quad([a.x,a.y],[b.x,b.y],lo0,lo1,za,zb,nx,ny,under);}}));
   if(!P.length)return false;
@@ -3244,6 +3245,13 @@ function qsWeld(D,OUT){const tol=0.25,reps=[];let nid=0;
     for(let k=1;k<L.length;k++){if(L[k].z-g[g.length-1].z<0.6)g.push(L[k]);else{flush();g=[L[k]];}}flush();});
   const byXY=new Map();reps.forEach(r=>byXY.set(r.x.toFixed(4)+','+r.y.toFixed(4),r));
   D.forEach(d=>{d.vzOf=q=>{const r=byXY.get(q[0].toFixed(4)+','+q[1].toFixed(4));return r&&d.vz.has(r.id)?d.vz.get(r.id):d.zf(q[0],q[1]);};});}
+
+/* the strips of the outline no pan covers: each to the nearest pan, its slope carried on */
+function qsFill(D,OUT){const PC=PCSYNC;if(!OUT||!PC||!D.length)return;let gaps=[];try{gaps=PC.difference(OUT,...D.map(d=>[d.outer,...d.holes]));}catch(e){return;}
+  gaps.forEach(g=>{const R=g[0].slice(0,-1);if(R.length<3)return;let cx=0,cy=0;R.forEach(([x,y])=>{cx+=x;cy+=y;});cx/=R.length;cy/=R.length;
+    let bi=-1,bd=1e9;D.forEach((d,i)=>{d.outer.forEach((a,k)=>{const b=d.outer[(k+1)%d.outer.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey||1;const t=Math.max(0,Math.min(1,((cx-a[0])*ex+(cy-a[1])*ey)/L2));const dd=Math.hypot(a[0]+ex*t-cx,a[1]+ey*t-cy);if(dd<bd){bd=dd;bi=i;}});});
+    if(bi<0)return;const d=D[bi];let un;try{un=PC.union([d.outer,...d.holes],g);}catch(e){return;}
+    D.splice(bi,1);un.forEach(poly=>D.push(Object.assign({},d,{outer:poly[0].slice(0,-1),holes:poly.slice(1).map(h=>h.slice(0,-1))})));});}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
