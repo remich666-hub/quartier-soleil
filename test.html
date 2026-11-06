@@ -3497,8 +3497,8 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
 (function(){
   const PALE=new THREE.Color(0xe9ebf2).convertSRGBToLinear(),PALE2=new THREE.Color(0xdfe2ec).convertSRGBToLinear(),TRUNK=new THREE.Color(0xd2d5df).convertSRGBToLinear();
   const vegMat=new THREE.MeshLambertMaterial({color:PALE}),vegMatD=new THREE.MeshLambertMaterial({color:PALE,side:THREE.DoubleSide}),trunkMat=new THREE.MeshLambertMaterial({color:TRUNK});
-  const lotMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xf3b99a).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-20});
-  const plainMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xeef0f5).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
+  const lotMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xf2a988).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-20});
+  const plainMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xe6e8f3).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
   try{ROOF.tuile.color.set(0xdcdde6);ROOF.ardoise.color.set(0xc9ccd8);ROOF.zinc.color.set(0xd6d8e2);ROOF.autre.color.set(0xdfe1e9);}catch(e){}
   const swap=(m,mat)=>{if(m&&m.material!==mat){m.material=mat;if(m.isInstancedMesh&&m.instanceColor)m.instanceColor=null;}};
   function flatten(){if(typeof photoMode!=='undefined'&&photoMode)return;
@@ -3584,7 +3584,9 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
       halo=new THREE.Mesh(g,haloMat);halo.renderOrder=2;halo.raycast=()=>{};halo.frustumCulled=false;scene.add(halo);}
     halo.visible=true;haloMat.opacity=up?0.9:0.45;haloMat.color.set(up?0xffffff:0x9aa3ff);}catch(e){}};
   /* replaced by the global glow below */
-  try{const sc=sun.shadow.camera;sc.left=-300;sc.right=300;sc.top=300;sc.bottom=-300;sc.updateProjectionMatrix();sun.shadow.bias=-0.0003;sun.shadow.normalBias=0.08;}catch(e){}
+  try{const sc=sun.shadow.camera;sc.left=-300;sc.right=300;sc.top=300;sc.bottom=-300;sc.near=1300;sc.far=2300;sc.updateProjectionMatrix();sun.shadow.bias=-0.00006;sun.shadow.normalBias=0.04;}catch(e){}
+  /* roads: a lavender grey, so the street reads as ground */
+  setInterval(()=>{try{if(typeof photoMode!=='undefined'&&photoMode)return;roadMeshes.forEach(m=>{(Array.isArray(m.material)?m.material:[m.material]).forEach(x=>{if(x&&x.color&&!x._qsRoad){x.color.set(0xd6d9ea);if(x.vertexColors){x.vertexColors=false;x.needsUpdate=true;}if(x.map){x.map=null;x.needsUpdate=true;}x._qsRoad=1;}});});}catch(e){}},1500);
   /* edges: a fine lavender line, like an architect's model */
   setInterval(()=>{try{if(edgeLines&&!edgeLines._qs){edgeLines.material.color.set(0x8f95c0);edgeLines.material.opacity=0.3;edgeLines._qs=1;}}catch(e){}},1000);
   /* the air: the hero's sky, lavender shadows (a pastel fill), and a haze that dissolves the far city */
@@ -3597,7 +3599,7 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
     hemi.color=lerpC(0x3a438a,0xc3cbff,day);hemi.groundColor=lerpC(0x1c2048,0xd9c8ec,day);  /* shadows take this lavender fill */
     hemi.intensity=day>0.05?0.58:0.42;if(day>0.05)sun.intensity=Math.max(sun.intensity,1.05);
     scene.fog=new THREE.FogExp2(skyUni.horizon.value.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.0005);
-    try{groundMat.color.copy(day>0.05?lin(0xeef0f9):lin(0x262c55));}catch(e){}
+    try{groundMat.color.copy(day>0.05?lin(0xe2e4f1):lin(0x262c55));}catch(e){}
     try{const em=lin(0x8a3a2c).multiplyScalar(1-day);[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(m=>m&&m.emissive&&m.emissive.copy(em));for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(m=>m.emissive&&m.emissive.copy(em));}catch(e){}};}catch(e){console.warn('model sky',e);}
 })();
 try{window.__wt=wallTex;window.__scene=scene;window.__cam=cam;window.__drive=()=>{clearInterval(window.__dv);window.__dv=setInterval(()=>{try{frame(performance.now());}catch(e){}},60);};}catch(e){}
@@ -3611,37 +3613,31 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
    tint and a fine screen grain that fade with the distance to the house. Geometry, shadows and the sun computations are untouched. ===== */
 (function(){
   const QSU={uQsC:{value:new THREE.Vector2(0,0)},uQsR:{value:120},uQsK:{value:0},uQsD0:{value:80},uQsD1:{value:250},uQsOn:{value:1}};
-  const VS_DECL='varying vec3 vQsG;\n',FS_DECL='uniform vec2 uQsC;uniform float uQsR;uniform float uQsK;uniform float uQsD0;uniform float uQsD1;uniform float uQsOn;varying vec3 vQsG;\nfloat qsH3(vec3 p){p=fract(p*vec3(.1031,.1030,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}\n';
+  const VS_DECL='uniform vec2 uQsC;varying vec3 vQsG;varying vec3 vQsM;\n',FS_DECL='uniform vec2 uQsC;uniform float uQsR;uniform float uQsK;uniform float uQsD0;uniform float uQsD1;uniform float uQsOn;varying vec3 vQsG;varying vec3 vQsM;\nfloat qsH3(vec3 p){p=fract(p*vec3(.1031,.1030,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}\n';
   /* the dissolve: opaque near the house, then the grain decides which surface points stay (an organic, slowly wavy outline),
      until only the sky and the haze remain. Each point is kept or dropped (no blending): cheap, no sorting, shadows untouched. */
   const FS_DIS=`
-  { vec2 rel=vQsG.xy-uQsC;float an=atan(rel.y,rel.x);
-    float wob=1.0+0.13*sin(3.0*an+1.3)+0.07*sin(5.0*an-0.7)+0.05*sin(9.0*an+2.1);
-    float al=1.0-smoothstep(uQsD0,uQsD1,length(rel)/wob);
-    float cdD=length(cameraPosition-vQsG),lodD=log2(max(cdD*0.0028,0.02)/0.02);
-    vec3 pd=vQsG/(0.02*exp2(floor(lodD)));
-    #ifndef QS_KEEP
-    if(uQsOn>0.5&&qsH3(floor(pd)+vec3(17.0,-5.0,3.0))>al)discard;
-    #endif
-  }
+  #ifndef QS_KEEP
+  { float al=1.0-smoothstep(uQsD0,uQsD1,vQsM.x);
+    if(uQsOn>0.5&&al<0.999){vec3 pd=vQsG/(0.02*exp2(floor(vQsM.y)));if(qsH3(floor(pd)+vec3(17.0,-5.0,3.0))>al)discard;} }
+  #endif
 `;
   const FS_BODY=`
-  { float d=length(vQsG.xy-uQsC)/uQsR;
+  if(uQsK>0.01){ float d=length(vQsG.xy-uQsC)/uQsR;
     vec3 warm=vec3(1.0,0.66,0.50),pink=vec3(0.97,0.62,0.72),lav=vec3(0.76,0.74,0.98);
     vec3 tint=d<0.6?mix(warm,pink,d/0.6):mix(pink,lav,clamp((d-0.6)/1.4,0.0,1.0));
     float a=uQsK*0.2*exp(-d*1.9);
     /* the grain lives on the surfaces and in the light: lit faces carry more of it, shade less; its cell size follows the
        distance to the camera (two power-of-two levels blended), so a dot stays ~2-3 px on screen while attached to its surface */
-    float lum=dot(gl_FragColor.rgb,vec3(0.3,0.59,0.11)),cd=length(cameraPosition-vQsG);
-    float lod=log2(max(cd*0.0028,0.02)/0.02),l0=floor(lod),lt=fract(lod);
+    float lum=dot(gl_FragColor.rgb,vec3(0.3,0.59,0.11));
+    float lod=vQsM.y,l0=floor(lod),lt=fract(lod);
     float c0=0.02*exp2(l0),c1=c0*2.0;
     vec3 p0=vQsG/c0,p1=vQsG/c1;
-    float dens=uQsK*0.6*exp(-d*1.8)*mix(0.2,1.0,smoothstep(0.35,0.85,lum));
-    float d0=step(qsH3(floor(p0)),dens)*step(length(fract(p0)-0.5),0.36),d1=step(qsH3(floor(p1)),dens)*step(length(fract(p1)-0.5),0.36);
-    float dots=mix(d0,d1,lt);
+    float dens=uQsK*0.6*exp(-d*1.8)*mix(0.2,1.0,smoothstep(0.35,0.85,lum)),dots=0.0;
+    if(dens>0.003){float d0=step(qsH3(floor(p0)),dens)*step(length(fract(p0)-0.5),0.36),d1=step(qsH3(floor(p1)),dens)*step(length(fract(p1)-0.5),0.36);dots=mix(d0,d1,lt);}
     gl_FragColor.rgb=mix(gl_FragColor.rgb,tint,clamp(a+dots*0.32,0.0,0.6)); }
 `;
-  const VS_POS='#include <project_vertex>\n{vec4 qw=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nqw=instanceMatrix*qw;\n#endif\nqw=modelMatrix*qw;vQsG=qw.xyz;}';
+  const VS_POS='#include <project_vertex>\n{vec4 qw=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nqw=instanceMatrix*qw;\n#endif\nqw=modelMatrix*qw;vQsG=qw.xyz;vec2 rl=qw.xy-uQsC;float an=atan(rl.y,rl.x);float wob=1.0+0.13*sin(3.0*an+1.3)+0.07*sin(5.0*an-0.7)+0.05*sin(9.0*an+2.1);vQsM=vec3(length(rl)/wob,log2(max(length(cameraPosition-qw.xyz)*0.0028,0.02)/0.02),0.0);}';
   const inject=(m,sh,keep)=>{Object.assign(sh.uniforms,QSU);if(keep)sh.fragmentShader='#define QS_KEEP\n'+sh.fragmentShader;
     sh.vertexShader=VS_DECL+sh.vertexShader.replace('#include <project_vertex>',VS_POS);
     let f=FS_DECL+sh.fragmentShader;const glow=m.isMeshLambertMaterial;
@@ -3670,7 +3666,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   /* the studied building keeps its own colours (it is the light) */
   const isHouse=m=>{try{if(m===PART_HI.roof||m===PART_HI.wall||m===PART_HI.wallT)return true;for(const k in matCache)if(k.startsWith('T:')&&matCache[k].includes(m))return true;}catch(e){}return false;};
   const sweep=()=>{try{scene.traverse(o=>{if(!o.isMesh&&!o.isLine)return;const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(m&&!isHouse(m)&&!m._qsKeepClone)patch(m,false);});});}catch(e){}};
-  setInterval(sweep,600);
+  setInterval(sweep,2500);
   try{const _add=scene.add.bind(scene);scene.add=function(...a){const r=_add(...a);a.forEach(o=>{try{o.traverse(c=>{if(c.isMesh||c.isLine){const ms=Array.isArray(c.material)?c.material:[c.material];ms.forEach(m=>{if(m&&!isHouse(m)&&!m._qsKeepClone)patch(m,false);});}});}catch(e){}});return r;};}catch(e){}
   /* centre on the studied building; strength follows the hour (softer at night) */
   setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent){const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
