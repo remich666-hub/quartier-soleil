@@ -2942,7 +2942,7 @@ function qsV4One(fam){
       [A,B,C].forEach(q=>{P.push(q[0],q[1],d.zf(q[0],q[1]));N.push(d.n[0],d.n[1],d.n[2]);});});});
   /* walls between the block tops and the roof: along every outline (closed, follows the drawn roof edge), and the steps inside */
   const GP=[],GN=[],TP=[],TN=[],TU=[];
-  const quad=(a,b,za0,zb0,za1,zb1,nx,ny,t0,t1,zb)=>{if(za1-za0<0.03&&zb1-zb0<0.03)return;const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]],uu=[t0,t1,t1,t0];
+  const quad=(a,b,za0,zb0,za1,zb1,nx,ny,t0,t1,zb)=>{if(za1-za0<0.03&&zb1-zb0<0.03)return;if((b[1]-a[1])*nx-(b[0]-a[0])*ny<0){[a,b]=[b,a];[za0,zb0]=[zb0,za0];[za1,zb1]=[zb1,za1];[t0,t1]=[t1,t0];} /* front face outward (the window material is one-sided) */const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]],uu=[t0,t1,t1,t0];
     const tall=Math.min(za1-za0,zb1-zb0)>=2.4;[[0,1,2],[0,2,3]].forEach(k=>k.forEach(i=>{if(tall){TP.push(...t[i]);TN.push(nx,ny,0);TU.push(uu[i],t[i][2]-zb);}else{GP.push(...t[i]);GN.push(nx,ny,0);}}));};
   fam.forEach(o=>{const r=o.userData.rings[0],n=r.length,area=areaOf(r),zb=topAbs(o);
     for(let k=0;k<n;k++){const a=r[k],b=r[(k+1)%n],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.05)continue;let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;if(area>0){nx=-nx;ny=-ny;}
