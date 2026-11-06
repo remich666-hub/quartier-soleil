@@ -2995,7 +2995,7 @@ function qsV4One(fam){
           if(da>0)quad([a.x,a.y],X,ta,zc,za,zc,nx,ny,under);else quad(X,[b.x,b.y],zc,tb,zc,zb,nx,ny,under);continue;}
         if((ta+tb)/2>=(za+zb)/2-0.05){dbg('twHigher '+ta.toFixed(2)+'/'+tb.toFixed(2));continue;} /* a ridge, a hip, a valley, or the higher side's wall */
         lo0=Math.min(ta,za-0.03);lo1=Math.min(tb,zb-0.03);if(L>=2.2)XL.push({a:{x:a.x,y:a.y},b:{x:b.x,y:b.y},nx,ny});}
-      else if(inOut(mx+nx*0.15,my+ny*0.15)){const ox=mx+nx*0.15,oy=my+ny*0.15;let zo=-Infinity;drawn.forEach(e=>{if(e!==d&&inRing(ox,oy,e.outer)&&!e.holes.some(h=>inRing(ox,oy,h)))zo=Math.max(zo,e.zf(ox,oy));}); /* the roof beyond: the other pans only */dbg('inOut zo='+zo);if(isFinite(zo)&&zo>=Math.min(za,zb)-0.05)continue;if(isFinite(zo)){lo0=Math.min(zo,za-0.03);lo1=Math.min(zo,zb-0.03);}else continue;} /* a leftover gap inside: a step at most */
+      else if(inOut(mx+nx*0.15,my+ny*0.15)){const ox=mx+nx*0.15,oy=my+ny*0.15;let zo=-Infinity;drawn.forEach(e=>{if(e!==d&&inRing(ox,oy,e.outer)&&!e.holes.some(h=>inRing(ox,oy,h)))zo=Math.max(zo,e.zf(ox,oy));}); /* the roof beyond: the other pans only */dbg('inOut zo='+zo);if(isFinite(zo)&&zo>=Math.max(za,zb)-0.05)continue; /* a wall wherever this edge stands above the roof beyond, not only where its low end does */if(isFinite(zo)){lo0=Math.min(zo,za-0.03);lo1=Math.min(zo,zb-0.03);}else continue;} /* a leftover gap inside: a step at most */
       else{dbg('outline');continue;} /* an outline edge: its wall is built on the outline itself, below */
       quad([a.x,a.y],[b.x,b.y],lo0,lo1,za,zb,nx,ny,under);}}));
   /* the outer walls stand on the outline itself, from under the ground up to the roof as drawn just inside it (the roof mesh,
