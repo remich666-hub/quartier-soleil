@@ -2884,7 +2884,7 @@ const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0,log:[]};
 ['pointerdown','pointermove','wheel','touchstart','keydown'].forEach(k=>addEventListener(k,e=>{if(k!=='pointermove'||e.buttons)QV4.last=performance.now();},{passive:true,capture:true}));
 const qsSleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function qsV4(){
-  const T=S.T; QV4.T=T; QV4.rings=[]; QV4.n=0; QV4.ms=0; QV4.log=[];
+  const T=S.T; QV4.T=T; QV4.rings=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
   for(let i=0;i<400&&!(S.lidarBuilt&&S.lidarR&&S.lidarR.mnh&&S.T&&S.T.lidarBuilt);i++){await qsSleep(100);if(S.T!==T)return;}
   if(S.T!==T||!S.lidarBuilt)return;
   await qsSleep(400); /* let the scene settle (vegetation, edges) */
@@ -2915,23 +2915,40 @@ function qsV4Model(fam){
 function qsV4One(fam){
   const r=qsV4Model(fam); if(!r)return false; const {M,main}=r, A0=S.alt0, dx=-M.sh0.dx, dy=-M.sh0.dy, u=main.userData;
   const X=x=>x+dx, Y=y=>y+dy;
-  /* wall top of each block: the lowest roof edge found along its own outline */
+  /* wall top of each block: the lowest roof point just inside its own outline (a tower keeps its full height, and its windows) */
   const blockAt=(x,y)=>fam.find(o=>pointInPoly(x,y,o.userData.rings[0]));
-  const top=new Map(); fam.forEach(o=>top.set(o,Infinity));
-  M.pieces.forEach(pc=>pc.edgeProfiles.forEach(ep=>{if(!ep.outer)return;ep.prof.forEach(p=>{const L=Math.hypot(ep.b[0]-ep.a[0],ep.b[1]-ep.a[1])||1,nx=(ep.b[1]-ep.a[1])/L,ny=-(ep.b[0]-ep.a[0])/L;
-    const o=blockAt(X(p[0])-nx*0.4,Y(p[1])-ny*0.4)||blockAt(X(p[0])+nx*0.4,Y(p[1])+ny*0.4);if(o)top.set(o,Math.min(top.get(o),p[2]-A0-o.userData.zBase));});}));
-  fam.forEach(o=>{let t=top.get(o);if(!isFinite(t)){const ps=o.userData.rings[0];let z=Infinity;ps.forEach(p=>M.pieces.forEach(pc=>{if(pointInPoly(p.x-dx,p.y-dy,pc.P.map(q=>({x:q[0],y:q[1]}))))z=Math.min(z,pc.roofZ(p.x-dx,p.y-dy)-A0-o.userData.zBase);}));t=z;}
-    top.set(o,isFinite(t)?Math.max(2.2,t-0.05):o.userData.h);});
-  /* roof pans */
-  const P=[],N=[]; M.pans.forEach(p=>{const n=p.n;p.tris.forEach(v=>{P.push(X(v.x),Y(v.y),v.z-A0);N.push(n[0],n[1],n[2]);});});
-  /* walls above each block's top: outer edges from the block top, inner steps from the lower piece's roof */
+  const Mpolys=M.pieces.map(pc=>pc.P.map(q=>({x:q[0],y:q[1]})));
+  const roofAt=(x,y)=>{let z=-Infinity;M.pieces.forEach((pc,k)=>{if(pointInPoly(x-dx,y-dy,Mpolys[k]))z=Math.max(z,pc.roofZ(x-dx,y-dy));});return z;};
+  const top=new Map();
+  fam.forEach(o=>{const r=o.userData.rings[0],n=r.length;let cx=0,cy=0;r.forEach(p=>{cx+=p.x;cy+=p.y;});cx/=n;cy/=n;const pts=[];
+    for(let k=0;k<n;k++){const a=r[k],b=r[(k+1)%n];[[a.x,a.y],[(a.x+b.x)/2,(a.y+b.y)/2]].forEach(([x,y])=>{const L=Math.hypot(cx-x,cy-y)||1;pts.push([x+(cx-x)/L*0.6,y+(cy-y)/L*0.6]);});}
+    let z=Infinity;pts.forEach(([x,y])=>{if(!pointInPoly(x,y,r))return;const v=roofAt(x,y);if(isFinite(v))z=Math.min(z,v);});
+    top.set(o,isFinite(z)?Math.max(2.2,z-A0-o.userData.zBase-0.05):o.userData.h);});
+  const topAbs=o=>o.userData.zBase+top.get(o);
+  /* roof pans, clipped to the footprints, and out of any block that stands above them (a tower) */
+  const PCx=PCSYNC, ringP=r=>[r.map(p=>[p.x,p.y])];
+  let famU=null;try{famU=PCx.union(...fam.map(o=>ringP(o.userData.rings[0])));}catch(e){famU=null;}
+  const P=[],N=[];
+  M.pans.forEach(p=>{const n=p.n,zf=(x,y)=>p.a*(x-dx)+p.b*(y-dy)+p.c-A0;let Q=p.Q.map(([x,y])=>[x+dx,y+dy]);
+    let parts=[[Q]];
+    if(famU){try{parts=PCx.intersection([Q],famU);const zmin=Math.min(...Q.map(([x,y])=>zf(x,y)));const tall=fam.filter(o=>topAbs(o)>zmin+0.4);if(tall.length&&parts.length)parts=PCx.difference(parts,...tall.map(o=>ringP(o.userData.rings[0])));}catch(e){parts=[[Q]];}}
+    parts.forEach(poly=>{const outer=poly[0].slice(0,-1),holes=poly.slice(1).map(h=>h.slice(0,-1));if(outer.length<3)return;
+      let tr;try{tr=THREE.ShapeUtils.triangulateShape(outer.map(([x,y])=>new THREE.Vector2(x,y)),holes.map(h=>h.map(([x,y])=>new THREE.Vector2(x,y))));}catch(e){return;}
+      const all=outer.concat(...holes);tr.forEach(t=>{let [A,B,C]=t.map(k=>all[k]);if(!A||!B||!C)return;if((B[0]-A[0])*(C[1]-A[1])-(B[1]-A[1])*(C[0]-A[0])<0){const T=B;B=C;C=T;}
+        [A,B,C].forEach(q=>{P.push(q[0],q[1],zf(q[0],q[1]));N.push(n[0],n[1],n[2]);});});});});
+  /* walls above each block's top: outer edges moved onto the real outline, inner steps from the lower piece's roof */
   const GP=[],GN=[]; const quad=(a,b,za0,zb0,za1,zb1,nx,ny)=>{if(za1-za0<0.03&&zb1-zb0<0.03)return;const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]];[[0,1,2],[0,2,3]].forEach(k=>k.forEach(i=>{GP.push(...t[i]);GN.push(nx,ny,0);}));};
-  const pieceAt=(x,y,not)=>M.pieces.find(o=>o!==not&&pointInPoly(x,y,o.P.map(q=>({x:q[0],y:q[1]}))));
+  const segs=[];fam.forEach(o=>{const r=o.userData.rings[0];for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length];segs.push([a.x,a.y,b.x,b.y]);}});
+  const snap=(x,y)=>{let best=null;segs.forEach(([ax,ay,bx,by])=>{const ex=bx-ax,ey=by-ay,L2=ex*ex+ey*ey||1;let t=((x-ax)*ex+(y-ay)*ey)/L2;t=Math.max(0,Math.min(1,t));const px=ax+t*ex,py=ay+t*ey,d=Math.hypot(x-px,y-py);if(!best||d<best.d)best={x:px,y:py,d};});return best;};
+  const pieceAt=(x,y,not)=>M.pieces.find((o,k)=>o!==not&&pointInPoly(x,y,Mpolys[k]));
+  const inTall=(x,y,z)=>fam.some(o=>topAbs(o)>z-0.05&&pointInPoly(x,y,o.userData.rings[0]));
   M.pieces.forEach(pc=>pc.edgeProfiles.forEach(ep=>{const L=Math.hypot(ep.b[0]-ep.a[0],ep.b[1]-ep.a[1])||1,nx=(ep.b[1]-ep.a[1])/L,ny=-(ep.b[0]-ep.a[0])/L;
-    for(let k=0;k<ep.prof.length-1;k++){const p=ep.prof[k],q=ep.prof[k+1],mx=(p[0]+q[0])/2,my=(p[1]+q[1])/2;let za,zb;
-      if(ep.outer){const o=blockAt(X(mx)-nx*0.4,Y(my)-ny*0.4)||blockAt(X(mx)+nx*0.4,Y(my)+ny*0.4);if(!o)continue;za=zb=o.userData.zBase+top.get(o);}
-      else{const o=pieceAt(mx+nx*0.3,my+ny*0.3,pc);if(!o)continue;za=o.roofZ(p[0],p[1])-A0;zb=o.roofZ(q[0],q[1])-A0;if(Math.min(p[2]-A0-za,q[2]-A0-zb)<0.05)continue;}
-      quad([X(p[0]),Y(p[1])],[X(q[0]),Y(q[1])],za,zb,p[2]-A0,q[2]-A0,nx,ny);}}));
+    for(let k=0;k<ep.prof.length-1;k++){const p=ep.prof[k],q=ep.prof[k+1],mx=(p[0]+q[0])/2,my=(p[1]+q[1])/2;let za,zb,A=[X(p[0]),Y(p[1])],B=[X(q[0]),Y(q[1])];
+      if(ep.outer){const sa=snap(A[0],A[1]),sb=snap(B[0],B[1]);if(!sa||!sb||sa.d>0.9||sb.d>0.9)continue;A=[sa.x,sa.y];B=[sb.x,sb.y];
+        const o=blockAt((A[0]+B[0])/2-nx*0.4,(A[1]+B[1])/2-ny*0.4)||blockAt((A[0]+B[0])/2+nx*0.4,(A[1]+B[1])/2+ny*0.4);if(!o)continue;za=zb=topAbs(o);}
+      else{const o=pieceAt(mx+nx*0.3,my+ny*0.3,pc);if(!o)continue;za=o.roofZ(p[0],p[1])-A0;zb=o.roofZ(q[0],q[1])-A0;if(Math.min(p[2]-A0-za,q[2]-A0-zb)<0.05)continue;
+        if(inTall((A[0]+B[0])/2,(A[1]+B[1])/2,Math.max(p[2],q[2])-A0))continue;}
+      quad(A,B,za,zb,p[2]-A0,q[2]-A0,nx,ny);}}));
   if(!P.length)return false;
   /* swap: old laser pans and IGN roof triangles out, blocks cut at their new wall top, new pans and walls in */
   const goneObs=new Set();
