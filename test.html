@@ -3217,7 +3217,7 @@ function qsJoinPans(D,th){if(!D.length)return;
   for(let it=0;it<4;it++){
     const T=D.map(d=>d.outer.map(q=>({q,z:null,w:1})));const extra=D.map(()=>[]);
     D.forEach((d,i)=>d.outer.forEach((q,k)=>{const zi=d.pl[0]*q[0]+d.pl[1]*q[1]+d.pl[2];const zs=[zi],js=[];
-      D.forEach((e,j)=>{if(j===i||!onEdge(q,e))return;const zj=e.pl[0]*q[0]+e.pl[1]*q[1]+e.pl[2];if(Math.abs(zj-zi)<0.6){zs.push(zj);js.push(j);}});
+      D.forEach((e,j)=>{if(j===i||!onEdge(q,e))return;const zj=e.pl[0]*q[0]+e.pl[1]*q[1]+e.pl[2],same=d.dir&&e.dir&&d.dir[0]*e.dir[0]+d.dir[1]*e.dir[1]>0.99;if(Math.abs(zj-zi)<(same?0.08:0.6)){zs.push(zj);js.push(j);}}); /* two roofs side by side running down the same way: a step over 8 cm is kept */
       if(!js.length)return;const m=zs.reduce((s,v)=>s+v,0)/zs.length;T[i][k].z=m;T[i][k].w=4;js.forEach(j=>extra[j].push({q,z:m,w:4}));}));
     D.forEach((d,i)=>{const pts=T[i].map(t=>({q:t.q,z:t.z!=null?t.z:d.pl[0]*t.q[0]+d.pl[1]*t.q[1]+d.pl[2],w:t.w})).concat(extra[i]);if(pts.length<3)return;
       /* weighted least squares for a, b, c (centred for stability) */
@@ -3286,7 +3286,8 @@ function qsWeld(D,OUT,th){const tol=0.25,reps=[];let nid=0;
   /* one height per shared point, for the pans that meet there */
   const at=new Map();D.forEach(d=>{d.vz=new Map();d.rings.forEach(R=>R.forEach(r=>{if(!at.has(r.id))at.set(r.id,[]);const L=at.get(r.id);if(!L.some(x=>x.d===d))L.push({d,z:d.zf(r.x,r.y)});}));});
   at.forEach((L,id)=>{L.sort((x,y)=>x.z-y.z);let g=[L[0]];const flush=()=>{const m=g.reduce((s,x)=>s+x.z,0)/g.length;g.forEach(x=>x.d.vz.set(id,m));};
-    for(let k=1;k<L.length;k++){if(L[k].z-g[g.length-1].z<0.6)g.push(L[k]);else{flush();g=[L[k]];}}flush();});
+    const same=(p,q)=>p.dir&&q.dir&&(p.dir[0]||p.dir[1])&&p.dir[0]*q.dir[0]+p.dir[1]*q.dir[1]>0.99;
+    for(let k=1;k<L.length;k++){const last=g[g.length-1];if(L[k].z-last.z<(g.some(x=>same(x.d,L[k].d))?0.08:0.6))g.push(L[k]);else{flush();g=[L[k]];}}flush();});
   const byXY=new Map();reps.forEach(r=>byXY.set(r.x.toFixed(4)+','+r.y.toFixed(4),r));
   D.forEach(d=>{d.vzOf=q=>{const r=byXY.get(q[0].toFixed(4)+','+q[1].toFixed(4));return r&&d.vz.has(r.id)?d.vz.get(r.id):d.zf(q[0],q[1]);};});}
 
@@ -3339,7 +3340,10 @@ function qsCoplanar(D){const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;
   for(let i=0;i<D.length;i++)for(let j=i+1;j<D.length;j++){const d=D[i],e=D[j];if(!d.dir||!e.dir)continue;
     const flat=v=>!(v.dir[0]||v.dir[1]);if(flat(d)!==flat(e))continue;if(!flat(d)&&d.dir[0]*e.dir[0]+d.dir[1]*e.dir[1]<0.99)continue;
     const sh=d.outer.filter(q=>onB(q,e)).concat(e.outer.filter(q=>onB(q,d)));if(sh.length<2)continue;
-    let span=0;sh.forEach(a=>sh.forEach(b=>{span=Math.max(span,Math.hypot(a[0]-b[0],a[1]-b[1]));}));if(span<1.0)continue;
+    let span=0,sa=null,sb=null;sh.forEach(a=>sh.forEach(b=>{const l=Math.hypot(a[0]-b[0],a[1]-b[1]);if(l>span){span=l;sa=a;sb=b;}}));if(span<1.0)continue;
+    /* one slope continued: the two pans meet on a level line (one above the other down the slope). Side by side (their common
+       edge running down the slope) they are two roofs, each keeps its own height: a step between them stays */
+    if(!flat(d)&&Math.abs(((sb[0]-sa[0])*d.dir[0]+(sb[1]-sa[1])*d.dir[1])/span)>0.3)continue;
     if(sh.some(q=>Math.abs(z(d,q)-z(e,q))>0.3))continue;par[f(i)]=f(j);}
   const G=new Map();D.forEach((d,i)=>{const r=f(i);if(!G.has(r))G.set(r,[]);G.get(r).push(d);});
   G.forEach(L=>{if(L.length<2)return;const pts=[];L.forEach(d=>{const w=area(d.outer)/d.outer.length;d.outer.forEach(q=>pts.push({q,z:z(d,q),w}));});
