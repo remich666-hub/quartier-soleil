@@ -2957,7 +2957,9 @@ function qsV4One(fam){
       const zo=drawnZ(ox,oy);if(isFinite(zo)&&zo>=Math.min(zA,zB)-0.05)continue; /* as high beyond: a ridge, a hip, or a taller part with its own wall */
       const under=blockAt(cx-nx*0.15,cy-ny*0.15)||blockAt(ox,oy)||main, beyond=blockAt(ox,oy);
       const zb=isFinite(zo)?zo:(beyond&&beyond!==under?topAbs(beyond):topAbs(under));
-      const zlo=Math.min(zb,zA-0.03),zlo2=Math.min(zb,zB-0.03);
+      /* a block whose outline this wall lies on already has its facade up to its own top: start above it (no doubled face) */
+      let zr=zb;fam.forEach(o=>{const r=o.userData.rings[0];for(let q=0;q<r.length;q++){const u0=r[q],u1=r[(q+1)%r.length],ex=u1.x-u0.x,ey=u1.y-u0.y,LL=Math.hypot(ex,ey);if(LL<0.05)continue;const tt=((cx-u0.x)*ex+(cy-u0.y)*ey)/(LL*LL);if(tt<-0.01||tt>1.01)continue;if(Math.abs((cx-u0.x)*ey-(cy-u0.y)*ex)/LL<0.08){zr=Math.max(zr,topAbs(o));break;}}});
+      const zlo=Math.min(zr,zA-0.03),zlo2=Math.min(zr,zB-0.03);
       /* window grid: in line with the facade of the block below when the wall stands on its outline */
       const bo=rs?rs.o:under,k=kOf(bo),uOf=P=>{if(!rs)return Math.hypot(P[0]-a[0],P[1]-a[1]);const tt=(P[0]-rs.a.x)*rs.ex+(P[1]-rs.a.y)*rs.ey,bays=rs.L>=2.2?Math.max(1,Math.round(rs.L/3.5)):0;return bays?tt/rs.L*bays*3.5:0.1;};
       quad(A,B,zlo,zlo2,zA,zB,nx,ny,uOf(A),uOf(B),bo.userData.zBase,k);}}});});
