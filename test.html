@@ -3059,12 +3059,13 @@ function qsWindows(main){const V=main.userData._v4;if(!V)return;const {fam,XL}=V
       const o=inFam(pm[0]-nx*0.3,pm[1]-ny*0.3)||main,{base,sh}=qsRows(o); /* the storeys of the block behind this bay */
       for(let r=0;r<12;r++){const zb=base+sh*(r+0.25),zt=base+sh*(r+0.75),zc=(zb+zt)/2;if(zt>maxTop)break;stat.cells++;
         const [cx,cy]=pt((t0+t1)/2);
-        if(zc<groundAt({x:cx,y:cy},{x:nx,y:ny})+WIN_CLEAR){stat.ground++;continue;}
+        const R=window.__qsDbg?(stat.rec=stat.rec||[]):null,rec=w=>R&&R.push([Math.round(cx*10)/10,Math.round(cy*10)/10,nx.toFixed(2),ny.toFixed(2),r,+zb.toFixed(1),w]);
+        if(zc<groundAt({x:cx,y:cy},{x:nx,y:ny})+WIN_CLEAR){stat.ground++;rec('g');continue;}
         let ok=true;for(const t of [t0+0.08,(t0+t1)/2,t1-0.08]){const [x,y]=pt(t);for(const z of [zb-0.1,zc,zt+0.2])if(!wallAt(x,y,z,nx,ny)){ok=false;break;}if(!ok)break;}
-        if(!ok){stat.wall++;continue;}
+        if(!ok){stat.wall++;rec('w');continue;}
         for(const t of [t0,t1]){const [x,y]=pt(t);if(!airAt(x+nx*0.35,y+ny*0.35,zb-0.05)){ok=false;break;}}
-        if(!ok){stat.air++;continue;}
-        stat.ok++;const [x0,y0]=pt(t0),[x1,y1]=pt(t1),ox=nx*0.02,oy=ny*0.02;
+        if(!ok){stat.air++;rec('a');continue;}
+        stat.ok++;rec('ok');const [x0,y0]=pt(t0),[x1,y1]=pt(t1),ox=nx*0.02,oy=ny*0.02;
         const q=[[x0,y0,zb,0,0],[x1,y1,zb,1,0],[x1,y1,zt,1,1],[x0,y0,zb,0,0],[x1,y1,zt,1,1],[x0,y0,zt,0,1]];
         q.forEach(v=>{P.push(v[0]+ox,v[1]+oy,v[2]);U.push(v[3],v[4]);});}}});
   main.userData._v4.stat=stat;
@@ -3286,7 +3287,7 @@ function roofModelV4(R,opt){opt=opt||{};
 
 
 window.__S=S;window.__fam=family;window.__cam=cam;window.__scene=scene;window.__shot=()=>{applyCam();renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.9);};
-window.__QV4=QV4;window.__qsM=qsV4Model;window.__qcur=qsCurErr;window.__rc=roofCells;window.__v4=roofModelV4;
+window.__QV4=QV4;window.__qsW=qsWindows;window.__qsRows=qsRows;window.__qsM=qsV4Model;window.__qcur=qsCurErr;window.__rc=roofCells;window.__v4=roofModelV4;
 
 })();
 </script>
