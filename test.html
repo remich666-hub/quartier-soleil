@@ -3569,7 +3569,7 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
   /* at night the windows of the studied house are lit (warm lamp light) on its dim red walls: the glow comes from this map */
   const winEmi=(()=>{try{const W=140,H=120,c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');
       g.fillStyle='#8a3a2c';g.fillRect(0,0,W,H);g.fillStyle='#ffd08a';g.fillRect(44,30,52,60);g.fillStyle='#e8a868';g.fillRect(44,30,52,5);
-      const t=wallTex.clone();t.image=c;t.needsUpdate=true;return t;}catch(e){return null;}})();
+      const t=wallTex.clone();t.image=c;t.encoding=THREE.sRGBEncoding;t.needsUpdate=true;return t;}catch(e){return null;}})(); /* sRGB like a colour: the walls glow the same dim red as before, only the windows are bright */
   const giveWin=m=>{if(winTex&&m&&m.map&&m.map!==winTex){m.map=winTex;if(winEmi){m.emissiveMap=winEmi;m._qsWinEmi=1;}m.needsUpdate=true;}};
   try{giveWin(PART_HI.wallT);for(const k in matCache)if(k.startsWith('T:'))giveWin(matCache[k][1]);
     const _m2=matsFor;matsFor=function(u,t){const r=_m2(u,t);if(t)giveWin(r[1]);return r;};}catch(e){}
@@ -3597,7 +3597,7 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
     scene.fog=new THREE.FogExp2(skyUni.horizon.value.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.0005);
     try{groundMat.color.copy(day>0.05?lin(0xe2e4f1):lin(0x262c55));}catch(e){}
     try{lotMat.emissive.setRGB(0.55,0.32,0.36).multiplyScalar(1-day);lotMat.opacity=day>0.05?0.9:0.55;}catch(e){}
-    try{const em=lin(0x8a3a2c).multiplyScalar(1-day);const ew=new THREE.Color(1,1,1).multiplyScalar(1-day);const setE=m=>{if(m&&m.emissive)m.emissive.copy(m._qsWinEmi?ew:em);};[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(setE);for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(setE);}catch(e){}};}catch(e){console.warn('model sky',e);}
+    try{const em=lin(0x8a3a2c).multiplyScalar(1-day);const ew=new THREE.Color(1,1,1).multiplyScalar(1-day);const setE=m=>{if(m&&m.emissive)m.emissive.copy(m._qsWinEmi?ew:em);};if(WIN_ON){const night=day<0.5;WIN_ON.blending=night?THREE.NormalBlending:THREE.MultiplyBlending;WIN_ON.color.set(night?0xffd29a:0xd47a78);} /* the window panes of the model's walls: darker than the wall by day, lit at night */[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(setE);for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(setE);}catch(e){}};}catch(e){console.warn('model sky',e);}
 })();
 try{window.__wt=wallTex;window.__scene=scene;window.__cam=cam;window.__drive=()=>{clearInterval(window.__dv);window.__dv=setInterval(()=>{try{frame(performance.now());}catch(e){}},60);};}catch(e){}
 try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}catch(e){}
