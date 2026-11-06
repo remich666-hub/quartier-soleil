@@ -3676,7 +3676,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
 /* ===== the house first: once the buildings are in, only the studied house shows while its laser roof is computed
    (at most 2.5 s); then the neighbours rise in a ripple from the house outwards, and the rest of the model follows ===== */
 async function qsHouseFirst(){
-  try{const t=S.target;if(!t||!window.QV4)return;const fam=family(t),hide=S.meshes.filter(m=>m&&m.parent&&!fam.includes(m)&&m.visible);
+  try{const t=S.target;if(!t||!(typeof QV4!=='undefined'&&QV4))return;const fam=family(t),hide=S.meshes.filter(m=>m&&m.parent&&!fam.includes(m)&&m.visible);
     const extra=[edgeLines].concat(S.roofSetMeshes||[]).filter(o=>o&&o.visible);extra.forEach(o=>o.visible=false);
     hide.forEach(m=>m.visible=false);
     const t0=performance.now();while(performance.now()-t0<2500){const cur=S.target?family(S.target):fam;if(cur.some(o=>QV4.used&&QV4.used.has(o)))break;await new Promise(r=>setTimeout(r,80));}
@@ -3703,12 +3703,12 @@ async function qsHouseFirst(){
   const view=document.getElementById('view');if(!view)return;
   const veil=document.createElement('div');veil.id='qsVeil';veil.innerHTML='<div class="orb"></div>';view.appendChild(veil);
   let token=0;
-  const sig=()=>{try{let n=0,v=0;scene.traverse(o=>{n++;if(o.visible)v++;});return n+'/'+v+'/'+(S.meshes?S.meshes.length:0)+'/'+(window.QV4&&QV4.used?QV4.used.size:0)+'/'+(groundMat.map?1:0);}catch(e){return '';}};
+  const sig=()=>{try{let n=0,v=0;scene.traverse(o=>{n++;if(o.visible)v++;});return n+'/'+v+'/'+(S.meshes?S.meshes.length:0)+'/'+((typeof QV4!=='undefined'&&QV4)&&QV4.used?QV4.used.size:0)+'/'+(groundMat.map?1:0);}catch(e){return '';}};
   /* the studied house's final (laser) roof must be in before the veil lifts */
-  const houseDone=()=>{try{const m=S.target||S.building;if(!m||!window.QV4||!QV4.used)return true;return family(m).some(o=>QV4.used.has(o))||(QV4.tried&&family(m).some(o=>QV4.tried.has&&QV4.tried.has(o)));}catch(e){return true;}};
+  const houseDone=()=>{try{const m=S.target||S.building;if(!m||!(typeof QV4!=='undefined'&&QV4)||!QV4.used)return true;return family(m).some(o=>QV4.used.has(o))||(QV4.tried&&family(m).some(o=>QV4.tried.has&&QV4.tried.has(o)));}catch(e){return true;}};
   const settle=async t=>{const t0=performance.now();let last=sig(),still=performance.now();
     while(t===token&&performance.now()-t0<9000){await new Promise(r=>setTimeout(r,250));const s2=sig();if(s2!==last){last=s2;still=performance.now();}
-      else if(performance.now()-still>1200&&!S.loading&&houseDone()&&!(window.QV4&&QV4.busy))break;}
+      else if(performance.now()-still>1200&&!S.loading&&houseDone()&&!((typeof QV4!=='undefined'&&QV4)&&QV4.busy))break;}
     if(t===token)veil.classList.remove('on');};
   try{const _load=load;load=async function(...a){const t=++token;veil.classList.add('on');try{return await _load.apply(this,a);}finally{settle(t);}};}catch(e){console.warn('veil',e);}
 })();
