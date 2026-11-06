@@ -4090,12 +4090,12 @@ function qsModel5(R,opt){opt=opt||{};
   tk('merge');const leaves=cur.ls.filter(l=>l.type!='none'&&(l.R[1]-l.R[0])>=1&&(l.R[3]-l.R[2])>=1);if(!leaves.length)return null;if(ST)try{ST('merged',snap(leaves));}catch(e){}
   /* a shared garage roof (semi-detached): a low volume whose roof runs on, without a step, over the neighbour's footprint is one pitch.
      Both sides grow the same laser surface across the boundary and fit the same plane, so the two halves meet exactly. */
-  if(others.length)try{const gs=0.5,kq=(x,y)=>Math.round(x/gs)+','+Math.round(y/gs),own=(x,y)=>rings.some(rg=>inPoly([x,y],rg)),oth=(x,y)=>others.some(rg=>inPoly([x,y],rg));
-    leaves.forEach(l=>{const [a,b,c,d]=l.R;let top=-1e9;for(const [u,v] of [[a,c],[b,c],[a,d],[b,d],[(a+b)/2,(c+d)/2]])top=Math.max(top,l.pred(u,v));if(top>4.6||(b-a)*(d-c)>45)return;
+  const DBG=[];if(others.length)try{const gs=0.5,kq=(x,y)=>Math.round(x/gs)+','+Math.round(y/gs),own=(x,y)=>rings.some(rg=>inPoly([x,y],rg)),oth=(x,y)=>others.some(rg=>inPoly([x,y],rg));
+    leaves.forEach(l=>{const [a,b,c,d]=l.R;let top=-1e9;for(const [u,v] of [[a,c],[b,c],[a,d],[b,d],[(a+b)/2,(c+d)/2]])top=Math.max(top,l.pred(u,v));if(top>4.6||(b-a)*(d-c)>45){DBG.push(['big',+top.toFixed(1)]);return;}
       const [cxl,cyl]=XY((a+b)/2,(c+d)/2),seen=new Map(),Q=[];
       for(let u=a+0.25;u<b;u+=gs)for(let v=c+0.25;v<d;v+=gs){const [x0,y0]=XY(u,v),x=Math.round(x0/gs)*gs,y=Math.round(y0/gs)*gs,z=Zl(x,y);if(z==null||z-Z0<1.8||z-Z0>5)continue;const k=kq(x,y);if(!seen.has(k)){seen.set(k,[x,y,z]);Q.push([x,y,z]);}}
       for(let q=0;q<Q.length&&seen.size<900;q++){const [x,y,z]=Q[q];for(const [ex,ey] of [[gs,0],[-gs,0],[0,gs],[0,-gs]]){const X=x+ex,Y=y+ey,k=kq(X,Y);if(seen.has(k)||Math.hypot(X-cxl,Y-cyl)>8)continue;const Z=Zl(X,Y);if(Z==null||Math.abs(Z-z)>0.3||Z-Z0<1.8||Z-Z0>5)continue;if(!own(X,Y)&&!oth(X,Y))continue;seen.set(k,[X,Y,Z]);Q.push([X,Y,Z]);}}
-      const P=[...seen.values()],nO=P.filter(([x,y])=>!own(x,y)&&oth(x,y)).length;if(nO*gs*gs<3||P.length<16)return;
+      const P=[...seen.values()],nO=P.filter(([x,y])=>!own(x,y)&&oth(x,y)).length;if(nO*gs*gs<3||P.length<16){DBG.push(['nO',nO,P.length]);return;}
       /* one plane, or one gable whose ridge crosses the party line (the ridge parallel to a wall): the best that explains the laser */
       const PU=P.map(([x,y,z])=>[U(x,y),V(x,y),z-Z0]);const ls3=(rows)=>{const M=[[0,0,0],[0,0,0],[0,0,0]],B=[0,0,0];rows.forEach(([f,z])=>{for(let i=0;i<3;i++){B[i]+=f[i]*z;for(let k=0;k<3;k++)M[i][k]+=f[i]*f[k];}});
         const d=M[0][0]*(M[1][1]*M[2][2]-M[1][2]*M[2][1])-M[0][1]*(M[1][0]*M[2][2]-M[1][2]*M[2][0])+M[0][2]*(M[1][0]*M[2][1]-M[1][1]*M[2][0]);if(Math.abs(d)<1e-9)return null;
@@ -4104,7 +4104,7 @@ function qsModel5(R,opt){opt=opt||{};
       let best=null;const pl=ls3(PU.map(([u,v,z])=>[[1,u,v],z]));if(pl)best={k:'plane',rms:pl.rms,sol:pl.sol};
       for(const ax of [0,1]){const ws=PU.map(p=>p[ax]);const w0=Math.min(...ws),w1=Math.max(...ws);for(let r=w0+1;r<=w1-1;r+=0.25){
         const g=ls3(PU.map(p=>[[1,Math.min(0,p[ax]-r),Math.max(0,p[ax]-r)],p[2]]));if(g&&g.sol[1]>0.05&&g.sol[2]<-0.05&&(!best||g.rms<best.rms-0.02))best={k:'gable',ax,r,rms:g.rms,sol:g.sol};}}
-      if(!best||best.rms>0.15)return; /* not one roof: two roofs, left as they are */
+      DBG.push(['fit',best&&best.k,best&&+best.rms.toFixed(3),best&&best.r,P.length,nO]);if(!best||best.rms>0.15)return; /* not one roof: two roofs, left as they are */
       if(best.k=='plane'){const pw=best.sol;l.type='shedU';l.x=[0,0];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;}
       else if(best.r<(best.ax?c:a)+0.3||best.r>(best.ax?d:b)-0.3){ /* the ridge lies outside this half: its one pitch */
         const [x0,k1,k2m]=best.sol,r=best.r,lo=best.r>(best.ax?d:b)-0.3,kk=lo?k1:k2m,c0=x0-kk*r,pw=best.ax?[c0,0,kk]:[c0,kk,0];l.type='shedU';l.x=[0,0];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;}
@@ -4150,7 +4150,7 @@ function qsModel5(R,opt){opt=opt||{};
       const quads=[];for(let k=0;k<prof.length-1;k++){const p=prof[k],q=prof[k+1];if(p[2]-zm<0.02&&q[2]-zm<0.02)continue;quads.push([[p[0],p[1],zm],[q[0],q[1],zm],[q[0],q[1],q[2]],[p[0],p[1],p[2]]]);}
       let ar=0,mx=0,my=0,mz=0;quads.forEach(q=>{const w=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1])*((q[2][2]-q[1][2])+(q[3][2]-q[0][2]))/2;ar+=w;mx+=(q[0][0]+q[1][0])/2*w;my+=(q[0][1]+q[1][1])/2*w;mz+=(q[0][2]+q[3][2]+q[1][2]+q[2][2])/4*w;});
       if(ar<1)continue;const nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;verts.push({quads,a:ar,x:mx/ar+nx*0.3,y:my/ar+ny*0.3,z:mz/ar,n:[nx,ny,0],tilt:Math.PI/2,az:((Math.atan2(nx,ny)/RAD)+360)%360});}});
-  tk('out');delete TT._;return {pieces,pans,cells,verts,rms,TT,L5:{leaves,XY,U,V,Z0,Ad,faceSet},v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
+  tk('out');delete TT._;return {pieces,pans,cells,verts,rms,TT,L5:{leaves,XY,U,V,Z0,Ad,faceSet,dbg:DBG},v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
 
 
 
@@ -4315,7 +4315,7 @@ function qsWorkerMain(){ /* runs inside the worker */
     if(m.kind==='data'){if(m.mnh!==undefined){S.lidarR={mnh:mkAt(m.mnh)};F=mkAt(m.F);C=mkAt(m.C);}if(m.ortho!==undefined)GD=null,S.rawOrtho=m.ortho?{raw:{width:m.ortho.width,height:m.ortho.height,getContext:()=>({getImageData:()=>({data:m.ortho.data})})},w:m.ortho.w,e:m.ortho.e,n:m.ortho.n,s:m.ortho.s}:null;return;}
     const t0=performance.now(),inF=(x,y)=>F&&Math.abs(x)<F.R-2&&Math.abs(y)<F.R-2;
     const R=Object.assign({},m.R,{Z:(x,y)=>{let z=inF(x,y)?F.at(x,y):null;if(z==null&&C)z=C.at(x,y);return z;}});
-    const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0,pw:l.pw,shared:l.shared}))});
+    const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,dbg:M.L5.dbg,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0,pw:l.pw,shared:l.shared}))});
     const ro=S.rawOrtho,green=ro?((x,y)=>{const W=ro.raw.width,H=ro.raw.height,mpp=(ro.e-ro.w)/W,d=GD||(GD=ro.raw.getContext().getImageData().data);const px=Math.round((x-ro.w)/mpp),py=Math.round((ro.n-y)/mpp);if(px<0||py<0||px>=W||py>=H)return -99;const k=(py*W+px)*4;return 2*d[k+1]-d[k]-d[k+2];}):null;
     let staged=!m.stages;const run=o=>{try{const st=staged?null:(k,d)=>self.postMessage({id:m.id,stage:k,data:d});staged=true;const M=qsModel5(R,Object.assign({big:m.big,green,onStage:st},o));return M&&M.cells.length?pack(M,o):null;}catch(err){return null;}};
     let M=run({});if(!M||(!m.big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
@@ -4335,7 +4335,7 @@ function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.us
   qsWorkerData();const id=++QW.seq;
   return new Promise(res=>{QW.cb.set(id,d=>{if(d.err)return res(undefined);const P=d.M;QV4.tWorker=(QV4.tWorker||0)+(d.ms||0);
       if(P&&P.TT){QV4.TT=QV4.TT||{};for(const k in P.TT)QV4.TT[k]=(QV4.TT[k]||0)+P.TT[k];}
-      if(!P||P.rms>0.6)return res(null);
+      if(P&&P.dbg&&P.dbg.length)(QV4.dbg=QV4.dbg||[]).push({b:main.userData.bid.slice(-4),d:P.dbg});if(!P||P.rms>0.6)return res(null);
       const t=[Math.cos(P.Ad),Math.sin(P.Ad)],n=[-t[1],t[0]],XY=(u,v)=>[u*t[0]+v*n[0],u*t[1]+v*n[1]],U=(x,y)=>x*t[0]+y*t[1],V=(x,y)=>x*n[0]+y*n[1];
       const leaves=P.leaves.map(l=>{l.pred=qsV5Pred(l);return l;});
       const pieces=leaves.map(l=>{const P4=[[l.R[0],l.R[2]],[l.R[1],l.R[2]],[l.R[1],l.R[3]],[l.R[0],l.R[3]]].map(([u,v])=>XY(u,v));return {P:P4,roofZ:(x,y)=>l.pred(U(x,y),V(x,y))+P.Z0};});
