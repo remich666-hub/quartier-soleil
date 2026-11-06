@@ -2944,6 +2944,7 @@ function qsV4One(fam){
       parts.forEach(poly=>{const outer=poly[0].slice(0,-1).length>=3&&poly[0][0][0]===poly[0][poly[0].length-1][0]?poly[0].slice(0,-1):poly[0];if(outer.length>=3)D2.push({outer,holes:poly.slice(1).map(h=>h.slice(0,-1)),zf:d.zf,n:d.n});});});
     /* the strips of the outline the laser roof does not reach: to the nearest pan, its slope carried on */
     let gaps=[];try{gaps=PCx.difference(OUT,...D2.map(d=>[d.outer,...d.holes]));}catch(e){}
+    if(window.__qsDbg!==undefined||1)QV4.dbgGaps=(QV4.dbgGaps||[]).concat([gaps.map(g=>g[0])]);
     gaps.forEach(g=>{const R=g[0].slice(0,-1);let cx=0,cy=0;R.forEach(([x,y])=>{cx+=x;cy+=y;});cx/=R.length;cy/=R.length;
       let bi=-1,bd=1e9;D2.forEach((d,i)=>{d.outer.forEach((a,k)=>{const b=d.outer[(k+1)%d.outer.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey||1;const t=Math.max(0,Math.min(1,((cx-a[0])*ex+(cy-a[1])*ey)/L2));const dd=Math.hypot(a[0]+ex*t-cx,a[1]+ey*t-cy);if(dd<bd){bd=dd;bi=i;}});});
       if(bi<0)return;const d=D2[bi];let un;try{un=PCx.union([d.outer,...d.holes],g);}catch(e){return;}
@@ -3011,7 +3012,7 @@ function qsV4One(fam){
   main.userData.v4=M.v4.types.length;
   qsFoldRoofs(); try{if(typeof partsSync==='function')fam.forEach(o=>partsSync(o));}catch(e){}
   S.obstacles=(S.obstacles||[]).filter(o=>!goneObs.has(o)).concat(adds);
-  main.userData._v4={fam,XL,OUT}; QV4.done.push(main); try{qsWindows(main);}catch(e){console.error('v4 windows',e);}
+  main.userData._v4={fam,XL,OUT,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(([x,y])=>d.zf(x,y))}))}; QV4.done.push(main); try{qsWindows(main);}catch(e){console.error('v4 windows',e);}
   try{if(S.gfWalls)buildGroundFloors(S.gfWalls);}catch(e){}
   rebuildEdges(); return true;}
 /* the IGN pitched roofs of these buildings live in shared meshes: their triangles are folded under the ground */
