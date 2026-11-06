@@ -3474,9 +3474,9 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
   /* the model: cool white volumes, rosy tiles, the studied building in night blue */
   try{Object.assign(USAGE,{'Résidentiel':[0xf4f5fa,0xdfe2ee],'Commercial et services':[0xf1f3f8,0xdadeea],'Industriel':[0xeceff6,0xd5dae6],'Religieux':[0xf3f2f6,0xe0dde8],'Agricole':[0xf2f2f6,0xdcdce6],'Sportif':[0xf0f2f7,0xd8dce8]});}catch(e){}
   try{ROOF.tuile.color.set(0xe5ccc6);ROOF.ardoise.color.set(0xa7adc4);ROOF.zinc.color.set(0xc6cad8);ROOF.autre.color.set(0xd9dbe6);}catch(e){}
-  const HI_WALL=0x2d3675,HI_ROOF=0x1f2552;
-  try{PART_HI.roof=new THREE.MeshLambertMaterial({color:HI_ROOF});PART_HI.wall=new THREE.MeshLambertMaterial({color:HI_WALL,side:THREE.DoubleSide});PART_HI.wallT=patchWall(new THREE.MeshLambertMaterial({color:HI_WALL,map:wallTex,side:THREE.DoubleSide}));}catch(e){}
-  try{const _m=matsFor;matsFor=function(u,t){const r=_m(u,t);if(t&&!r._qs){r[0].color.set(HI_ROOF);r[1].color.set(HI_WALL);r._qs=1;}return r;};}catch(e){}
+  const HI_WALL=new THREE.Color(0x3d405a).convertSRGBToLinear(),HI_ROOF=new THREE.Color(0x272938).convertSRGBToLinear(); /* night blue on screen (the renderer outputs sRGB) */
+  try{PART_HI.roof=new THREE.MeshLambertMaterial({color:HI_ROOF.clone()});PART_HI.wall=new THREE.MeshLambertMaterial({color:HI_WALL.clone(),side:THREE.DoubleSide});PART_HI.wallT=patchWall(new THREE.MeshLambertMaterial({color:HI_WALL.clone(),map:wallTex,side:THREE.DoubleSide}));}catch(e){}
+  try{const _m=matsFor;matsFor=function(u,t){const r=_m(u,t);if(t&&!r._qs){r[0].color.copy(HI_ROOF);r[1].color.copy(HI_WALL);r._qs=1;}return r;};}catch(e){}
   try{sunPath.material.color.set(0xf28a62);}catch(e){}
   /* the sky of the hour, in the reference's palette, and the panels' warm light following it */
   const root=document.documentElement,hex=c=>'#'+c.getHexString();
@@ -3487,7 +3487,7 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
     else{const t=Math.min(1,(alt-0.1)/0.5);top=lerpC(0x8e9bd8,0xb7c4ea,t);hor=lerpC(0xf4b29a,0xeaedf7,t);a=lerpC(0xff7a3a,0xf0873f,t);b=lerpC(0xf06a8a,0xe8678e,t);c=lerpC(0x9aa6dc,0x8fa3d9,t);}
     const grey=new THREE.Color(0xc4c8d6);top.lerp(grey,cloud*0.8*(alt>0?1:0.3));hor.lerp(grey,cloud*0.45*(alt>0?1:0.3));
     skyUni.top.value.copy(top);skyUni.horizon.value.copy(hor);skyUni.ground.value.copy(hor.clone().multiplyScalar(0.86));
-    const day=Math.max(0,Math.min(1,alt/0.25));
+    const day=Math.max(0,Math.min(1,alt/0.25));hemi.intensity*=0.85;sun.color=lerpC(0xff9a6a,0xffead8,Math.min(1,alt/0.35)); /* a warmer sun on the facades, a softer fill */
     hemi.color=day>0.05?top.clone().lerp(new THREE.Color(0xffffff),0.6):new THREE.Color(0x8f9bd0);hemi.groundColor=new THREE.Color(0xd9d6e6).multiplyScalar(0.55+0.45*day);
     scene.fog=new THREE.FogExp2(hor.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.00045);
     root.style.setProperty('--aura-a',hex(a));root.style.setProperty('--aura-b',hex(b));root.style.setProperty('--aura-c',hex(c));};}catch(e){console.warn('theme sky',e);}
