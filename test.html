@@ -3627,7 +3627,7 @@ function qsV5Build(M,fam,main){const L5=M.L5;if(!L5||!PCSYNC)return null;const P
       let ar=0;for(let k=0,q=outer.length-1;k<outer.length;q=k++)ar+=(outer[q][0]-outer[k][0])*(outer[q][1]+outer[k][1]);if(Math.abs(ar)<0.02)return;
       drawn.push({outer,holes:poly.slice(1).map(ring).filter(h=>h.length>=3),zf,n,v5:f.pi});});});
   /* outline: the union of the volumes (the wing extensions lie inside another volume) */
-  let OUT=null;try{OUT=qsUnion(L.map(l=>{const [a,b,c,d]=l.R;const P=[[a,c],[b,c],[b,d],[a,d]].map(([u,v])=>W(u,v));return [P.concat([P[0]])];}));}catch(e){OUT=null;}
+  let OUT=null;try{OUT=qsUnion(L.map(l=>{const [a,b,c,d]=l.R;return [[[a,c],[b,c],[b,d],[a,d],[a,c]]];})).map(poly=>poly.map(R=>R.map(([u,v])=>W(u,v))));}catch(e){OUT=null;} /* in the axis frame: exact, then turned */
   /* walls: on every volume edge, where the envelope jumps (outline: from the ground; inside: from the lower roof) */
   const lines=new Map();PR.forEach(l=>{const [a,b,c,d]=l.R;[['u',a,c,d],['u',b,c,d],['v',c,a,b],['v',d,a,b]].forEach(([o,e,t0,t1])=>{const k=o+Math.round(e*1000);(lines.get(k)||lines.set(k,{o,e,iv:[]}).get(k)).iv.push([t0,t1]);});});
   const walls=[],XL=[],EPS=0.01,TH=0.03;
