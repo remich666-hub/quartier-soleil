@@ -429,11 +429,11 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
     /* big variant: the sun enters the window from outside in the morning and leaves it at dusk, cropped by the frame */
     const sx=g.x0+g.ww*(BIG?-0.32+1.64*dd:0.14+0.72*dd),sy=g.y0+g.wh*(0.9-0.6*Math.max(-0.1,a));
     /* big variant: a large moon cropped in the window's top corner */
-    const mx=BIG?g.x1-g.ww*0.06:g.x0+g.ww*0.6,my=BIG?g.y0+g.wh*0.07:g.y0+g.wh*0.34;
+    const mx=g.x0+g.ww*0.6,my=g.y0+g.wh*0.34;
     const warm=mix([255,112,52],[255,190,140],sm(0.1,0.7,a)),pink=[238,104,150],cold=[196,204,255];
     const LX=sunUp?sx:mx,LY=sunUp?sy:my,LI=sunUp?lit:nt*0.6,LC=sunUp?warm:cold,LC2=sunUp?pink:[170,160,240];
-    const SM=window.QS_SUN||1,SK=sunUp?1+(SM-1)*Math.exp(-Math.pow((dd-0.62)/0.3,2)):SM,OR=g.ww*(sunUp?0.2*SK:BIG?0.62:0.16),R=g.ww*0.95,OH=g.ww*(sunUp?0.2:0.16)*(1+(SK-1)*0.35),LS=g.ww*0.36;
-    const WX=2*(g.x0+g.x1)/2-LX,WY=Math.max(g.y0,Math.min(g.y1,2*(g.y0+g.y1)/2-LY));
+    const SM=window.QS_SUN||1,SK=sunUp?1+(SM-1)*Math.exp(-Math.pow((dd-0.62)/0.3,2)):SM,OR=g.ww*(sunUp?0.2*SK:0.16*(1+(SK-1)*0.5)),R=g.ww*0.95,OH=g.ww*(sunUp?0.2:0.16)*(1+(SK-1)*0.35),LS=g.ww*0.36;
+    const WCX=(g.x0+g.x1)/2,WCY=(g.y0+g.y1)/2,WX=WCX-Math.max(-g.ww*0.62,Math.min(g.ww*0.62,(LX-WCX)*1.5)),WY=WCY-(LY-WCY)*0.8,PH0=hour*0.9;
     /* the patch the window casts below it, sheared away from the light */
     const cx=(g.x0+g.x1)/2,py0=g.y1+H*D*0.035,py1=Math.min(PH-2,py0+H*D*0.2),sh=-(LX-cx)/(g.ww/2)*g.ww*0.6,PI=LI*(sunUp?0.75:0.5);
     const core=[255,248,238],moonC=[236,240,255];
@@ -465,7 +465,7 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
         /* outside: halo + patch */
         let gl=0,gr=0,gg2=0,gb=0,pm=0;
         if(mW<0.999){
-          if(LI>0.01){const f=dlw/R;gl=(sunUp?1:0.55)*LI*Math.exp(-f*f*3.2);if(gl>0.004){const c=Math.min(1,f*1.6);gr=LC[0]+(LC2[0]-LC[0])*c;gg2=LC[1]+(LC2[1]-LC[1])*c;gb=LC[2]+(LC2[2]-LC[2])*c;}else gl=0;}
+          if(LI>0.01){const an=Math.atan2(yc-WY,dxw),f=dlw/(g.ww*0.72)*(1+0.13*Math.sin(3*an+PH0)+0.07*Math.sin(5*an-PH0*1.4));gl=(sunUp?1:0.55)*LI*Math.exp(-f*f*3.2);if(gl>0.004){const c=Math.min(1,f*1.6);gr=LC[0]+(LC2[0]-LC[0])*c;gg2=LC[1]+(LC2[1]-LC[1])*c;gb=LC[2]+(LC2[2]-LC[2])*c;}else gl=0;}
           if(inPatchRow){const d=Math.max(pxl-xc,xc-pxr,py0-yc,yc-py1);if(d<psoft*8)pm=soft(d,psoft)*pfade;}
         }
         const fe=sm(0,Math.min(PW,PH)*0.14,Math.min(xc,PW-xc,fy));gl*=fe;pm*=fe;const cols=x+1<PW?2:1;
