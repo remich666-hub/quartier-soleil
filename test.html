@@ -3564,7 +3564,7 @@ function qsV5Pred(l){const [a,b,c,d]=l.R,x=l.x;
     case 'hip':return (u,v)=>x[0]+x[1]*Math.min(u-a,b-u,v-c,d-v);
     case 'mansard':return (u,v)=>{const dd=Math.min(u-a,b-u,v-c,d-v);return x[0]+x[1]*Math.min(dd,l.w0)+x[2]*Math.max(0,dd-l.w0);};
   }return l.pred;}
-/* the walls on the cadastre: an outer edge of the volumes within 80 cm of a parallel footprint edge is moved onto it
+/* the walls on the cadastre: an outer edge of the volumes up to 1.5 m outside a parallel footprint edge (or 50 cm inside it) is moved onto it
    (the laser sees the roof with its overhang; the walls stand under it, on the footprint). A cut is one value shared by every
    volume that uses it, so neighbours move together and stay joined. */
 function qsV5Snap(L,fam,M,log){const L5=M.L5,sx=M.sh0.dx,sy=M.sh0.dy,E=1e-6;
@@ -3573,8 +3573,8 @@ function qsV5Snap(L,fam,M,log){const L5=M.L5,sx=M.sh0.dx,sy=M.sh0.dy,E=1e-6;
   /* outer edges: the parts of a rectangle side no other rectangle touches */
   const outer=(l,o,c,t0,t1)=>{let iv=[[t0,t1]];L.forEach(m=>{if(m===l)return;const [a,b,cc,d]=m.R;let hit=null;if(o=='u'&&(Math.abs(a-c)<E||Math.abs(b-c)<E))hit=[cc,d];if(o=='v'&&(Math.abs(cc-c)<E||Math.abs(d-c)<E))hit=[a,b];if(!hit)return;
       iv=iv.flatMap(([p,q])=>{if(hit[1]<=p||hit[0]>=q)return [[p,q]];const out=[];if(hit[0]>p)out.push([p,hit[0]]);if(hit[1]<q)out.push([hit[1],q]);return out;});});return iv;};
-  const vote=new Map();L.forEach(l=>{const [a,b,c,d]=l.R;[['u',a,c,d],['u',b,c,d],['v',c,a,b],['v',d,a,b]].forEach(([o,cc,t0,t1])=>{const k=o+cc.toFixed(3);const V=vote.get(k)||vote.set(k,{o,c:cc,len:0,ext:0,tg:[]}).get(k);V.len+=t1-t0;
-    outer(l,o,cc,t0,t1).forEach(([p,q])=>{if(q-p<0.3)return;V.ext+=q-p;let best=null;seg.forEach(sg=>{if(sg.o!==o)return;const ov=Math.min(q,sg.t1)-Math.max(p,sg.t0);if(ov<0.3*(q-p))return;const dd=sg.c-cc;if(Math.abs(dd)<=0.8&&(!best||Math.abs(dd)<Math.abs(best.dd)))best={dd,w:ov};});if(best)V.tg.push(best);});});});
+  const vote=new Map();L.forEach(l=>{const [a,b,c,d]=l.R;[['u',a,c,d,-1],['u',b,c,d,1],['v',c,a,b,-1],['v',d,a,b,1]].forEach(([o,cc,t0,t1,sd])=>{const k=o+cc.toFixed(3);const V=vote.get(k)||vote.set(k,{o,c:cc,len:0,ext:0,tg:[]}).get(k);V.len+=t1-t0;
+    outer(l,o,cc,t0,t1).forEach(([p,q])=>{if(q-p<0.3)return;V.ext+=q-p;let best=null;seg.forEach(sg=>{if(sg.o!==o)return;const ov=Math.min(q,sg.t1)-Math.max(p,sg.t0);if(ov<0.3*(q-p))return;const dd=sg.c-cc,out=dd*sd;if(out<=0.5&&out>=-1.5&&(!best||Math.abs(dd)<Math.abs(best.dd)))best={dd,w:ov};});if(best)V.tg.push(best);});});});
   const mv=new Map();vote.forEach(V=>{if(!V.tg.length)return;const w=V.tg.reduce((s,t)=>s+t.w,0);if(w<0.5*V.ext)return;const m=V.tg.reduce((s,t)=>s+t.dd*t.w,0)/w;if(V.tg.some(t=>Math.abs(t.dd-m)>0.15)||Math.abs(m)<0.02)return;mv.set(V.o+V.c.toFixed(3),Math.round((V.c+m)*1000)/1000);});
   if(!mv.size)return;L.forEach(l=>{const R0=l.R.slice(),R=l.R;[0,1].forEach(i=>{const k='u'+R[i].toFixed(3);if(mv.has(k))R[i]=mv.get(k);});[2,3].forEach(i=>{const k='v'+R[i].toFixed(3);if(mv.has(k))R[i]=mv.get(k);});
     if(R[1]-R[0]<0.8||R[3]-R[2]<0.8){l.R=R0;return;}
