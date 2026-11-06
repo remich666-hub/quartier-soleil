@@ -3063,8 +3063,8 @@ function qsWindows(main){const V=main.userData._v4;if(!V)return;const {fam,XL}=V
       const wt=Math.min(...[t0+0.1,(t0+t1)/2,t1-0.1].map(t=>{const [x,y]=pt(t);return topAt(x-nx*0.06,y-ny*0.06);})); /* the wall top over this window (eave, gable slope) */
       for(let r=0;r<12;r++){const fl=base+S3*r,zt0=fl+S3*0.75;if(zt0-0.45>maxTop)break;stat.cells++;
         /* the lintel sits just under the eave: a low wall brings the window down (up to 45 cm), keeping a sill 60 cm above the floor */
-        const zt=Math.min(zt0,wt-0.25),zb=zt-HW,zc=(zb+zt)/2;const [cx,cy]=pt((t0+t1)/2);
-        if(zt<zt0-0.45||zb<fl+0.6){stat.wall++;rec0(cx,cy,r,zb,'low');continue;}
+        const zt=Math.min(zt0,wt-0.25),zb=Math.max(zt-HW,fl+0.7),zc=(zb+zt)/2;const [cx,cy]=pt((t0+t1)/2); /* a lower window keeps its sill: it gets shorter, down to 1 m */
+        if(zt<zt0-0.45||zt-zb<1.0){stat.wall++;rec0(cx,cy,r,zb,'low');continue;}
         const rec=w=>rec0(cx,cy,r,zb,w);
         if(zc<groundAt({x:cx,y:cy},{x:nx,y:ny})+WIN_CLEAR){stat.ground++;rec('g');continue;}
         let ok=true;for(const t of [t0+0.08,(t0+t1)/2,t1-0.08]){const [x,y]=pt(t);for(const z of [zb-0.1,zc,zt+0.12])if(!wallAt(x,y,z,nx,ny)){ok=false;break;}if(!ok)break;}
