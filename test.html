@@ -3810,7 +3810,10 @@ async function qsHouseFirst(){
     tagged.forEach(o=>{if(!nx.has(o))o.layers.disable(LH);});nx.forEach(o=>o.layers.enable(LH));tagged=nx;};
   const draw=c=>{
     const w=S.win,b=(w&&w.obj)||S.building||S.addrTarget;if(!b||!b.parent||cam.mode==='window'){if(tagged.size)tag([]);return;}
-    const fam=family(b);tag(fam);if(b._qsClipFor!==b.uuid+fam.length){let z=1e9;fam.forEach(o=>{if(!o.geometry)return;if(!o.geometry.boundingBox)o.geometry.computeBoundingBox();o.updateMatrixWorld();const bz=o.geometry.boundingBox.min.z+o.matrixWorld.elements[14];z=Math.min(z,bz+SINK);});b._qsClip=z===1e9?0:z;b._qsClipFor=b.uuid+fam.length;}clip.constant=-b._qsClip+0.05;
+    const fam=family(b);tag(fam);if(b._qsClipFor!==b.uuid+fam.length){ /* the ground along the footprint (the lowest point of it): the outline stops where the walls leave the ground */
+      let fill=null;scene.traverse(o=>{if(!fill&&o.isMesh&&o.userData&&o.userData.fill)fill=o;});let z=1e9;const rc=new THREE.Raycaster(),dn=new THREE.Vector3(0,0,-1);
+      if(fill)fam.forEach(o=>{const r=o.userData&&o.userData.rings&&o.userData.rings[0];if(!r)return;r.forEach((p,i)=>{const q=r[(i+1)%r.length];[0,0.5].forEach(t=>{const x=p.x+(q.x-p.x)*t,y=p.y+(q.y-p.y)*t;rc.set(new THREE.Vector3(x,y,200),dn);const h=rc.intersectObject(fill,false)[0];if(h)z=Math.min(z,h.point.z);});});});
+      if(z===1e9)fam.forEach(o=>{if(o.userData&&o.userData.zBase!=null)z=Math.min(z,o.userData.zBase);});b._qsClip=z===1e9?0:z;b._qsClipFor=b.uuid+fam.length;}clip.constant=-b._qsClip+0.05;
     {let day=true;try{day=sun.position.z-sun.target.position.z>0;}catch(e){}COL.lerp(day?DAY:NIGHT,0.08);}
     /* the window: a pane on the wall where the window is, seen only from the side it faces */
     let front=0;if(w&&w.pos&&w.normal){const n=w.normal;winQ.position.set(w.pos.x-n.x*0.4,w.pos.y-n.y*0.4,w.pos.z);winQ.lookAt(winQ.position.x+n.x,winQ.position.y+n.y,winQ.position.z);
