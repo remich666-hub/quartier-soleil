@@ -3497,7 +3497,7 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
 (function(){
   const PALE=new THREE.Color(0xe9ebf2).convertSRGBToLinear(),PALE2=new THREE.Color(0xdfe2ec).convertSRGBToLinear(),TRUNK=new THREE.Color(0xd2d5df).convertSRGBToLinear();
   const vegMat=new THREE.MeshLambertMaterial({color:PALE}),vegMatD=new THREE.MeshLambertMaterial({color:PALE,side:THREE.DoubleSide}),trunkMat=new THREE.MeshLambertMaterial({color:TRUNK});
-  const lotMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xf6d2c0).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-20});
+  const lotMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xf3b99a).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-20});
   const plainMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xeef0f5).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
   try{ROOF.tuile.color.set(0xdcdde6);ROOF.ardoise.color.set(0xc9ccd8);ROOF.zinc.color.set(0xd6d8e2);ROOF.autre.color.set(0xdfe1e9);}catch(e){}
   const swap=(m,mat)=>{if(m&&m.material!==mat){m.material=mat;if(m.isInstancedMesh&&m.instanceColor)m.instanceColor=null;}};
