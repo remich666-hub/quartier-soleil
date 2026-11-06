@@ -2890,7 +2890,7 @@ async function qsV4(){
   await qsSleep(400); /* let the scene settle (vegetation, edges) */
   const seen=new Set(), list=[];
   S.meshes.forEach(m=>{const u=m.userData;if(!u||!u.rings||!u.lidar||u.monu||u.church)return;const g=u.gid||m.uuid;if(seen.has(g))return;seen.add(g);
-    const fam=family(m).filter(o=>o.userData.rings);let d=1e9;fam.forEach(o=>o.userData.rings[0].forEach(p=>{d=Math.min(d,Math.hypot(p.x,p.y));}));if(d<=30)list.push({fam,d});});
+    const fam=family(m).filter(o=>o.userData.rings);let d=1e9;fam.forEach(o=>o.userData.rings[0].forEach(p=>{d=Math.min(d,Math.hypot(p.x,p.y));}));const ar=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0);if(d<=30&&ar<=700)list.push({fam,d}); /* a large block (over 700 m²) keeps the model's roof: its fit would freeze the view for seconds */});
   list.sort((a,b)=>a.d-b.d);
   for(const it of list){
     while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;} /* the user is moving the camera: wait */
