@@ -3052,7 +3052,7 @@ function qsV4One(fam,pre){
   main.userData.v4=M.v4.types.length;
   qsFoldRoofs(); try{if(typeof partsSync==='function')fam.forEach(o=>partsSync(o));}catch(e){}
   S.obstacles=(S.obstacles||[]).filter(o=>!goneObs.has(o)).concat(adds);
-  QV4.tBuild=(QV4.tBuild||0)+performance.now()-tm0;main.userData._v4={fam,XL,OUT,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(q=>d.vzOf?d.vzOf(q):d.zf(q[0],q[1]))}))}; QV4.done.push(main); {const tw0=performance.now();try{qsWindows(main);}catch(e){console.error('v4 windows',e);}QV4.tWin=(QV4.tWin||0)+performance.now()-tw0;}
+  QV4.tBuild=(QV4.tBuild||0)+performance.now()-tm0;main.userData._v4={fam,XL,OUT,w5:V5?V5.walls:null,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(q=>d.vzOf?d.vzOf(q):d.zf(q[0],q[1]))}))}; QV4.done.push(main); {const tw0=performance.now();try{qsWindows(main);}catch(e){console.error('v4 windows',e);}QV4.tWin=(QV4.tWin||0)+performance.now()-tw0;}
   try{if(S.gfWalls)buildGroundFloors(S.gfWalls);}catch(e){}
   rebuildEdges(); return true;}
 /* the IGN pitched roofs of these buildings live in shared meshes: their triangles are folded under the ground */
@@ -3094,7 +3094,7 @@ function qsRows(o){const u=o.userData;let base=u.zBase,sh=0;
   try{if(u.lidar&&u.facades&&nFloorsRaw(u)<=2){const off=floorBase(u)-u.zBase;if(off>=0.3||u._gl){base=u.zBase+off;sh=u._gl?u._glH:3;}}}catch(e){}
   if(!sh){const b=u.floors||Math.max(1,Math.round(u.h/3));sh=u.h/b;}
   return {base,sh};}
-function qsWindows(main){const V=main.userData._v4;if(!V)return;const {fam,XL,OUT}=V;
+function qsWindows(main){const V=main.userData._v4;if(!V)return;if(V.w5)return qsWindows5(main);const {fam,XL,OUT}=V;
   [...main.children].forEach(c=>{if(c.userData.winDecal){main.remove(c);c.geometry.dispose();}});
   const objs=[];fam.forEach(o=>{objs.push(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal&&!c.userData.hiRoof)objs.push(c);});});
   const bs=main.geometry.boundingSphere||(main.geometry.computeBoundingSphere(),main.geometry.boundingSphere);
@@ -3701,6 +3701,47 @@ function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.us
       const cur=qsCurErr(fam,R),mine=qsV4Err(M,R);QV4.log.push({x:Math.round(main.userData.rings[0][0].x),y:Math.round(main.userData.rings[0][0].y),cur:+cur.toFixed(2),v4:+mine.toFixed(2),types:M.v4.types.join(',')});
       res(mine<cur*0.8&&cur-mine>0.08?{M,main}:null);});
     w.postMessage({kind:'model',id,big,R:{rings:R.rings,sh:R.sh,s:R.s}});});}
+/* windows on the v5 walls: the wall lines, their top and bottom are known along them, so no ray is needed to find the wall;
+   rays only for what stands in front (a neighbour, a wing in a corner). Same rules as before: the study's storeys, 3.5 m bays,
+   lintel under the eave, sill above the ground in front. */
+function qsWindows5(main){const V=main.userData._v4,{fam,w5}=V;
+  [...main.children].forEach(c=>{if(c.userData.winDecal){main.remove(c);c.geometry.dispose();}});
+  const objs=[];fam.forEach(o=>{objs.push(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal&&!c.userData.hiRoof)objs.push(c);});});
+  const bs=main.geometry.boundingSphere||(main.geometry.computeBoundingSphere(),main.geometry.boundingSphere);
+  const near=S.meshes.filter(m=>!fam.includes(m)&&m.geometry&&(m.geometry.boundingSphere||(m.geometry.computeBoundingSphere(),m.geometry.boundingSphere)).center.distanceTo(bs.center)<bs.radius+40);
+  const around=objs.concat(near,S.roofSetMeshes||[]);around.forEach(o=>o.updateMatrixWorld(true));
+  const ray=new THREE.Raycaster(),org=new THREE.Vector3(),dir=new THREE.Vector3(),down=new THREE.Vector3(0,0,-1);
+  const tallIn=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
+  const airAt=(x,y,z)=>{org.set(x,y,z+300);ray.set(org,down);ray.far=1000;const h=ray.intersectObjects(around,false);return !h.length||h[0].point.z<z;};
+  /* wall lines: segments on one straight line, same side, merged; cut where the wall top jumps (a tower corner) */
+  const G=[];w5.forEach(w=>{const ex=-w.ny,ey=w.nx,off=w.a[0]*w.nx+w.a[1]*w.ny;let g=G.find(g=>g.nx*w.nx+g.ny*w.ny>0.9999&&Math.abs(off-g.off)<0.02);if(!g){g={nx:w.nx,ny:w.ny,ex,ey,off,S:[]};G.push(g);}
+    let ta=w.a[0]*g.ex+w.a[1]*g.ey,tb=w.b[0]*g.ex+w.b[1]*g.ey,s={ta,tb,za1:w.za1,zb1:w.zb1,za0:w.za0,zb0:w.zb0};if(ta>tb)s={ta:tb,tb:ta,za1:w.zb1,zb1:w.za1,za0:w.zb0,zb0:w.za0};g.S.push(s);});
+  const runs=[];G.forEach(g=>{g.S.sort((p,q)=>p.ta-q.ta);let cur=null;const close=()=>{if(cur&&cur.t1-cur.t0>=1.6)runs.push(cur);cur=null;};
+    g.S.forEach(s=>{const gr=s.za0==null;if(cur&&(s.ta>cur.t1+0.01||gr!==cur.gr||Math.abs(s.za1-cur.S[cur.S.length-1].zb1)>0.8))close();if(!cur)cur={g,gr,t0:s.ta,t1:s.tb,S:[]};cur.S.push(s);cur.t1=Math.max(cur.t1,s.tb);});close();});
+  const at=(r,t,k1,k0)=>{for(const s of r.S)if(t>=s.ta-1e-6&&t<=s.tb+1e-6){const f=(t-s.ta)/((s.tb-s.ta)||1);return [s[k1]+(s[k0]-s[k1])*f];}return [null];};
+  const topOf=(r,t)=>at(r,t,'za1','zb1')[0],botOf=(r,t)=>r.gr?-Infinity:at(r,t,'za0','zb0')[0];
+  const P=[],U=[],stat={cells:0,ground:0,wall:0,air:0,ok:0,runs:runs.length},placed=[];
+  runs.forEach(r=>{const g=r.g,L=r.t1-r.t0,nx=g.nx,ny=g.ny,bays=Math.max(1,Math.round(L/3.5)),w=L/bays,pt=t=>[g.nx*g.off+g.ex*t,g.ny*g.off+g.ey*t];
+    for(let i=0;i<bays;i++){const ww=Math.min(1.3,w-0.5);if(ww<0.6)continue;const tc=r.t0+i*w+w/2,t0=tc-ww/2,t1=tc+ww/2,[cx,cy]=pt(tc);
+      const o=tallIn(cx-nx*0.3,cy-ny*0.3)||main,ub=o.userData;let fb,sh,nF;try{fb=floorBase(ub);sh=storeyH(ub);nF=nFloors(ub);}catch(e){continue;}
+      const gz=groundAt({x:cx,y:cy},{x:nx,y:ny});
+      const T3=[t0+0.1,tc,t1-0.1],tops=T3.map(t=>topOf(r,t));if(tops.some(v=>v==null))continue;const wt=Math.min(...tops);
+      for(let k=0;k<nF;k++){stat.cells++;
+        if(k<nF-1&&fb+k*sh+1.5<gz+WIN_SILL){stat.ground++;continue;}
+        const zc0=Math.max(fb+k*sh+1.5,gz+WIN_CLEAR),zt0=zc0+0.75,zt=Math.min(zt0,wt-0.25),zb=zc0-0.75,zc=(zb+zt)/2;
+        if(zt<zt0-0.45||zt-zb<1.0){stat.wall++;continue;}
+        /* the wall stands over the whole window: under its top, above the lower roof for a step wall */
+        let ok=true;for(const t of [t0+0.08,tc,t1-0.08]){const tp=topOf(r,t),bt=botOf(r,t);if(tp==null||tp<zt+0.12||bt>zb-0.1){ok=false;break;}}
+        if(!ok){stat.wall++;continue;}
+        for(const t of [t0,t1]){const [x,y]=pt(t);if(!airAt(x+nx*0.35,y+ny*0.35,zb-0.05)){ok=false;break;}}
+        if(ok)for(const t of [t0-0.25,t1+0.25]){const [x,y]=pt(t);org.set(x+nx*0.05,y+ny*0.05,zc);dir.set(nx,ny,0);ray.set(org,dir);ray.far=1.2;if(ray.intersectObjects(objs,false).length){ok=false;break;}}
+        if(ok&&placed.some(q=>Math.hypot(q[0]-cx,q[1]-cy)<1.4&&Math.abs(q[2]-zc)<1.0))ok=false;
+        if(!ok){stat.air++;continue;}
+        placed.push([cx,cy,zc]);stat.ok++;const [x0,y0]=pt(t0),[x1,y1]=pt(t1),ox=nx*0.02,oy=ny*0.02;
+        [[x0,y0,zb,0,0],[x1,y1,zb,1,0],[x1,y1,zt,1,1],[x0,y0,zb,0,0],[x1,y1,zt,1,1],[x0,y0,zt,0,1]].forEach(v=>{P.push(v[0]+ox,v[1]+oy,v[2]);U.push(v[3],v[4]);});}}});
+  V.stat=stat;if(!P.length)return;
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
+  const m=new THREE.Mesh(g,QS_WIN_MAT);m.position.z=-main.position.z;m.renderOrder=2;m.userData.winDecal=true;m.userData.hiRoof=true;m.raycast=()=>{};main.add(m);}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
