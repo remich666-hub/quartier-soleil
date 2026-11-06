@@ -2950,7 +2950,7 @@ function qsV4One(fam){
       if(bi<0)return;const d=D2[bi];let un;try{un=PCx.union([d.outer,...d.holes],g);}catch(e){return;}
       D2.splice(bi,1);un.forEach(poly=>D2.push({outer:poly[0].slice(0,-1),holes:poly.slice(1).map(h=>h.slice(0,-1)),zf:d.zf,n:d.n}));});
     drawn.length=0;drawn.push(...D2);}
-  qsJoinPans(drawn);
+  qsJoinPans(drawn,qsAxis(main));
   const inOut=(x,y)=>!OUT||OUT.some(poly=>pointInPoly(x,y,poly[0].map(([a,b])=>({x:a,y:b})))&&!poly.slice(1).some(h=>pointInPoly(x,y,h.map(([a,b])=>({x:a,y:b})))));
   const inRing=(x,y,R)=>{let o=false;for(let i=0,j=R.length-1;i<R.length;j=i++){const [a,b]=R[i],[c,d]=R[j];if((b>y)!==(d>y)&&x<(c-a)*(y-b)/(d-b)+a)o=!o;}return o;};
   const drawnZ=(x,y)=>{let z=-Infinity;drawn.forEach(d=>{if(inRing(x,y,d.outer)&&!d.holes.some(h=>inRing(x,y,h)))z=Math.max(z,d.zf(x,y));});return z;};
@@ -3162,11 +3162,17 @@ function qsDespike(R){R=R.slice();for(let it=0;it<R.length*2&&R.length>3;it++){l
 /* neighbouring pans meet exactly: where two pans share an edge (a ridge, a hip, a valley) and their heights there differ by less
    than 60 cm, both are brought to the mean (each plane refitted by least squares on its corners, shared points weighted);
    a larger difference is a real step and stays */
-function qsJoinPans(D){if(D.length<2)return;
+function qsJoinPans(D,th){if(!D.length)return;
   const onEdge=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2<1e-6)continue;
     const t=((q[0]-a[0])*ex+(q[1]-a[1])*ey)/L2;if(t<-0.01||t>1.01)continue;if(Math.abs((q[0]-a[0])*ey-(q[1]-a[1])*ex)/Math.sqrt(L2)<0.06)return true;}return false;};
   /* each pan's plane as z = a x + b y + c, from its own function */
   D.forEach(d=>{const z0=d.zf(0,0);d.pl=[d.zf(1,0)-z0,d.zf(0,1)-z0,z0];});
+  /* a pan runs down square to its eave wall: its slope turned onto the nearest wall axis (within 20°), the pan kept at its mean height;
+     a flat roof stays flat. Eaves and ridges along the walls are then level. */
+  if(th!=null)D.forEach(d=>{const [a,b,c]=d.pl,g=Math.hypot(a,b);let cx=0,cy=0;d.outer.forEach(q=>{cx+=q[0];cy+=q[1];});cx/=d.outer.length;cy/=d.outer.length;const zc=a*cx+b*cy+c;
+    if(g<0.06){d.pl=[0,0,zc];d.dir=[0,0];return;}
+    const ang=Math.atan2(b,a),k=Math.round((ang-th)/(Math.PI/2)),dev=ang-th-k*Math.PI/2;if(Math.abs(dev)>0.35)return;
+    const ua=th+k*Math.PI/2,ux=Math.cos(ua),uy=Math.sin(ua),s=a*ux+b*uy;d.dir=[ux,uy];d.pl=[s*ux,s*uy,zc-s*(ux*cx+uy*cy)];});
   for(let it=0;it<4;it++){
     const T=D.map(d=>d.outer.map(q=>({q,z:null,w:1})));const extra=D.map(()=>[]);
     D.forEach((d,i)=>d.outer.forEach((q,k)=>{const zi=d.pl[0]*q[0]+d.pl[1]*q[1]+d.pl[2];const zs=[zi],js=[];
@@ -3176,10 +3182,16 @@ function qsJoinPans(D){if(D.length<2)return;
       /* weighted least squares for a, b, c (centred for stability) */
       let sw=0,mx=0,my=0;pts.forEach(p=>{sw+=p.w;mx+=p.w*p.q[0];my+=p.w*p.q[1];});mx/=sw;my/=sw;
       let sxx=0,sxy=0,syy=0,sxz=0,syz=0,sz=0;pts.forEach(p=>{const x=p.q[0]-mx,y=p.q[1]-my;sxx+=p.w*x*x;sxy+=p.w*x*y;syy+=p.w*y*y;sxz+=p.w*x*p.z;syz+=p.w*y*p.z;sz+=p.w*p.z;});
+      if(d.dir){const [ux,uy]=d.dir;let suu=0,suz=0;pts.forEach(p=>{const t=(p.q[0]-mx)*ux+(p.q[1]-my)*uy;suu+=p.w*t*t;suz+=p.w*t*p.z;});
+        const s0=d.pl[0]*ux+d.pl[1]*uy;let s1=(ux||uy)&&suu>1e-6?suz/suu:0;if(!(ux||uy))s1=0;if(Math.abs(s1-s0)>0.12)s1=s0;
+        d.pl=[s1*ux,s1*uy,sz/sw-s1*(ux*mx+uy*my)];return;}
       const det=sxx*syy-sxy*sxy;if(Math.abs(det)<1e-6)return;const a=(sxz*syy-syz*sxy)/det,b=(syz*sxx-sxz*sxy)/det,c=sz/sw-a*mx-b*my;
       /* a refit that tilts the pan noticeably is refused (the laser slope stays the reference) */
       if(Math.hypot(a-d.pl[0],b-d.pl[1])>0.12)return;d.pl=[a,b,c];});}
   D.forEach(d=>{const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const L=Math.hypot(a,b,1);d.n=[-a/L,-b/L,1/L];});}
+
+/* the main wall axis of a building: the direction of the longest edge of its main footprint */
+function qsAxis(main){const mr=main.userData.rings[0];let th=0,best=0;for(let k=0;k<mr.length;k++){const a=mr[k],b=mr[(k+1)%mr.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L>best){best=L;th=Math.atan2(b.y-a.y,b.x-a.x);}}return th;}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
