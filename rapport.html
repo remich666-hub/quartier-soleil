@@ -10,9 +10,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
-  --desk:#ebe6dc; --sheet:#fdfbf7; --raised:#f4efe6;
-  --ink:#1f1b16; --ink2:#5e554a; --muted:#7b7266; --line:rgba(31,27,22,.10); --line2:rgba(31,27,22,.18);
-  --sun:#e8772e; --sun-ink:#ad4f16; --sun-soft:#f8e2cd; --shade:#d8d1c5; --shade-ink:#a79e90; --sky:#eef0ee;
+  --desk:#e9ecf7; --sheet:#fdfdff; --raised:#f1f3fa;
+  --ink:#151a33; --ink2:#474e6d; --muted:#7a809b; --line:rgba(21,26,51,.09); --line2:rgba(21,26,51,.16);
+  --sun:#f0773a; --sun-ink:#c2521c; --sun-soft:#fbe3d8; --shade:#cfd5ea; --shade-ink:#8f97b8; --sky:#eef1fb;
   --sans:"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   --serif:"Instrument Serif",ui-serif,Georgia,serif;
   --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
@@ -30,10 +30,10 @@ img{max-width:100%;display:block}
 .toolbar #tbNote{order:3;flex-basis:100%}
 .btn{font:500 14px/1 var(--sans);height:40px;padding:0 16px;border-radius:10px;border:1px solid var(--line2);background:var(--sheet);color:var(--ink);cursor:pointer;transition:background-color .15s var(--ease),border-color .15s var(--ease)}
 .btn:hover{background:var(--raised)}
-.btn.primary{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
-.btn.primary:hover{background:#3a332b}
+.btn.primary{background:linear-gradient(100deg,#f0773a,#e8678e);color:#fff;border-color:transparent}
+.btn.primary:hover{background:#2a3050}
 
-.page{width:210mm;min-height:297mm;margin:0 auto 24px;background:var(--sheet);border-radius:4px;box-shadow:0 1px 2px rgba(31,27,22,.06),0 12px 32px rgba(31,27,22,.08);
+.page{width:210mm;min-height:297mm;margin:0 auto 24px;background:var(--sheet);border-radius:4px;box-shadow:0 1px 2px rgba(21,26,51,.06),0 12px 32px rgba(21,26,51,.08);
   padding:16mm 16mm 14mm;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .page>main{flex:1;display:flex;flex-direction:column;gap:20px}
 .head{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:24px}
@@ -108,7 +108,7 @@ th.n{text-align:right;white-space:nowrap}
 .src li span:last-child{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
 
 .loading{max-width:210mm;margin:80px auto;text-align:center;color:var(--ink2)}
-.feedback{max-width:210mm;margin:8px auto 24px;background:var(--sheet);border-radius:12px;padding:28px 32px;box-shadow:0 1px 2px rgba(31,27,22,.06);display:flex;flex-direction:column;gap:8px}
+.feedback{max-width:210mm;margin:8px auto 24px;background:var(--sheet);border-radius:12px;padding:28px 32px;box-shadow:0 1px 2px rgba(21,26,51,.06);display:flex;flex-direction:column;gap:8px}
 .feedback a{color:var(--sun-ink)}
 @media print{.feedback{display:none!important}}
 @media (max-width:860px){.feedback{padding:24px 20px}}
@@ -135,7 +135,7 @@ th.n{text-align:right;white-space:nowrap}
 </head>
 <body>
 <div class="toolbar" id="toolbar" hidden>
-  <a class="note" href="./" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#e8772e"/><path d="M2 17h20" stroke="#1f1b16" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
+  <a class="note" href="./" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#f0773a" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#f0773a"/><path d="M2 17h20" stroke="#151a33" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
   <span class="note" id="tbNote"></span>
   <span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="pdf" type="button">Télécharger en PDF</button><a class="btn primary" id="tbGo" href="explorer.html" style="display:inline-flex;align-items:center;text-decoration:none">Calculer pour mon adresse</a></span>
 </div>
@@ -160,7 +160,7 @@ function hm(h){const m=Math.round(h*60);const H=Math.floor(m/60),M=m%60;return H
 function hmBig(h){const m=Math.round(h*60);const H=Math.floor(m/60),M=m%60;return `${H}<small>h</small>${String(M).padStart(2,'0')}`;}
 function floorName(f){return f===-1?'rez-de-jardin':f===0?'rez-de-chaussée':f===1?'1er étage':`${f}e étage`;}
 function toMin(s){const [a,b]=s.split(':').map(Number);return a*60+b;}
-const sunMark=(s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="${'#e8772e'}" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#e8772e"/><path d="M2 17h20" stroke="#1f1b16" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+const sunMark=(s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="${'#f0773a'}" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#f0773a"/><path d="M2 17h20" stroke="#151a33" stroke-width="1.6" stroke-linecap="round"/></svg>`;
 
 function verdict(R){
   const a=R.annual.h, w=R.keyDates[0].h, s=R.keyDates[2].h, lost=R.annual.free-a;
@@ -236,25 +236,25 @@ function maskChart(R){
 function panorama(R){
   const W=640,H=300,hz=246,f=0; const az0=R.window.az;
   const d=a=>((a-az0+540)%360)-180; const x=a=>W/2+d(a)/90*(W/2); const y=e=>hz-Math.sin(Math.min(88,Math.max(-5,e))*Math.PI/180)*(hz-22);
-  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Panorama depuis la fenêtre"><defs><linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfdde6"/><stop offset="1" stop-color="#f3eee4"/></linearGradient></defs>`;
-  s+=`<rect x="0" y="0" width="${W}" height="${hz}" fill="url(#skyG)"/><rect x="0" y="${hz}" width="${W}" height="${H-hz}" fill="#e9e2d6"/>`;
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Panorama depuis la fenêtre"><defs><linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9d3f6"/><stop offset="1" stop-color="#f0f2f9"/></linearGradient></defs>`;
+  s+=`<rect x="0" y="0" width="${W}" height="${hz}" fill="url(#skyG)"/><rect x="0" y="${hz}" width="${W}" height="${H-hz}" fill="#e6e9f3"/>`;
   // sun paths
   const days=[[12,'21 déc.'],[3,'20 mars'],[6,'21 juin']];
   const horAt=a=>{if(!R.sky)return 0;let b=null,bd=1e9;R.sky.az.forEach((z,i)=>{const dd=Math.abs(((a-z+540)%360)-180);if(dd<bd){bd=dd;b=R.sky.deg[i];}});return bd>3?90:b;};
   // skyline silhouette, coloured by kind of obstacle
   if(R.sky){const pts=R.sky.az.map((a,i)=>[a,R.sky.deg[i],(R.sky.type||[])[i]||'']).filter(p=>Math.abs(d(p[0]))<=90).sort((p,q)=>d(p[0])-d(q[0]));
-    const col={'végétation':'#a9bd9c','bâtiment':'#d3cbbe','votre bâtiment':'#ddd5c8','relief':'#c2b7a4'};
-    for(let i=0;i<pts.length-1;i++){const [a1,e1,t1]=pts[i],[a2,e2]=pts[i+1];if(e1<=0.3&&e2<=0.3)continue;s+=`<path d="M${x(a1).toFixed(1)} ${hz} L${x(a1).toFixed(1)} ${y(Math.max(0,e1)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,e2)).toFixed(1)} L${x(a2).toFixed(1)} ${hz}Z" fill="${col[t1]||'#d3cbbe'}" stroke="${col[t1]||'#d3cbbe'}" stroke-width=".6"/>`;}
+    const col={'végétation':'#b9c3ea','bâtiment':'#cfd3e3','votre bâtiment':'#dfe2ee','relief':'#c3bfd9'};
+    for(let i=0;i<pts.length-1;i++){const [a1,e1,t1]=pts[i],[a2,e2]=pts[i+1];if(e1<=0.3&&e2<=0.3)continue;s+=`<path d="M${x(a1).toFixed(1)} ${hz} L${x(a1).toFixed(1)} ${y(Math.max(0,e1)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,e2)).toFixed(1)} L${x(a2).toFixed(1)} ${hz}Z" fill="${col[t1]||'#cfd3e3'}" stroke="${col[t1]||'#cfd3e3'}" stroke-width=".6"/>`;}
     // deciduous crowns: the part of the silhouette that opens up in winter, lighter
     if(R.sky.degB){const pb=R.sky.az.map((a,i)=>[a,R.sky.deg[i],R.sky.degB[i]]).filter(p=>Math.abs(d(p[0]))<=90).sort((p,q)=>d(p[0])-d(q[0]));
-      for(let i=0;i<pb.length-1;i++){const [a1,e1,b1]=pb[i],[a2,e2,b2]=pb[i+1];if(e1-b1<0.5&&e2-b2<0.5)continue;s+=`<path d="M${x(a1).toFixed(1)} ${y(Math.max(0,b1)).toFixed(1)} L${x(a1).toFixed(1)} ${y(Math.max(0,e1)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,e2)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,b2)).toFixed(1)}Z" fill="#d6e2cc" stroke="#d6e2cc" stroke-width=".6"/>`;}}
-    let dl=`M${x(pts[0][0])} ${y(Math.max(0,pts[0][1]))}`;pts.forEach(p=>{dl+=` L${x(p[0]).toFixed(1)} ${y(Math.max(0,p[1])).toFixed(1)}`;});s+=`<path d="${dl}" fill="none" stroke="#e8772e" stroke-width="1.2" stroke-opacity=".8"/>`;}
-  days.forEach(([m,lab])=>{const p=R.paths.find(q=>q.m===(m===3?3:m));if(!p)return;let seg=[],on=null;const flush=()=>{if(seg.length>1)s+=`<polyline points="${seg.join(' ')}" fill="none" stroke="${on?'#e8772e':'#9a9083'}" stroke-width="${on?2.2:1.2}" ${on?'':'stroke-dasharray="3 3"'} stroke-linecap="round"/>`;};
+      for(let i=0;i<pb.length-1;i++){const [a1,e1,b1]=pb[i],[a2,e2,b2]=pb[i+1];if(e1-b1<0.5&&e2-b2<0.5)continue;s+=`<path d="M${x(a1).toFixed(1)} ${y(Math.max(0,b1)).toFixed(1)} L${x(a1).toFixed(1)} ${y(Math.max(0,e1)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,e2)).toFixed(1)} L${x(a2).toFixed(1)} ${y(Math.max(0,b2)).toFixed(1)}Z" fill="#dfe4f7" stroke="#dfe4f7" stroke-width=".6"/>`;}}
+    let dl=`M${x(pts[0][0])} ${y(Math.max(0,pts[0][1]))}`;pts.forEach(p=>{dl+=` L${x(p[0]).toFixed(1)} ${y(Math.max(0,p[1])).toFixed(1)}`;});s+=`<path d="${dl}" fill="none" stroke="#f0773a" stroke-width="1.2" stroke-opacity=".8"/>`;}
+  days.forEach(([m,lab])=>{const p=R.paths.find(q=>q.m===(m===3?3:m));if(!p)return;let seg=[],on=null;const flush=()=>{if(seg.length>1)s+=`<polyline points="${seg.join(' ')}" fill="none" stroke="${on?'#f0773a':'#8f95ad'}" stroke-width="${on?2.2:1.2}" ${on?'':'stroke-dasharray="3 3"'} stroke-linecap="round"/>`;};
     p.pts.forEach(([a,e])=>{if(e<0||Math.abs(d(a))>90){flush();seg=[];on=null;return;}const vis=e>horAt(a);const pt=x(a).toFixed(1)+','+y(e).toFixed(1);if(on!==null&&vis!==on){seg.push(pt);flush();seg=[pt];}on=vis;seg.push(pt);});flush();
-    const pk=p.pts.reduce((b,c)=>c[1]>b[1]?c:b);if(Math.abs(d(pk[0]))<85){const vis=pk[1]>horAt(pk[0]);s+=`<circle cx="${x(pk[0])}" cy="${y(pk[1])}" r="7" fill="${vis?'#f0a35a':'#fdfbf7'}" stroke="${vis?'#e8772e':'#9a9083'}" stroke-width="1.2"/><text x="${x(pk[0])}" y="${y(pk[1])-12}" text-anchor="middle" font-size="10" fill="#5e554a">${lab}</text>`;}});
+    const pk=p.pts.reduce((b,c)=>c[1]>b[1]?c:b);if(Math.abs(d(pk[0]))<85){const vis=pk[1]>horAt(pk[0]);s+=`<circle cx="${x(pk[0])}" cy="${y(pk[1])}" r="7" fill="${vis?'#f6a07a':'#fdfdff'}" stroke="${vis?'#f0773a':'#8f95ad'}" stroke-width="1.2"/><text x="${x(pk[0])}" y="${y(pk[1])-12}" text-anchor="middle" font-size="10" fill="#474e6d">${lab}</text>`;}});
   // own wall beyond ±90° and frame
-  s+=`<rect x="0" y="0" width="6" height="${H}" fill="#cfc6b8"/><rect x="${W-6}" y="0" width="6" height="${H}" fill="#cfc6b8"/>`;
-  [['E',90],['SE',135],['S',180],['SO',225],['O',270],['N',0],['NE',45],['NO',315]].forEach(([n,a])=>{if(Math.abs(d(a))>85)return;s+=`<text x="${x(a)}" y="${H-10}" text-anchor="middle" font-size="11" font-weight="500" fill="#5e554a">${n}</text>`;});
+  s+=`<rect x="0" y="0" width="6" height="${H}" fill="#c9cee0"/><rect x="${W-6}" y="0" width="6" height="${H}" fill="#c9cee0"/>`;
+  [['E',90],['SE',135],['S',180],['SO',225],['O',270],['N',0],['NE',45],['NO',315]].forEach(([n,a])=>{if(Math.abs(d(a))>85)return;s+=`<text x="${x(a)}" y="${H-10}" text-anchor="middle" font-size="11" font-weight="500" fill="#474e6d">${n}</text>`;});
   return s+'</svg>';
 }
 function heatmap(R){
@@ -300,7 +300,7 @@ function render(R){
     <div class="chart">${maskChart(R)}</div>
     <div class="legend"><span><i class="sw" style="background:var(--sun)"></i>Soleil visible</span><span><i class="sw" style="border:1px dashed var(--shade-ink)"></i>Soleil caché</span><span><i class="sw" style="background:var(--shade)"></i>Obstacles et mur de la façade</span><span><i class="sw" style="border-top:1px dashed var(--muted);border-radius:0;height:0;width:14px"></i>Heures</span></div>
     ${obs.length?`<div class="figure"><h3>Obstacles identifiés</h3><div class="tablewrap"><table><thead><tr><th>Obstacle</th><th>Direction</th><th class="n">Distance</th><th class="n">Hauteur</th><th class="n">Masque</th><th class="n">Soleil retiré / an</th></tr></thead><tbody>
-      ${obs.map(o=>`<tr><td><span class="tag"><i class="dot" style="background:${o.type==='végétation'?'#8aa37c':o.type==='relief'?'#b9a98f':'#b8b0a3'}"></i>${o.type==='végétation'?(o.dec?'Arbre à feuilles caduques':'Végétation'):o.type==='votre bâtiment'?'Votre bâtiment':o.type==='bâtiment'?'Bâtiment voisin':'Mur, clôture ou relief'}</span></td><td>${DIRL[o.dir]} <span class="mono">${o.az0}°–${o.az1}°</span></td><td class="n">${o.d} m</td><td class="n">${o.h!=null?fr(o.h)+' m':'—'}</td><td class="n">${o.deg}°</td><td class="n">${o.lostH} h</td></tr>`).join('')}
+      ${obs.map(o=>`<tr><td><span class="tag"><i class="dot" style="background:${o.type==='végétation'?'#8f9bd6':o.type==='relief'?'#b0a8d0':'#a9afc6'}"></i>${o.type==='végétation'?(o.dec?'Arbre à feuilles caduques':'Végétation'):o.type==='votre bâtiment'?'Votre bâtiment':o.type==='bâtiment'?'Bâtiment voisin':'Mur, clôture ou relief'}</span></td><td>${DIRL[o.dir]} <span class="mono">${o.az0}°–${o.az1}°</span></td><td class="n">${o.d} m</td><td class="n">${o.h!=null?fr(o.h)+' m':'—'}</td><td class="n">${o.deg}°</td><td class="n">${o.lostH} h</td></tr>`).join('')}
       </tbody></table></div><p class="small">« Masque » : angle jusqu'auquel l'obstacle cache le ciel vu de la fenêtre. « Soleil retiré » : heures de soleil direct par an que la fenêtre recevrait si cet obstacle n'existait pas.</p></div>`:''}`;
   const views=(R.images&&R.images.views)||[];
   const vlab=[['21 décembre','12 h 30'],['20 mars','13 h'],['21 juin','13 h 30']];
@@ -348,7 +348,7 @@ function render(R){
     $('#pdf').addEventListener('click',()=>window.print());
     const tq='ref='+encodeURIComponent(R.ref||'')+'&source='+(R.__example?'exemple':'rapport');
     $('#tally').src='https://tally.so/embed/ArzGWo?alignLeft=1&hideTitle=1&transparentBackground=1&dynamicHeight=1&'+tq;
-    $('#tallyLink').href='https://tally.so/r/ArzGWo?'+tq; $('#feedback').hidden=false;}
+    $('#tallyLink').href='https://tally.so/r/ArzGWo?'+tq; $('#fde3d6ck').hidden=false;}
 })();
 </script>
 </body>

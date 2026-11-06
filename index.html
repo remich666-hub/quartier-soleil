@@ -184,12 +184,12 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 :root{--bg:#eef1f8;--card:rgba(248,249,253,.72);--raised:rgba(21,26,51,.05);--ink:#151a33;--ink2:#474e6d;--muted:#7a809b;
   --line:rgba(21,26,51,.09);--line2:rgba(21,26,51,.16);--sun:#f0773a;--sun2:#e8678e;--sun-ink:#c2521c;--sun-soft:#fbe3d8;--btn:#151a33;--btn-ink:#f6f7fc;
   --aura1:#f6c3b0;--aura2:#c9d3f0;--aura3:#efc6d8;--grain:.06;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0c1022;--card:rgba(16,20,40,.62);--raised:rgba(238,240,250,.06);--ink:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;
-  --line:rgba(238,240,250,.08);--line2:rgba(238,240,250,.16);--sun:#ff8a4c;--sun2:#f0679a;--sun-ink:#ffa070;--sun-soft:#3a2436;--btn:#eef0fa;--btn-ink:#0c1022;
-  --aura1:#4a2a4a;--aura2:#1e2858;--aura3:#3a2050;--grain:.08;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#0c1022;--card:rgba(16,20,40,.62);--raised:rgba(238,240,250,.06);--ink:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;
-  --line:rgba(238,240,250,.08);--line2:rgba(238,240,250,.16);--sun:#ff8a4c;--sun2:#f0679a;--sun-ink:#ffa070;--sun-soft:#3a2436;--btn:#eef0fa;--btn-ink:#0c1022;
-  --aura1:#4a2a4a;--aura2:#1e2858;--aura3:#3a2050;--grain:.08;color-scheme:dark}
+/* the home page is always light; only the hero turns to night, following the window */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#eef1f8;--card:rgba(248,249,253,.72);--raised:rgba(21,26,51,.05);--ink:#151a33;--ink2:#474e6d;--muted:#7a809b;--line:rgba(21,26,51,.09);--line2:rgba(21,26,51,.16);--sun:#f0773a;--sun2:#e8678e;--sun-ink:#c2521c;--sun-soft:#fbe3d8;--btn:#151a33;--btn-ink:#f6f7fc;--aura1:#f6c3b0;--aura2:#c9d3f0;--aura3:#efc6d8;--grain:.06;color-scheme:light}}
+:root[data-theme="dark"]{--bg:#eef1f8;--card:rgba(248,249,253,.72);--raised:rgba(21,26,51,.05);--ink:#151a33;--ink2:#474e6d;--muted:#7a809b;--line:rgba(21,26,51,.09);--line2:rgba(21,26,51,.16);--sun:#f0773a;--sun2:#e8678e;--sun-ink:#c2521c;--sun-soft:#fbe3d8;--btn:#151a33;--btn-ink:#f6f7fc;--aura1:#f6c3b0;--aura2:#c9d3f0;--aura3:#efc6d8;--grain:.06;color-scheme:light}
+.hero[data-mode="dark"]{--bg:#0c1022;--card:rgba(16,20,40,.62);--raised:rgba(238,240,250,.06);--ink:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;--line:rgba(238,240,250,.08);--line2:rgba(238,240,250,.16);--sun:#ff8a4c;--sun2:#f0679a;--sun-ink:#ffa070;--sun-soft:#3a2436;--btn:#eef0fa;--btn-ink:#0c1022;--aura1:#4a2a4a;--aura2:#1e2858;--aura3:#3a2050;--grain:.08;color-scheme:dark}
+.hero{background:var(--bg);color:var(--ink)}
+#themeBtn{display:none}
 /* the page sits in soft coloured air, with a fixed grain over everything */
 body{background:var(--bg)}
 body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:40;opacity:var(--grain);mix-blend-mode:overlay;
@@ -231,14 +231,50 @@ nav .btn.primary.sm{box-shadow:none}
 @property --aura2{syntax:'<color>';inherits:true;initial-value:#c9d3f0}
 @property --aura3{syntax:'<color>';inherits:true;initial-value:#efc6d8}
 @property --grain{syntax:'<number>';inherits:true;initial-value:.06}
-:root{transition:--bg 1.6s cubic-bezier(.45,0,.55,1),--card 1.6s cubic-bezier(.45,0,.55,1),--raised 1.6s cubic-bezier(.45,0,.55,1),--ink 1.6s cubic-bezier(.45,0,.55,1),--ink2 1.6s cubic-bezier(.45,0,.55,1),--muted 1.6s cubic-bezier(.45,0,.55,1),--line 1.6s cubic-bezier(.45,0,.55,1),--line2 1.6s cubic-bezier(.45,0,.55,1),--sun 1.6s cubic-bezier(.45,0,.55,1),--sun2 1.6s cubic-bezier(.45,0,.55,1),--sun-ink 1.6s cubic-bezier(.45,0,.55,1),--sun-soft 1.6s cubic-bezier(.45,0,.55,1),--btn 1.6s cubic-bezier(.45,0,.55,1),--btn-ink 1.6s cubic-bezier(.45,0,.55,1),--aura1 1.6s cubic-bezier(.45,0,.55,1),--aura2 1.6s cubic-bezier(.45,0,.55,1),--aura3 1.6s cubic-bezier(.45,0,.55,1),--grain 1.6s cubic-bezier(.45,0,.55,1)}
+.hero{transition:--bg 1.6s cubic-bezier(.45,0,.55,1),--card 1.6s cubic-bezier(.45,0,.55,1),--raised 1.6s cubic-bezier(.45,0,.55,1),--ink 1.6s cubic-bezier(.45,0,.55,1),--ink2 1.6s cubic-bezier(.45,0,.55,1),--muted 1.6s cubic-bezier(.45,0,.55,1),--line 1.6s cubic-bezier(.45,0,.55,1),--line2 1.6s cubic-bezier(.45,0,.55,1),--sun 1.6s cubic-bezier(.45,0,.55,1),--sun2 1.6s cubic-bezier(.45,0,.55,1),--sun-ink 1.6s cubic-bezier(.45,0,.55,1),--sun-soft 1.6s cubic-bezier(.45,0,.55,1),--btn 1.6s cubic-bezier(.45,0,.55,1),--btn-ink 1.6s cubic-bezier(.45,0,.55,1),--aura1 1.6s cubic-bezier(.45,0,.55,1),--aura2 1.6s cubic-bezier(.45,0,.55,1),--aura3 1.6s cubic-bezier(.45,0,.55,1),--grain 1.6s cubic-bezier(.45,0,.55,1)}
+/* ===== the rest of the page speaks the hero's language: pastel light in the air, grain, one warm accent ===== */
+html,body{overflow-x:clip}
+section.block,.facts,.cta{position:relative;isolation:isolate}
+/* the lights are not clipped by their section: they spill softly into the next one */
+/* each section gets its own soft light, placed differently, as if the sun moved across the page */
+section.block::before,.cta::before{content:"";position:absolute;z-index:-1;pointer-events:none;width:min(900px,120vw);aspect-ratio:1;border-radius:50%;filter:blur(60px);opacity:.55}
+#comment::before{left:-25%;top:-10%;background:radial-gradient(closest-side,#c9d3f6,transparent)}
+#exemple::before{right:-30%;top:5%;background:radial-gradient(closest-side,#f8cdbb,transparent)}
+#fiabilite::before{left:-20%;bottom:-30%;background:radial-gradient(closest-side,#efc6dc,transparent)}
+#tarifs::before{right:-25%;top:-20%;background:radial-gradient(closest-side,#c9d3f6,transparent)}
+section.block:not([id])::before{left:10%;top:0;background:radial-gradient(closest-side,#f6d6c8,transparent);opacity:.4}
+/* figures: light serif numbers, units in the warm accent */
+.facts{border-color:var(--line)}
+.fact .v{color:var(--ink)}
+.fact .v small{color:var(--sun-ink)}
+/* the section examples: no flat beige, a cool paper */
+#exemple{background:transparent!important;border:0!important}
+.paper{border-radius:22px;border-color:var(--line);background:#e9ecf7}.paper::after{background:linear-gradient(to bottom,transparent,#e9ecf7)}
+/* soft, rounded, airy cards */
+.step,.card{border-radius:22px;border-color:rgba(255,255,255,.7)}
+.step .n{color:transparent;background:linear-gradient(100deg,var(--sun),var(--sun2));-webkit-background-clip:text;background-clip:text}
+.limits{background:color-mix(in srgb,#c9d3f6 35%,transparent);border-radius:18px}
+.badge{background:linear-gradient(100deg,#fde3d6,#fbdbe7);color:var(--sun-ink)}
+.btn{border-radius:12px}
+.btn.ghost{background:rgba(255,255,255,.5);border-color:var(--line2)}
+.btn.ghost:hover{background:rgba(255,255,255,.85)}
+details summary::after{color:var(--sun-ink)}
+/* the closing call is a small night window: navy, grain, one warm glow */
+.cta .box{position:relative;overflow:hidden;isolation:isolate;background:#0f1430;border:0;border-radius:28px;color:#eef0fa;
+  box-shadow:0 30px 70px -30px rgba(20,24,60,.6)}
+.cta .box::before{content:"";position:absolute;z-index:-1;right:-10%;top:-60%;width:70%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(255,138,76,.75),rgba(240,103,154,.35) 45%,transparent);filter:blur(10px)}
+.cta .box::after{content:"";position:absolute;inset:0;z-index:-1;opacity:.22;mix-blend-mode:overlay;pointer-events:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+.cta .box p,.cta .box .hint{color:#aab0cb}
+.cta .box .btn.ghost{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18);color:#eef0fa}
 </style>
 <script>window.QS_SUN=3</script>
 </head>
 <body>
 <nav id="nav"><div class="wrap">
-  <a class="brand" href="./" aria-label="Quartier Soleil, accueil"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#e8772e"/><path d="M2 17h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
-  <div class="links"><a class="l" href="#comment">Comment ça marche</a><a class="l" href="#exemple">Exemple</a><a class="l" href="#fiabilite">Fiabilité</a><a class="l" href="#tarifs">Tarifs</a><button class="tbtn" type="button" id="themeBtn" aria-label="Basculer clair / foncé"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" stroke-linejoin="round"/></svg></button><a class="btn primary sm" href="explorer.html">Essayer</a></div>
+  <a class="brand" href="./" aria-label="Quartier Soleil, accueil"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#f0773a" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#f0773a"/><path d="M2 17h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
+  <div class="links"><a class="l" href="#comment">Comment ça marche</a><a class="l" href="#exemple">Exemple</a><a class="l" href="#fiabilite">Fiabilité</a><a class="l" href="#tarifs">Tarifs</a><a class="btn primary sm" href="explorer.html">Essayer</a></div>
 </div></nav>
 
 <header class="hero"><div class="wrap">
@@ -269,11 +305,11 @@ nav .btn.primary.sm{box-shadow:none}
   <div class="head2 rise"><div class="kicker">Comment ça marche</div><h2>Trois étapes, sans visite</h2><p>Une annonce dit « lumineux ». Nous mesurons combien de temps le soleil touche réellement la vitre, en hiver comme en été.</p></div>
   <div class="steps">
     <div class="step rise"><span class="n">01</span><h3>Votre adresse</h3><p>Le quartier est reconstruit en 3D à partir des données de l'IGN : bâtiments, toitures, arbres, haies et relief.</p>
-      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><g fill="var(--card)" stroke="var(--line2)"><rect x="30" y="52" width="44" height="40"/><rect x="92" y="34" width="36" height="58"/><rect x="146" y="60" width="52" height="32"/><rect x="216" y="44" width="40" height="48"/></g><g fill="#a9bd9c"><circle cx="84" cy="80" r="9"/><circle cx="206" cy="78" r="11"/></g><line x1="20" y1="92" x2="280" y2="92" stroke="var(--line2)"/></svg></div>
+      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><g fill="var(--card)" stroke="var(--line2)"><rect x="30" y="52" width="44" height="40"/><rect x="92" y="34" width="36" height="58"/><rect x="146" y="60" width="52" height="32"/><rect x="216" y="44" width="40" height="48"/></g><g fill="#a6b6f6"><circle cx="84" cy="80" r="9"/><circle cx="206" cy="78" r="11"/></g><line x1="20" y1="92" x2="280" y2="92" stroke="var(--line2)"/></svg></div>
     <div class="step rise"><span class="n">02</span><h3>Votre fenêtre</h3><p>Choisissez la façade, l'étage et la position. L'horizon réel est mesuré depuis ce point précis.</p>
-      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="110" y="18" width="80" height="84" fill="var(--card)" stroke="var(--line2)"/><g fill="var(--raised)" stroke="var(--line2)"><rect x="122" y="30" width="16" height="16"/><rect x="162" y="30" width="16" height="16"/><rect x="122" y="76" width="16" height="16"/><rect x="162" y="76" width="16" height="16"/></g><rect x="162" y="53" width="16" height="16" fill="#e8772e"/><path d="M178 61h70" stroke="#e8772e" stroke-width="1.5" stroke-dasharray="3 3"/><circle cx="252" cy="61" r="3" fill="#e8772e"/></svg></div>
+      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="110" y="18" width="80" height="84" fill="var(--card)" stroke="var(--line2)"/><g fill="var(--raised)" stroke="var(--line2)"><rect x="122" y="30" width="16" height="16"/><rect x="162" y="30" width="16" height="16"/><rect x="122" y="76" width="16" height="16"/><rect x="162" y="76" width="16" height="16"/></g><rect x="162" y="53" width="16" height="16" fill="#f0773a"/><path d="M178 61h70" stroke="#f0773a" stroke-width="1.5" stroke-dasharray="3 3"/><circle cx="252" cy="61" r="3" fill="#f0773a"/></svg></div>
     <div class="step rise"><span class="n">03</span><h3>Votre rapport</h3><p>Heures de soleil jour par jour, masque solaire, obstacles nommés, effet des nuages. Prêt à partager.</p>
-      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="60" y="14" width="180" height="96" rx="4" fill="var(--card)" stroke="var(--line2)"/><path d="M80 92a70 70 0 0 1 140 0" fill="none" stroke="#e8772e" stroke-width="2"/><path d="M80 92l20-18 18 6 20-14 22 10 22-4 18 20z" fill="var(--raised)" stroke="var(--line2)"/><line x1="80" y1="92" x2="220" y2="92" stroke="var(--line2)"/></svg></div>
+      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="60" y="14" width="180" height="96" rx="4" fill="var(--card)" stroke="var(--line2)"/><path d="M80 92a70 70 0 0 1 140 0" fill="none" stroke="#f0773a" stroke-width="2"/><path d="M80 92l20-18 18 6 20-14 22 10 22-4 18 20z" fill="var(--raised)" stroke="var(--line2)"/><line x1="80" y1="92" x2="220" y2="92" stroke="var(--line2)"/></svg></div>
   </div>
 </div></section>
 
@@ -333,7 +369,7 @@ nav .btn.primary.sm{box-shadow:none}
 
 <script>
 /* theme toggle */
-document.getElementById('themeBtn').addEventListener('click',()=>{const r=document.documentElement;const cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');const nx=cur==='dark'?'light':'dark';r.dataset.theme=nx;try{localStorage.setItem('qs-theme',nx);}catch(e){}});
+document.getElementById('themeBtn')?.addEventListener('click',()=>{const r=document.documentElement;const cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');const nx=cur==='dark'?'light':'dark';r.dataset.theme=nx;try{localStorage.setItem('qs-theme',nx);}catch(e){}});
 /* nav border on scroll */
 const nav=document.getElementById('nav');addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>8),{passive:true});
 /* reveal on scroll */
@@ -451,7 +487,8 @@ void main(){
   }
   const clockT=document.getElementById('clockT'),clockL=document.getElementById('clockL');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const dark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches;};
+  /* only the hero goes dark (with the night in the window); the rest of the page stays light */
+  const HERO=stage.closest('.hero')||document.body;const dark=()=>HERO.dataset.mode==='dark';
   let W=0,H=0,DPR=1,PW=0,PH=0,img=null,buf=null,T1=null,T2=null,T3=null,G={};
   function build(){
     PW=cv.width;PH=cv.height;if(GL){GL.viewport(0,0,PW,PH);}else{img=ctx.createImageData(PW,PH);buf=new Uint32Array(img.data.buffer);
@@ -555,8 +592,7 @@ void main(){
   }
   /* one day and one night in 18 s: the night passes quicker, dawn and dusk linger (ease in / ease out); ~30 fps is plenty */
   /* the whole page follows the window: light while the sun is up, dark once night falls (until the visitor picks a theme) */
-  let auto=true;const tb=document.getElementById('themeBtn');if(tb)tb.addEventListener('click',()=>{auto=false;},true);
-  const follow=a=>{if(!auto)return;const want=a<-0.06?'dark':'light',r=document.documentElement;if(r.dataset.theme!==want)r.dataset.theme=want;};
+  const follow=a=>{const want=a<-0.06?'dark':'light';if(HERO.dataset.mode!==want)HERO.dataset.mode=want;};
   const CYCLE=18000;let t0=performance.now()-0.2*18000,visible=true,raf=0,last=-1e9;
   const hourAt=p=>{const k=[[0,4],[0.1,6],[0.2,8],[0.68,19],[0.82,21.5],[1,28]];let i=0;while(i<k.length-2&&p>k[i+1][0])i++;const t=(p-k[i][0])/(k[i+1][0]-k[i][0]),e=0.5-0.5*Math.cos(Math.PI*t);return k[i][1]+(k[i+1][1]-k[i][1])*e;};
   function frame(now){raf=0;if(now-last>=32||reduce){last=now;const p=reduce?0.66:((now-t0)%CYCLE)/CYCLE;const h=hourAt(p)%24;draw(h);const dd=(h-6)/15;follow(dd>=0&&dd<=1?Math.sin(Math.PI*dd):-Math.min(1,(dd<0?-dd:dd-1)*5));}if(visible&&!reduce)raf=requestAnimationFrame(frame);}
