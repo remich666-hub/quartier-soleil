@@ -3530,7 +3530,7 @@ button.primary{background:linear-gradient(100deg,var(--accent),var(--accent2))!i
 input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important}
 :root[data-theme="dark"] input[type=text]{background:rgba(255,255,255,.06)!important}
 /* the 3D view gets the home page's fine grain and a soft vignette of air at its edges */
-#qsGrain{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.07;mix-blend-mode:overlay;
+#qsGrain{display:none;position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.07;mix-blend-mode:overlay;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.05' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}`;
   document.head.appendChild(st);
   try{const g=document.createElement('div');g.id='qsGrain';(document.getElementById('view')||document.body).appendChild(g);}catch(e){}
@@ -3594,7 +3594,7 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
     if(alt>0.1){const t=Math.min(1,(alt-0.1)/0.5);skyUni.top.value.copy(lerpC(0xa6b6f6,0xbccaf8,t));skyUni.horizon.value.copy(lerpC(0xffc9b6,0xf6e0ec,t));}
     else if(alt>-0.12){const t=(alt+0.12)/0.22;skyUni.top.value.copy(lerpC(0x141a3c,0xa6b6f6,t));skyUni.horizon.value.copy(lerpC(0x262050,0xffb59a,t));}
     else{skyUni.top.value.copy(lerpC(0x080c20,0x080c20,0));skyUni.horizon.value.copy(lerpC(0x1a1f45,0x1a1f45,0));}
-    skyUni.ground.value.copy(skyUni.horizon.value);
+    skyUni.ground.value.copy(skyUni.horizon.value);try{window.__QSU&&window.__QSU.uQsAir.value.copy(skyUni.horizon.value);}catch(e){}
     const day=Math.max(0,Math.min(1,alt/0.2));
     hemi.color=lerpC(0x3a438a,0xc3cbff,day);hemi.groundColor=lerpC(0x1c2048,0xd9c8ec,day);  /* shadows take this lavender fill */
     hemi.intensity=day>0.05?0.58:0.42;if(day>0.05)sun.intensity=Math.max(sun.intensity,1.05);
@@ -3612,37 +3612,29 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
 /* ===== the light of the studied house spreads over the whole model: every surface (ground, walls, roofs, trees) takes a warm
    tint and a fine screen grain that fade with the distance to the house. Geometry, shadows and the sun computations are untouched. ===== */
 (function(){
-  const QSU={uQsC:{value:new THREE.Vector2(0,0)},uQsR:{value:120},uQsK:{value:0},uQsD0:{value:80},uQsD1:{value:250},uQsOn:{value:1}};
-  const VS_DECL='uniform vec2 uQsC;varying vec3 vQsG;varying vec3 vQsM;\n',FS_DECL='uniform vec2 uQsC;uniform float uQsR;uniform float uQsK;uniform float uQsD0;uniform float uQsD1;uniform float uQsOn;varying vec3 vQsG;varying vec3 vQsM;\nfloat qsH3(vec3 p){p=fract(p*vec3(.1031,.1030,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}\n';
+  const QSU={uQsC:{value:new THREE.Vector2(0,0)},uQsR:{value:120},uQsK:{value:0},uQsD0:{value:80},uQsD1:{value:250},uQsOn:{value:1},uQsAir:{value:new THREE.Color(0xf1e6ee)}};
+  const VS_DECL='uniform vec2 uQsC;varying vec3 vQsG;varying vec3 vQsM;\n',FS_DECL='uniform vec2 uQsC;uniform float uQsR;uniform float uQsK;uniform float uQsD0;uniform float uQsD1;uniform float uQsOn;uniform vec3 uQsAir;varying vec3 vQsG;varying vec3 vQsM;\nfloat qsH3(vec3 p){p=fract(p*vec3(.1031,.1030,.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}\n';
   /* the dissolve: opaque near the house, then the grain decides which surface points stay (an organic, slowly wavy outline),
      until only the sky and the haze remain. Each point is kept or dropped (no blending): cheap, no sorting, shadows untouched. */
+  /* away from the house the model fades smoothly into the air (no grain): opaque near, the sky's colour far, then gone */
   const FS_DIS=`
   #ifndef QS_KEEP
-  { float al=1.0-smoothstep(uQsD0,uQsD1,vQsM.x);
-    if(uQsOn>0.5&&al<0.999){vec3 pd=vQsG/(0.02*exp2(floor(vQsM.y)));if(qsH3(floor(pd)+vec3(17.0,-5.0,3.0))>al)discard;} }
+  if(uQsOn>0.5){ float f=smoothstep(uQsD0,uQsD1,vQsM.x); if(f>0.985)discard; gl_FragColor.rgb=mix(gl_FragColor.rgb,uQsAir,f*f*(3.0-2.0*f)); }
   #endif
 `;
+  /* a soft warm light around the house, no dots */
   const FS_BODY=`
   if(uQsK>0.01){ float d=length(vQsG.xy-uQsC)/uQsR;
     vec3 warm=vec3(1.0,0.66,0.50),pink=vec3(0.97,0.62,0.72),lav=vec3(0.76,0.74,0.98);
     vec3 tint=d<0.6?mix(warm,pink,d/0.6):mix(pink,lav,clamp((d-0.6)/1.4,0.0,1.0));
-    float a=uQsK*0.2*exp(-d*1.9);
-    /* the grain lives on the surfaces and in the light: lit faces carry more of it, shade less; its cell size follows the
-       distance to the camera (two power-of-two levels blended), so a dot stays ~2-3 px on screen while attached to its surface */
-    float lum=dot(gl_FragColor.rgb,vec3(0.3,0.59,0.11));
-    float lod=vQsM.y,l0=floor(lod),lt=fract(lod);
-    float c0=0.02*exp2(l0),c1=c0*2.0;
-    vec3 p0=vQsG/c0,p1=vQsG/c1;
-    float dens=uQsK*0.6*exp(-d*1.8)*mix(0.2,1.0,smoothstep(0.35,0.85,lum)),dots=0.0;
-    if(dens>0.003){float d0=step(qsH3(floor(p0)),dens)*step(length(fract(p0)-0.5),0.36),d1=step(qsH3(floor(p1)),dens)*step(length(fract(p1)-0.5),0.36);dots=mix(d0,d1,lt);}
-    gl_FragColor.rgb=mix(gl_FragColor.rgb,tint,clamp(a+dots*0.32,0.0,0.6)); }
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,tint,uQsK*0.18*exp(-d*1.9)); }
 `;
   const VS_POS='#include <project_vertex>\n{vec4 qw=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nqw=instanceMatrix*qw;\n#endif\nqw=modelMatrix*qw;vQsG=qw.xyz;vec2 rl=qw.xy-uQsC;float an=atan(rl.y,rl.x);float wob=1.0+0.13*sin(3.0*an+1.3)+0.07*sin(5.0*an-0.7)+0.05*sin(9.0*an+2.1);vQsM=vec3(length(rl)/wob,log2(max(length(cameraPosition-qw.xyz)*0.0028,0.02)/0.02),0.0);}';
   const inject=(m,sh,keep)=>{Object.assign(sh.uniforms,QSU);if(keep)sh.fragmentShader='#define QS_KEEP\n'+sh.fragmentShader;
     sh.vertexShader=VS_DECL+sh.vertexShader.replace('#include <project_vertex>',VS_POS);
     let f=FS_DECL+sh.fragmentShader;const glow=m.isMeshLambertMaterial;
+    if(glow)f=f.replace('#include <premultiplied_alpha_fragment>',FS_BODY+'#include <premultiplied_alpha_fragment>');
     f=f.replace('#include <premultiplied_alpha_fragment>',FS_DIS+'#include <premultiplied_alpha_fragment>');
-    if(glow)f=f.replace('#include <dithering_fragment>','#include <dithering_fragment>'+FS_BODY);
     sh.fragmentShader=f;};
   const OK=m=>m&&(m.isMeshLambertMaterial||m.isMeshBasicMaterial||m.isLineBasicMaterial)&&!m.isShaderMaterial;
   const patch=(m,keep)=>{if(!OK(m)||m._qsGlow)return;m._qsGlow=1;const prev=m.onBeforeCompile,pk=m.customProgramCacheKey;
@@ -3696,7 +3688,7 @@ async function qsHouseFirst(){
 :root[data-theme="dark"] #qsVeil{background:radial-gradient(60% 45% at 50% 46%,rgba(255,138,76,.35),rgba(240,103,154,.15) 45%,transparent 75%),linear-gradient(180deg,#0b1026,#1a1f45)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #qsVeil{background:radial-gradient(60% 45% at 50% 46%,rgba(255,138,76,.35),rgba(240,103,154,.15) 45%,transparent 75%),linear-gradient(180deg,#0b1026,#1a1f45)}}
 #qsVeil.on{opacity:1;transition:none}
-#qsVeil::after{content:"";position:absolute;inset:0;opacity:.12;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.05' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+#qsVeil::after{display:none;content:"";position:absolute;inset:0;opacity:.12;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.05' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
 #qsVeil .orb{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle at 40% 38%,#fff6ec,#ffb48a 45%,rgba(240,110,150,.0) 72%);filter:blur(1px);animation:qsBreath 2.4s cubic-bezier(.45,0,.55,1) infinite alternate}
 @keyframes qsBreath{from{transform:scale(.88);opacity:.75}to{transform:scale(1.08);opacity:1}}
 @media (prefers-reduced-motion:reduce){#qsVeil .orb{animation:none}}`;
