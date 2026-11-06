@@ -2357,7 +2357,7 @@ async function load(q,at){
     S.T={start:performance.now()}; S.recentered=!!(at&&at.recenter&&!at.keepAddr); let g=at||await geocode(q); S.T.geo=performance.now();
     /* the address point is often on the road, far from the house (countryside): centre the model on the building the number belongs to */
     if(!(at&&at.recenter)){S.addrBats=null; const lk=await Promise.race([addrLink(g),new Promise(r=>setTimeout(()=>r(null),2500))]).catch(()=>null);
-      if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar();
+      if(lk){S.addrBats=lk.ids; if(lk.d>RECENTER_D*0.8)g={...g,lat:lk.lat,lon:lk.lon};} S.T.link=performance.now();} S.lat=g.lat;S.lon=g.lon;S.label=g.label;S.addrLabel=g.label;S.bLat=S.bLon=null; S.counts={}; startLidar(); qsV4();
     S.irc=null; S.vegZoneRings=[]; S.leafGrid=null; S.rgbFar=null; /* the wide photo only paints the far gardens: 80 cm/px is plenty (25 tiles instead of 49 at 40 cm); none on a phone (plain far lots) */
     S.rgbFarP=(isPhone()&&matchMedia('(pointer:coarse)').matches)?null:fetchTileGrid('ORTHOIMAGERY.ORTHOPHOTOS',g.lat,g.lon,17,2).catch(()=>null); S.ircP=null; {const myLat=g.lat,myLon=g.lon; // the infrared photo (deciduous trees) is only fetched once the model is up: it never competes with it
       S.startIRC=()=>{if(S.ircP||S.lat!==myLat)return S.ircP;S.ircP=fetchIRC(myLat,myLon).then(I=>{if(!I||S.lat!==myLat)return null;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();return I;}).catch(()=>null);return S.ircP;};
@@ -2876,6 +2876,1179 @@ function frame(now){
 requestAnimationFrame(frame);
 window.QS={terrainZ,floorBase,facEave,facGround,storeyH,nFloors,S,scene,cam,selectBuilding,reportData,captureViews,chooseFacade,detectCanopy,rebuildTrees,buildHedges,refineWithLidar,treeSets,get layers(){return layerMeshes},get blockers(){return blockers},get roads(){return roadMeshes},get trees(){return treeCrown},get treesD(){return treeCrownD},LEAF,LEAFU,classifyTrees};
 update(); if(!S.startPending)load($('addr').value); // an address handed over by the home page is loaded once, not also the last one seen
+/* ===== Quartier Soleil : the Toit Soleil roofs (straight volumes, v4) on the buildings around the address =====
+   Runs once the laser buildings are there, in the background, nearest first, and pauses while the camera is being moved.
+   Visual only: the window study reads its horizon from the laser rasters, not from these meshes. */
+var RF=window.RF||{};
+const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0,log:[],done:[]};
+['pointerdown','pointermove','wheel','touchstart','keydown'].forEach(k=>addEventListener(k,e=>{if(k!=='pointermove'||e.buttons)QV4.last=performance.now();},{passive:true,capture:true}));
+const qsSleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function qsV4(){
+  const T=S.T; QV4.T=T; QV4.times=[]; QV4.rings=[]; QV4.done=[]; QV4.used=new Set(); QV4.wdbg=[]; QV4.wskip=[]; QV4.relax=[]; QV4.sq=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
+  for(let i=0;i<400&&!(S.lidarBuilt&&S.lidarR&&S.lidarR.mnh&&S.T&&S.T.lidarBuilt);i++){await qsSleep(100);if(S.T!==T)return;}
+  if(S.T!==T||!S.lidarBuilt)return;
+  await qsSleep(400); /* let the scene settle (vegetation, edges) */
+  const legacy0=window.__qsOld||window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4';
+  /* v5: the fit runs in the worker, so the radius and the size limit can grow (50 m, 2000 m²); the address's own building always,
+     first, wherever the address point fell (often on the road, far from the house) */
+  const RMAX=legacy0?30:50,AMAX=legacy0?700:2000,own=new Set(S.addrTarget?family(S.addrTarget):[]);
+  const seen=new Set(), list=[];
+  S.meshes.forEach(m=>{const u=m.userData;if(!u||!u.rings||!u.lidar||u.monu||u.church)return;const g=u.gid||m.uuid;if(seen.has(g))return;seen.add(g);
+    const fam=family(m).filter(o=>o.userData.rings);let d=1e9;fam.forEach(o=>o.userData.rings[0].forEach(p=>{d=Math.min(d,Math.hypot(p.x,p.y));}));const ar=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0);
+    if(fam.some(o=>own.has(o)))d=-1;if((d<=RMAX&&ar<=AMAX)||(d<0&&ar<=4000))list.push({fam,d});});
+  list.sort((a,b)=>a.d-b.d);QV4.pri=[];QV4.tried=new Set();
+  /* then the blocks the user selects further away, on demand (setHi below), until the address changes */
+  while(S.T===T){const it=QV4.pri.shift()||list.shift();if(!it){await qsSleep(250);continue;}
+    while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;} /* the user is moving the camera: wait */
+    await qsSleep(16); if(S.T!==T)return;
+    if(it.fam.some(o=>!o.parent))continue; /* rebuilt meanwhile */
+    if(it.fam.some(o=>QV4.used.has(o)))continue; /* a block already rebuilt with another group (an annex linked to two): once only */
+    const legacy=window.__qsOld||window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4';let pre;
+    if(!legacy){const tq=performance.now();try{pre=await qsModelReq(it.fam);}catch(e){console.error('v5 model',e);pre=null;}QV4.tWait=(QV4.tWait||0)+performance.now()-tq;
+      if(S.T!==T)return;if(it.fam.some(o=>!o.parent||QV4.used.has(o)))continue;while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;}}
+    it.fam.forEach(o=>QV4.tried.add(o));
+    const t0=performance.now(); try{if(qsV4One(it.fam,pre)){QV4.n++;it.fam.forEach(o=>QV4.used.add(o));}}catch(e){console.error('v4 quartier',e);} QV4.ms+=performance.now()-t0;(QV4.times=QV4.times||[]).push([Math.round(performance.now()-t0),it.fam.length,Math.round(it.fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0))]);
+  }
+}
+function qsV4Model(fam){
+  const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.userData.rings[0]))-Math.abs(areaOf(p.userData.rings[0])))[0];
+  const R=roofCells(main); if(!R||R.cells.length<16)return null;
+  const ud=main.userData, area=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0), big=(ud.floors||0)>=3||(ud.h||0)>9.5||area>800;
+  const run=o=>{try{const M=(window.__qsOld?roofModelV4:qsModel5)(R,Object.assign({big,green:orthoGreen()},o));if(M&&M.TT){QV4.TT=QV4.TT||{};for(const k in M.TT)QV4.TT[k]=(QV4.TT[k]||0)+M.TT[k];}return M&&M.cells.length?Object.assign(M,{sh0:o.noShift?{dx:0,dy:0}:R.sh}):null;}catch(e){return null;}};
+  let M=run({}); if(!M||(!big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
+  if(!M||M.rms>0.3){const M3=run({big:false,lam:4,kinks:true});if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
+  if(!M||M.rms>0.6)return null; /* a model that explains the laser badly: the current roofs stay */
+  /* keep the better of the two: the current roof (laser planes or IGN roof) and the v4 one, both measured against the laser */
+  const tc0=performance.now(),cur=qsCurErr(fam,R);QV4.tCur=(QV4.tCur||0)+performance.now()-tc0;const mine=qsV4Err(M,R); QV4.log.push({x:Math.round(main.userData.rings[0][0].x),y:Math.round(main.userData.rings[0][0].y),cur:+cur.toFixed(2),v4:+mine.toFixed(2),types:M.v4.types.join(',')});
+  if(!(mine<cur*0.8&&cur-mine>0.08))return null;
+  return {M,main};
+}
+function qsV4One(fam,pre){
+  const tm0=performance.now();const r=pre!==undefined?pre:qsV4Model(fam);QV4.tModel=(QV4.tModel||0)+performance.now()-tm0; if(!r)return false; const {M,main}=r, A0=S.alt0, dx=-M.sh0.dx, dy=-M.sh0.dy, u=main.userData;
+  const X=x=>x+dx, Y=y=>y+dy;
+  const blockAt=(x,y)=>fam.find(o=>pointInPoly(x,y,o.userData.rings[0]));
+  /* the tallest block over a point (footprints overlap: a tower inside the outline of the main block) */
+  const tallAt=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
+  let V5=(window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4')?null:qsV5Build(M,fam,main);QV4.v5log=QV4.v5log||[];
+  /* a footprint the rectangles do not fit (an old town's slanted, irregular plots): the polygon method of v4, on the same fitted roof */
+  if(V5){const fit=qsV5Fit(V5.OUT,fam);if(fit<0.6){QV4.v5log.push({fallback:+fit.toFixed(2)});V5=null;}else QV4.v5log.push({n:V5.n,ext:V5.ext,fit:+fit.toFixed(2),log:V5.log});}
+  if(!V5&&!M.pans&&M.L5)M.pans=qsPansFromLeaves(M);if(!V5&&!M.pans)return false;
+  let drawn=[],OUT=null;
+  if(V5){drawn=V5.drawn;OUT=V5.OUT;}else{
+  const Mpolys=M.pieces.map(pc=>pc.P.map(q=>({x:q[0],y:q[1]})));
+  const PCx=PCSYNC, ringP=r=>[r.map(p=>[p.x,p.y])];
+  let famU=null;try{famU=qsUnion(fam.map(o=>ringP(o.userData.rings[0])));}catch(e){famU=null;}
+  /* roof pans: clipped to the footprints, and cut where a higher piece (a tower, an upper storey) stands over them */
+
+  const Pm=M.pieces.map(pc=>pc.P.map(([x,y])=>[x+dx,y+dy]));
+  M.pans.forEach(p=>{const zf=(x,y)=>p.a*(x-dx)+p.b*(y-dy)+p.c-A0;const Q=p.Q.map(([x,y])=>[x+dx,y+dy]);let parts=[[Q]];
+    if(famU&&PCx){try{parts=PCx.intersection([Q],famU);
+      M.pieces.forEach((pc,k)=>{if(k===p.piece||!parts.length)return;let ov;try{ov=PCx.intersection(parts,[Pm[k]]);}catch(e){return;}if(!ov.length)return;
+        let cx=0,cy=0,n=0;ov.forEach(pl=>pl[0].forEach(([x,y])=>{cx+=x;cy+=y;n++;}));cx/=n;cy/=n;if(pc.roofZ(cx-dx,cy-dy)-A0>zf(cx,cy)+0.3)parts=PCx.difference(parts,[Pm[k]]);});}catch(e){parts=[[Q]];}}
+    parts.forEach(poly=>{const outer=poly[0].slice(0,-1),holes=poly.slice(1).map(h=>h.slice(0,-1));if(outer.length>=3)drawn.push({outer,holes,zf,n:p.n});});});
+  /* the walls stand under the roof edge: the building outline is the outline of its roof, squared (walls parallel or
+     perpendicular to the main axis within 12°; a real slant or a rounded corner stays), and the pans are clipped / extended to it */
+  try{const U0=qsUnion(drawn.map(d=>[d.outer,...d.holes]));const mr=main.userData.rings[0];let th=0,best=0;
+    for(let k=0;k<mr.length;k++){const a=mr[k],b=mr[(k+1)%mr.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L>best){best=L;th=Math.atan2(b.y-a.y,b.x-a.x);}}
+    const sq=U0.map(poly=>poly.map(R=>qsSquare(qsSquare(R.slice(0,-1),th),th))); /* twice: the second pass clears what the first leaves */
+    const st=(P,key)=>{let ok=0,tot=0;P.forEach(poly=>poly.forEach(R=>{const n=R.length;for(let k=0;k<n;k++){const a=R[k],b=R[(k+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);let d=((Math.atan2(b[1]-a[1],b[0]-a[0])-th)%(Math.PI/2)+Math.PI/2)%(Math.PI/2);d=Math.min(d,Math.PI/2-d);tot+=L;if(d<0.052)ok+=L;}}));return tot?ok/tot:1;};
+    const ar=P=>P.reduce((s,poly)=>s+poly.reduce((t,R,i)=>{let a=0;for(let k=0,j=R.length-1;k<R.length;j=k++)a+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);return t+(i?-1:1)*Math.abs(a/2);},0),0);
+    const A0u=ar(U0.map(p=>p.map(R=>R.slice(0,-1)))),A1u=ar(sq);
+    QV4.sq=QV4.sq||[];QV4.sq.push({before:+st(U0.map(p=>p.map(R=>R.slice(0,-1)))).toFixed(2),after:+st(sq).toFixed(2),dA:+((A1u-A0u)/A0u).toFixed(3)});
+    OUT=Math.abs(A1u-A0u)<0.04*A0u?qsUnion(sq.map(poly=>poly.map(R=>R.concat([R[0]])))):U0;}catch(e){console.warn('v4 outline',e);OUT=null;}
+  if(!OUT||!OUT.length)OUT=famU; /* never without an outline: the cadastral footprint at worst */
+  if(OUT){const D2=[];drawn.forEach(d=>{let parts=[];try{parts=PCx.intersection([d.outer,...d.holes],OUT);}catch(e){parts=[[d.outer,...d.holes]];}
+      parts.forEach(poly=>{const outer=poly[0].slice(0,-1).length>=3&&poly[0][0][0]===poly[0][poly[0].length-1][0]?poly[0].slice(0,-1):poly[0];if(outer.length>=3)D2.push({outer,holes:poly.slice(1).map(h=>h.slice(0,-1)),zf:d.zf,n:d.n});});});
+    /* the strips of the outline the laser roof does not reach: to the nearest pan, its slope carried on */
+    let gaps=[];try{gaps=PCx.difference(OUT,...D2.map(d=>[d.outer,...d.holes]));}catch(e){}
+    gaps.forEach(g=>{const R=g[0].slice(0,-1);let cx=0,cy=0;R.forEach(([x,y])=>{cx+=x;cy+=y;});cx/=R.length;cy/=R.length;
+      let bi=-1,bd=1e9;D2.forEach((d,i)=>{d.outer.forEach((a,k)=>{const b=d.outer[(k+1)%d.outer.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey||1;const t=Math.max(0,Math.min(1,((cx-a[0])*ex+(cy-a[1])*ey)/L2));const dd=Math.hypot(a[0]+ex*t-cx,a[1]+ey*t-cy);if(dd<bd){bd=dd;bi=i;}});});
+      if(bi<0)return;const d=D2[bi];let un;try{un=PCx.union([d.outer,...d.holes],g);}catch(e){return;}
+      D2.splice(bi,1);un.forEach(poly=>D2.push({outer:poly[0].slice(0,-1),holes:poly.slice(1).map(h=>h.slice(0,-1)),zf:d.zf,n:d.n}));});
+    drawn.length=0;drawn.push(...D2);}
+  qsJoinPans(drawn,qsAxis(main));
+  qsFill(drawn,OUT); /* the ridge lines moved: close again any strip left between the pans and the outline */
+  qsWeld(drawn,OUT,qsAxis(main));
+  }
+  const inOut=(x,y)=>!OUT||OUT.some(poly=>pointInPoly(x,y,poly[0].map(([a,b])=>({x:a,y:b})))&&!poly.slice(1).some(h=>pointInPoly(x,y,h.map(([a,b])=>({x:a,y:b})))));
+  const inRing=(x,y,R)=>{let o=false;for(let i=0,j=R.length-1;i<R.length;j=i++){const [a,b]=R[i],[c,d]=R[j];if((b>y)!==(d>y)&&x<(c-a)*(y-b)/(d-b)+a)o=!o;}return o;};
+  const drawnZ=(x,y)=>{let z=-Infinity;drawn.forEach(d=>{if(inRing(x,y,d.outer)&&!d.holes.some(h=>inRing(x,y,h)))z=Math.max(z,d.zf(x,y));});return z;};
+  /* wall top of each block: the lowest drawn roof just inside its own outline (a tower keeps its full height) */
+  const top=new Map();
+  fam.forEach(o=>{const r=o.userData.rings[0],n=r.length;let cx=0,cy=0;r.forEach(p=>{cx+=p.x;cy+=p.y;});cx/=n;cy/=n;const pts=[];
+    for(let k=0;k<n;k++){const a=r[k],b=r[(k+1)%n];[[a.x,a.y],[(a.x+b.x)/2,(a.y+b.y)/2]].forEach(([x,y])=>{const L=Math.hypot(cx-x,cy-y)||1;pts.push([x+(cx-x)/L*0.6,y+(cy-y)/L*0.6]);});}
+    let z=Infinity;pts.forEach(([x,y])=>{if(!pointInPoly(x,y,r))return;const v=drawnZ(x,y);if(isFinite(v))z=Math.min(z,v);});
+    top.set(o,isFinite(z)?Math.max(2.2,z-o.userData.zBase-0.05):o.userData.h);});
+  const topAbs=o=>o.userData.zBase+top.get(o);
+  const P=[],N=[];
+  drawn.forEach(d=>{let tr;try{tr=THREE.ShapeUtils.triangulateShape(d.outer.map(([x,y])=>new THREE.Vector2(x,y)),d.holes.map(h=>h.map(([x,y])=>new THREE.Vector2(x,y))));}catch(e){return;}
+    const all=d.outer.concat(...d.holes);tr.forEach(t=>{let [A,B,C]=t.map(k=>all[k]);if(!A||!B||!C)return;if((B[0]-A[0])*(C[1]-A[1])-(B[1]-A[1])*(C[0]-A[0])<0){const T=B;B=C;C=T;}
+      [A,B,C].forEach(q=>{P.push(q[0],q[1],d.vzOf?d.vzOf(q):d.zf(q[0],q[1]));N.push(d.n[0],d.n[1],d.n[2]);});});});
+  /* every roof edge stands on a wall: down to the roof drawn just beyond it, else to the facade top of the block under it.
+     A ridge or a hip (the neighbouring pan as high) needs none. */
+  const XL=[]; /* XL: wall lines off the outlines (a step between two roofs), for the windows */
+  const GW=new Map(); /* wall pieces per block they stand on: a click on them selects that block (its storeys, its facades) */
+  const quad=(a,b,za0,zb0,za1,zb1,nx,ny,own)=>{const GP=GW.get(own)||(GW.set(own,[]),GW.get(own));if(za1-za0<0.03&&zb1-zb0<0.03)return;if((b[1]-a[1])*nx-(b[0]-a[0])*ny<0){[a,b]=[b,a];[za0,zb0]=[zb0,za0];[za1,zb1]=[zb1,za1];}
+    const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]];
+    [[0,1,2],[0,2,3]].forEach(q=>q.forEach(i=>{GP.push(t[i],[nx,ny]);}));};
+  /* the outline segment a point lies on (for windows in line with the facade below) */
+  const onRing=(x,y)=>{for(const o of fam){const r=o.userData.rings[0];for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length],ex=b.x-a.x,ey=b.y-a.y,L=Math.hypot(ex,ey);if(L<0.05)continue;const t=((x-a.x)*ex+(y-a.y)*ey)/(L*L);if(t<-0.01||t>1.01)continue;if(Math.abs((x-a.x)*ey-(y-a.y)*ex)/L<0.08)return {o,a,L,ex:ex/L,ey:ey/L};}}return null;};
+  /* the roof is one mesh: an edge shared by two pans is the same edge for both. A wall stands only under an edge with no neighbour
+     (the outline: from under the ground) or under a real step (from the lower pan's edge up to the higher one's) */
+  const EK=new Map();drawn.forEach(d=>(d.rings||[]).forEach(R=>{for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length];EK.set(a.id+'>'+b.id,{d,a,b});}}));
+  drawn.forEach(d=>(d.rings||[]).forEach((R,ri)=>{let ar=0;for(let k=0,q=R.length-1;k<R.length;q=k++)ar+=(R[q].x-R[k].x)*(R[q].y+R[k].y);const sg=(ar>0?1:-1)*(ri?-1:1);
+    for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.05)continue;let nx=sg*(b.y-a.y)/L,ny=-sg*(b.x-a.x)/L;
+      /* a pan twisted by the straightening can fool the turning sign: the outward side never lies in the pan itself */
+      {const px=(a.x+b.x)/2+nx*0.05,py=(a.y+b.y)/2+ny*0.05;if(inRing(px,py,d.outer)&&!d.holes.some(h=>inRing(px,py,h))){nx=-nx;ny=-ny;}}
+      const za=d.vz.get(a.id),zb=d.vz.get(b.id),mx=(a.x+b.x)/2,my=(a.y+b.y)/2;let tw=EK.get(b.id+'>'+a.id);
+      const QE=window.__QE||(window.__QE=(()=>{try{return JSON.parse(localStorage.getItem('qsE'))||0;}catch(e){return 0;}})());const dbg=w=>{if(QE&&Math.hypot(mx-QE[0],my-QE[1])<QE[2])(QV4.edbg=QV4.edbg||[]).push([drawn.indexOf(d),+a.x.toFixed(2),+a.y.toFixed(2),+b.x.toFixed(2),+b.y.toFixed(2),+za.toFixed(2),+zb.toFixed(2),+nx.toFixed(2),+ny.toFixed(2),w]);};
+      /* a neighbour only if it really lies on the other side (two pans folded onto the same side of an outline edge are not neighbours) */
+      dbg(tw?'tw'+drawn.indexOf(tw.d):'notw');if(tw){const px=mx+nx*0.05,py=my+ny*0.05;if(!(inRing(px,py,tw.d.outer)&&!tw.d.holes.some(h=>inRing(px,py,h)))){tw=null;dbg('twRejected');}}
+      const under=tallAt(mx-nx*0.15,my-ny*0.15)||blockAt(mx-nx*0.15,my-ny*0.15)||main;let lo0,lo1;
+      if(tw){const ta=tw.d.vz.get(a.id),tb=tw.d.vz.get(b.id),da=za-ta,db=zb-tb;
+        /* the two pans cross along the edge (each higher at one end): this side gets its wall where it is the higher one */
+        if(da*db<0&&Math.max(da,db)>0.05){const t=da/(da-db),X=[a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t],zc=za+(zb-za)*t;
+          if(da>0)quad([a.x,a.y],X,ta,zc,za,zc,nx,ny,under);else quad(X,[b.x,b.y],zc,tb,zc,zb,nx,ny,under);continue;}
+        if((ta+tb)/2>=(za+zb)/2-0.05){dbg('twHigher '+ta.toFixed(2)+'/'+tb.toFixed(2));continue;} /* a ridge, a hip, a valley, or the higher side's wall */
+        lo0=Math.min(ta,za-0.03);lo1=Math.min(tb,zb-0.03);if(L>=2.2)XL.push({a:{x:a.x,y:a.y},b:{x:b.x,y:b.y},nx,ny});}
+      else if(inOut(mx+nx*0.15,my+ny*0.15)){const ox=mx+nx*0.15,oy=my+ny*0.15;let zo=-Infinity;drawn.forEach(e=>{if(e!==d&&inRing(ox,oy,e.outer)&&!e.holes.some(h=>inRing(ox,oy,h)))zo=Math.max(zo,e.zf(ox,oy));}); /* the roof beyond: the other pans only */dbg('inOut zo='+zo);if(isFinite(zo)&&zo>=Math.max(za,zb)-0.05)continue; /* a wall wherever this edge stands above the roof beyond, not only where its low end does */if(isFinite(zo)){lo0=Math.min(zo,za-0.03);lo1=Math.min(zo,zb-0.03);}else continue;} /* a leftover gap inside: a step at most */
+      else{dbg('outline');continue;} /* an outline edge: its wall is built on the outline itself, below */
+      quad([a.x,a.y],[b.x,b.y],lo0,lo1,za,zb,nx,ny,under);}}));
+  if(V5)V5.walls.forEach(w=>{const mx=(w.a[0]+w.b[0])/2,my=(w.a[1]+w.b[1])/2,own=tallAt(mx-w.nx*0.3,my-w.ny*0.3)||blockAt(mx-w.nx*0.3,my-w.ny*0.3)||main,zg=own.userData.zBase-SINK;
+    quad(w.a,w.b,w.za0==null?zg:w.za0,w.zb0==null?zg:w.zb0,w.za1,w.zb1,w.nx,w.ny,own);});
+  if(V5)XL.push(...V5.XL);
+  if(!V5)/* the outer walls stand on the outline itself, from under the ground up to the roof as drawn just inside it (the roof mesh,
+     triangle by triangle): every outline wall is whole, whatever the pans along it */
+  {const TR=[];for(let i=0;i<P.length;i+=9)TR.push([P[i],P[i+1],P[i+2],P[i+3],P[i+4],P[i+5],P[i+6],P[i+7],P[i+8]]);
+   const roofAt=(x,y)=>{let z=-Infinity;for(const t of TR){const d=(t[4]-t[7])*(t[0]-t[6])+(t[6]-t[3])*(t[1]-t[7]);if(Math.abs(d)<1e-9)continue;
+     const l1=((t[4]-t[7])*(x-t[6])+(t[6]-t[3])*(y-t[7]))/d,l2=((t[7]-t[1])*(x-t[6])+(t[0]-t[6])*(y-t[7]))/d,l3=1-l1-l2;if(l1<-1e-4||l2<-1e-4||l3<-1e-4)continue;z=Math.max(z,l1*t[2]+l2*t[5]+l3*t[8]);}return z;};
+   (OUT||[]).forEach(poly=>poly.forEach((R0,ri)=>{const R=R0.slice(0,-1),n=R.length;let ar=0;for(let k=0,q=n-1;k<n;q=k++)ar+=(R[q][0]-R[k][0])*(R[q][1]+R[k][1]);const sg=(ar>0?1:-1)*(ri?-1:1);
+     for(let k=0;k<n;k++){const a=R[k],b=R[(k+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<0.02)continue;const nx=sg*(b[1]-a[1])/L,ny=-sg*(b[0]-a[0])/L,m=Math.max(1,Math.ceil(L/0.25));
+       const zAt=t=>{const x=a[0]+(b[0]-a[0])*t,y=a[1]+(b[1]-a[1])*t;let z=roofAt(x-nx*0.02,y-ny*0.02);if(!isFinite(z))z=roofAt(x-nx*0.15,y-ny*0.15);return {x,y,z,t};};
+       const S=[];for(let s2=0;s2<=m;s2++)S.push(zAt(s2/m));
+       /* where the roof jumps (a tower over a lower roof), the jump is found to 1 cm so the wall top rises straight, not on a slant */
+       const S2=[S[0]];for(let k2=1;k2<S.length;k2++){let A=S[k2-1],B=S[k2];if(isFinite(A.z)&&isFinite(B.z)&&Math.abs(A.z-B.z)>0.3){let lo=A,hi=B;
+           for(let it=0;it<10&&(hi.t-lo.t)*L>0.01;it++){const M=zAt((lo.t+hi.t)/2);if(isFinite(M.z)&&Math.abs(M.z-lo.z)<Math.abs(M.z-hi.z))lo=M;else hi=M;}
+           const e=0.0005;S2.push(Object.assign(zAt(lo.t),{}),zAt(Math.min(hi.t,lo.t+e*2)));}S2.push(B);}
+       let prev=null;S2.forEach(cur=>{if(prev&&isFinite(cur.z)&&isFinite(prev.z)&&Math.hypot(cur.x-prev.x,cur.y-prev.y)>1e-4){const mx=(prev.x+cur.x)/2,my=(prev.y+cur.y)/2,own=tallAt(mx-nx*0.3,my-ny*0.3)||blockAt(mx-nx*0.3,my-ny*0.3)||main,zg=own.userData.zBase-SINK;
+           quad([prev.x,prev.y],[cur.x,cur.y],zg,zg,prev.z,cur.z,nx,ny,own);}prev=cur;});}}));}
+  if(!P.length)return false;
+  /* swap: old laser pans and IGN roof triangles out, blocks cut at their new wall top, new pans and walls in */
+  const goneObs=new Set();
+  /* v5: a block of the group that the volumes do not cover (a shed or garage the fit left out) keeps its own walls and IGN roof */
+  let famSwap=fam;if(V5&&OUT){const inO=(x,y)=>OUT.some(poly=>pointInPoly(x,y,poly[0].map(([a,b])=>({x:a,y:b})))&&!poly.slice(1).some(h=>pointInPoly(x,y,h.map(([a,b])=>({x:a,y:b})))));
+    famSwap=fam.filter(o=>{const r=o.userData.rings[0];if(Math.abs(areaOf(r))<12)return true; /* a chimney, a stair box: follows the group */let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});
+      const st=Math.max(0.3,Math.min(x1-x0,y1-y0)/8);let n=0,k=0;for(let x=x0+st/2;x<x1;x+=st)for(let y=y0+st/2;y<y1;y+=st){if(!pointInPoly(x,y,r))continue;n++;if(inO(x,y))k++;}return n&&k/n>=0.5;});
+    if(!famSwap.length)return false;}
+  famSwap.forEach(o=>{o.userData.roofRef=null;if(o.userData._hiRoof){o.remove(o.userData._hiRoof);o.userData._hiRoof.geometry.dispose();o.userData._hiRoof=null;}});
+  famSwap.forEach(o=>{[...o.children].forEach(c=>{if(c.userData.hiRoof)return;o.remove(c);goneObs.add(c);c.geometry.dispose();});
+    if(o.userData.roofMesh){scene.remove(o.userData.roofMesh);goneObs.add(o.userData.roofMesh);o.userData.roofMesh=null;}
+    const ud=o.userData,h=top.get(o),outer=ud.rings[0],holes=ud.rings.slice(1),shape=new THREE.Shape(outer);holes.forEach(hr=>shape.holes.push(new THREE.Path(hr)));
+    /* the block itself is now only its footprint, 30 cm under the ground (selection, framing, bounds): its walls are the wall pieces */
+    const geo=new THREE.ShapeGeometry(shape);geo.translate(0,0,SINK-0.3);
+    ud.v4done=true; ud._v4top=h; geo.computeBoundingBox();geo.computeBoundingSphere();
+    o.geometry.dispose();o.geometry=geo; ud.edgeArr=new Float32Array(0);
+    o.scale.z=1; /* the model may squash a block to its laser height: these walls and roofs are drawn at their true heights */
+    QV4.rings.push(...ud.rings.slice(0,1));});
+  const z0=main.position.z, mk=(P,N,mat,gable)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+    const m=new THREE.Mesh(g,mat);m.castShadow=m.receiveShadow=true;m.position.z=-z0;if(gable)m.userData.gable=true;main.add(m);return m;};
+  const roofM=mk(P,N,ROOF[u.roofKey||'autre']||ROOF.autre,false), adds=[roofM];
+  {const gmat=new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0],side:THREE.DoubleSide});
+   GW.forEach((L,o)=>{const Pp=[],Nn=[];for(let i=0;i<L.length;i+=2){Pp.push(...L[i]);Nn.push(L[i+1][0],L[i+1][1],0);}
+     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(Pp,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(Nn,3));
+     const m=new THREE.Mesh(g,gmat);m.castShadow=m.receiveShadow=true;m.position.z=-o.position.z;m.userData.gable=true;o.add(m);adds.push(m);});}
+  /* edges: creases of the new roof (ridges, hips, outline) and of the upper walls, added to the main block's lines */
+  const ex=[]; [roofM].forEach(m=>{const eg=new THREE.EdgesGeometry(m.geometry,15);ex.push(eg.attributes.position.array.slice());eg.dispose();});
+  /* the vertical corners of the outer walls */
+  if(OUT){const C=[];OUT.forEach(poly=>poly.forEach(R0=>{const R=R0.slice(0,-1),n=R.length;for(let k=0;k<n;k++){const p=R[(k+n-1)%n],q=R[k],r=R[(k+1)%n];
+      const a1=Math.atan2(q[1]-p[1],q[0]-p[0]),a2=Math.atan2(r[1]-q[1],r[0]-q[0]);let da=Math.abs(a2-a1);da=Math.min(da,2*Math.PI-da);if(da<0.35)continue;
+      let zt=-Infinity;for(const [sx,sy] of [[1,1],[1,-1],[-1,1],[-1,-1]]){const z=drawnZ(q[0]+sx*0.08,q[1]+sy*0.08);if(isFinite(z))zt=Math.max(zt,z);}if(!isFinite(zt))continue;
+      const ow=tallAt(q[0],q[1])||main;C.push(q[0],q[1],ow.userData.zBase-0.3,q[0],q[1],zt);}}));ex.push(new Float32Array(C));}
+  {let tot=main.userData.edgeArr.length;ex.forEach(a=>tot+=a.length);const all=new Float32Array(tot);all.set(main.userData.edgeArr);let o=main.userData.edgeArr.length;ex.forEach(a=>{all.set(a,o);o+=a.length;});main.userData.edgeArr=all;}
+  main.userData.v4=M.v4.types.length;
+  qsFoldRoofs(); try{if(typeof partsSync==='function')fam.forEach(o=>partsSync(o));}catch(e){}
+  S.obstacles=(S.obstacles||[]).filter(o=>!goneObs.has(o)).concat(adds);
+  QV4.tBuild=(QV4.tBuild||0)+performance.now()-tm0;main.userData._v4={fam,XL,OUT,w5:V5?V5.walls:null,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(q=>d.vzOf?d.vzOf(q):d.zf(q[0],q[1]))}))}; QV4.done.push(main); {const tw0=performance.now();try{qsWindows(main);}catch(e){console.error('v4 windows',e);}QV4.tWin=(QV4.tWin||0)+performance.now()-tw0;}
+  try{if(S.gfWalls)buildGroundFloors(S.gfWalls);}catch(e){}
+  rebuildEdges(); return true;}
+/* the IGN pitched roofs of these buildings live in shared meshes: their triangles are folded under the ground */
+function qsFoldRoofs(){ if(!QV4.rings.length)return; const rg=QV4.rings;
+  const inB=(x,y)=>rg.some(r=>pointInPoly(x,y,r));
+  (S.roofSetMeshes||[]).forEach(m=>{const pa=m.geometry.attributes.position,A=pa.array,ix=m.geometry.index?m.geometry.index.array:null,nt=(ix?ix.length:pa.count)/3;let ch=false;
+    for(let t=0;t<nt;t++){const v=[0,1,2].map(k=>ix?ix[t*3+k]:t*3+k);if(A[v[0]*3+2]<-100)continue;const cx=(A[v[0]*3]+A[v[1]*3]+A[v[2]*3])/3,cy=(A[v[0]*3+1]+A[v[1]*3+1]+A[v[2]*3+1])/3,nin=v.filter(q=>inB(A[q*3],A[q*3+1])).length;if(inB(cx,cy)||nin>=2){ /* centre inside, or two corners: an overhanging IGN facet goes too */v.forEach(q=>{A[q*3+2]=-200;});ch=true;}}
+    if(ch){pa.needsUpdate=true;m.geometry.computeBoundingSphere();}});
+  (S.roofEdgeParts||[]).forEach(A=>{for(let q=0;q+5<A.length;q+=6){if(A[q+2]>-100&&inB((A[q]+A[q+3])/2,(A[q+1]+A[q+4])/2)){A[q+2]=-200;A[q+5]=-200;}}});}
+
+/* error of a roof against the laser: robust RMS (the worst 10 % of points, chimneys and foliage, left out) */
+function qsRms(d){d=d.filter(v=>isFinite(v)).map(v=>v*v).sort((a,b)=>a-b);if(d.length<8)return Infinity;const n=Math.floor(d.length*0.9);let s=0;for(let i=0;i<n;i++)s+=d[i];return Math.sqrt(s/n);}
+function qsV4Err(M,R){const dx=M.sh0.dx-R.sh.dx,dy=M.sh0.dy-R.sh.dy,P=M.pieces.map(pc=>({pc,poly:pc.P.map(q=>({x:q[0],y:q[1]}))}));
+  return qsRms(R.cells.map(c=>{const x=c.x+dx,y=c.y+dy;let z=-Infinity;P.forEach(({pc,poly})=>{if(pointInPoly(x,y,poly))z=Math.max(z,pc.roofZ(x,y));});return isFinite(z)?z-c.z:4;}));}
+const qsRay=new THREE.Raycaster();
+function qsCurErr(fam,R){
+  /* what is drawn now over these footprints: the blocks, their laser pans, and the IGN roof triangles of the shared meshes */
+  const objs=[];fam.forEach(o=>{objs.push(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.hiRoof)objs.push(c);});});
+  const rg=fam.map(o=>o.userData.rings[0]),inB=(x,y)=>rg.some(r=>pointInPoly(x,y,r)),T=[];
+  (S.roofSetMeshes||[]).forEach(m=>{const A=m.geometry.attributes.position.array,ix=m.geometry.index?m.geometry.index.array:null,nt=(ix?ix.length:A.length/3)/3;
+    for(let t=0;t<nt;t++){const v=[0,1,2].map(k=>ix?ix[t*3+k]:t*3+k);if(A[v[0]*3+2]<-100)continue;if(inB((A[v[0]*3]+A[v[1]*3]+A[v[2]*3])/3,(A[v[0]*3+1]+A[v[1]*3+1]+A[v[2]*3+1])/3))v.forEach(q=>T.push(A[q*3],A[q*3+1],A[q*3+2]));}});
+  let tmp=null;if(T.length){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(T,3));tmp=new THREE.Mesh(g,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));tmp.updateMatrixWorld();objs.push(tmp);}
+  objs.forEach(o=>o.updateMatrixWorld());
+  const A0=S.alt0,dn=new THREE.Vector3(0,0,-1),org=new THREE.Vector3();
+  const err=qsRms(R.cells.filter((c,i)=>i%2===0).map(c=>{org.set(c.x-R.sh.dx,c.y-R.sh.dy,400);qsRay.set(org,dn);qsRay.far=800;const h=qsRay.intersectObjects(objs,false);return h.length?(h[0].point.z+A0)-c.z:4;}));
+  if(tmp){tmp.geometry.dispose();tmp.material.dispose();}
+  return err;}
+
+/* ===== windows of the v4 buildings, laid one by one by rule (no texture grid that the roof or the ground could cut) =====
+   rows: the model's own storeys (a house on a slope: from its real floor, floorBase; otherwise the IGN height over its storey count);
+   bays: 3.5 m, a whole number per wall, as everywhere in the model. A window is drawn only if
+   1. its centre stands at least WIN_CLEAR above the ground in front of it,
+   2. the wall really stands over the whole window and 20 cm above it (horizontal rays: no window across a roof line, a gable or a gap),
+   3. there is air in front of it (no roof, block or neighbour against it). */
+const QS_WIN_MAT=(()=>{const c=document.createElement('canvas');c.width=52;c.height=60;const g=c.getContext('2d');
+  g.fillStyle='rgb(204,204,204)';g.fillRect(0,0,52,60);g.fillStyle='rgba(0,0,0,0.1)';g.fillRect(0,0,52,5); /* the wall texture's window: 20 % darker, lintel shade */
+  return new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),blending:THREE.MultiplyBlending,transparent:true,depthWrite:false,fog:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});})();
+function qsRows(o){const u=o.userData;let base=u.zBase,sh=0;
+  try{if(u.lidar&&u.facades&&nFloorsRaw(u)<=2){const off=floorBase(u)-u.zBase;if(off>=0.3||u._gl){base=u.zBase+off;sh=u._gl?u._glH:3;}}}catch(e){}
+  if(!sh){const b=u.floors||Math.max(1,Math.round(u.h/3));sh=u.h/b;}
+  return {base,sh};}
+function qsWindows(main){const V=main.userData._v4;if(!V)return;if(V.w5)return qsWindows5(main);const {fam,XL,OUT}=V;
+  [...main.children].forEach(c=>{if(c.userData.winDecal){main.remove(c);c.geometry.dispose();}});
+  const objs=[];fam.forEach(o=>{objs.push(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal&&!c.userData.hiRoof)objs.push(c);});});
+  const bs=main.geometry.boundingSphere||(main.geometry.computeBoundingSphere(),main.geometry.boundingSphere);
+  const near=S.meshes.filter(m=>!fam.includes(m)&&m.geometry&&(m.geometry.boundingSphere||(m.geometry.computeBoundingSphere(),m.geometry.boundingSphere)).center.distanceTo(bs.center)<bs.radius+40);
+  const around=objs.concat(near,S.roofSetMeshes||[]); around.forEach(o=>o.updateMatrixWorld(true));
+  const ray=new THREE.Raycaster(),org=new THREE.Vector3(),dir=new THREE.Vector3(),down=new THREE.Vector3(0,0,-1);
+  const tallIn=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
+  const inFam=(x,y)=>fam.find(o=>pointInPoly(x,y,o.userData.rings[0])&&!o.userData.rings.slice(1).some(h=>pointInPoly(x,y,h)));
+  /* wall lines: every outline edge of the blocks, and the steps between two roofs that lie off the outlines */
+  /* wall lines: the edges of the outline (the walls stand under the roof edge), and the steps between two roofs */
+  const lines=[];(OUT||[]).forEach(poly=>poly.forEach((R0,ri)=>{const R=R0.slice(0,-1),n=R.length;let ar=0;for(let k=0,q=n-1;k<n;q=k++)ar+=(R[q][0]-R[k][0])*(R[q][1]+R[k][1]);
+    for(let k=0;k<n;k++){const a={x:R[k][0],y:R[k][1]},b={x:R[(k+1)%n][0],y:R[(k+1)%n][1]},L=Math.hypot(b.x-a.x,b.y-a.y);if(L<1.6)continue;
+      /* outward normal from the ring's own turning direction (outer ring counter-clockwise: right-hand side; a courtyard: the other way) */
+      const sgn=(ar>0?1:-1)*(ri?-1:1);const nx=sgn*(b.y-a.y)/L,ny=-sgn*(b.x-a.x)/L; lines.push({a,b,L,nx,ny});}}));
+  XL.forEach(l=>lines.push(Object.assign({L:Math.hypot(l.b.x-l.a.x,l.b.y-l.a.y)},l)));
+  /* one grid per facade: edges on the same straight line (two blocks sharing a facade, a ring split at a flat vertex) are merged into one run */
+  {const G=[];lines.forEach(l=>{const ex=(l.b.x-l.a.x)/l.L,ey=(l.b.y-l.a.y)/l.L,off=l.a.x*l.nx+l.a.y*l.ny;
+     let g=G.find(g=>g.nx*l.nx+g.ny*l.ny>0.9986&&Math.abs(off-g.off)<0.15);if(!g){g={nx:l.nx,ny:l.ny,ex:-l.ny,ey:l.nx,off,iv:[]};G.push(g);}
+     const ta=l.a.x*g.ex+l.a.y*g.ey,tb=l.b.x*g.ex+l.b.y*g.ey;g.iv.push([Math.min(ta,tb),Math.max(ta,tb)]);});
+   lines.length=0;G.forEach(g=>{g.iv.sort((p,q)=>p[0]-q[0]);const M=[];g.iv.forEach(v=>{const l=M[M.length-1];if(l&&v[0]<=l[1]+0.3)l[1]=Math.max(l[1],v[1]);else M.push(v.slice());});
+     M.forEach(([t0,t1])=>{const L=t1-t0;if(L<1.6)return;const P=t=>({x:g.nx*g.off+g.ex*t,y:g.ny*g.off+g.ey*t});lines.push({a:P(t0),b:P(t1),L,nx:g.nx,ny:g.ny});});});}
+  const maxTop=Math.max(...fam.map(o=>o.userData.zBase+(o.userData._v4top!=null?o.userData._v4top:o.userData.h)))+3;
+  const P=[],U=[],stat={cells:0,ground:0,wall:0,air:0,ok:0},placed=[];
+  const wallAt=(x,y,z,nx,ny)=>{org.set(x+nx*1.0,y+ny*1.0,z);dir.set(-nx,-ny,0);ray.set(org,dir);ray.far=1.3;const h=ray.intersectObjects(objs,false);return h.length&&h[0].distance>0.85&&h[0].distance<1.15;};
+  const airAt=(x,y,z)=>{org.set(x,y,z+300);ray.set(org,down);ray.far=1000;const h=ray.intersectObjects(around,false);return !h.length||h[0].point.z<z;};
+  /* ...then cut where the wall height jumps (the corner of a tower over a lower wing): each piece gets its own grid, centred on its own wall */
+  const topAt=(x,y)=>{org.set(x,y,400);ray.set(org,down);ray.far=800;const h=ray.intersectObjects(objs,false);return h.length?h[0].point.z:-1e9;};
+  const rec0=(cx,cy,r,zb,w)=>{if(window.__qsDbg)(stat.rec=stat.rec||[]).push([Math.round(cx*10)/10,Math.round(cy*10)/10,r,+zb.toFixed(1),w]);};
+  {
+   const out=[];lines.forEach(l=>{const ex=(l.b.x-l.a.x)/l.L,ey=(l.b.y-l.a.y)/l.L,n=Math.max(2,Math.ceil(l.L/0.25)),T=[];
+     for(let k=0;k<=n;k++){const t=l.L*k/n;T.push(topAt(l.a.x+ex*t-l.nx*0.06,l.a.y+ey*t-l.ny*0.06));}
+     let s0=0;for(let k=1;k<=n;k++){if(k===n||Math.abs(T[k+1]-T[k])>0.8){const t0=l.L*s0/n,t1=l.L*(k===n?n:k+0.5)/n;if(t1-t0>=1.6)out.push({a:{x:l.a.x+ex*t0,y:l.a.y+ey*t0},b:{x:l.a.x+ex*t1,y:l.a.y+ey*t1},L:t1-t0,nx:l.nx,ny:l.ny});s0=k+0.5;}}});
+   lines.length=0;lines.push(...out);}
+  lines.forEach(l=>{const {a,b,L,nx,ny}=l,ex=(b.x-a.x)/L,ey=(b.y-a.y)/L,bays=Math.max(1,Math.round(L/3.5)),w=L/bays;
+    for(let i=0;i<bays;i++){const ww=Math.min(1.3,w-0.5);if(ww<0.6)continue;const tc=i*w+w/2,t0=tc-ww/2,t1=tc+ww/2,pt=t=>[a.x+ex*t,a.y+ey*t],pm=pt(tc),[cx,cy]=pm;
+      /* the levels of the window study, for the block behind this bay: same floor, storey height, count and lift above the street (placeMarker) */
+      const o=tallIn(cx-nx*0.3,cy-ny*0.3)||main,ub=o.userData;let fb,sh,nF;try{fb=floorBase(ub);sh=storeyH(ub);nF=nFloors(ub);}catch(e){continue;}
+      const gz=groundAt({x:cx,y:cy},{x:nx,y:ny});
+      const wt=Math.min(...[t0+0.1,tc,t1-0.1].map(t=>{const [x,y]=pt(t);return topAt(x-nx*0.06,y-ny*0.06);})); /* the wall top over this window (eave, gable slope) */
+      for(let r=0;r<nF;r++){stat.cells++;
+        if(r<nF-1&&fb+r*sh+1.5<gz+WIN_SILL){stat.ground++;rec0(cx,cy,r,0,'g');continue;} /* buried level: the study moves up a level */
+        const zc0=Math.max(fb+r*sh+1.5,gz+WIN_CLEAR),zt0=zc0+0.75; /* the study's window centre; the window 1.5 m tall around it */
+        /* the lintel sits just under the eave: a low wall brings the window top down (up to 45 cm), the sill stays (shorter window, ≥ 1 m) */
+        const zt=Math.min(zt0,wt-0.25),zb=zc0-0.75,zc=(zb+zt)/2;
+        if(zt<zt0-0.45||zt-zb<1.0){stat.wall++;rec0(cx,cy,r,zb,'low');continue;}
+        const rec=w=>rec0(cx,cy,r,zb,w);
+        let ok=true;for(const t of [t0+0.08,(t0+t1)/2,t1-0.08]){const [x,y]=pt(t);for(const z of [zb-0.1,zc,zt+0.12])if(!wallAt(x,y,z,nx,ny)){ok=false;break;}if(!ok)break;}
+        if(!ok){stat.wall++;rec('w');continue;}
+        for(const t of [t0,t1]){const [x,y]=pt(t);if(!airAt(x+nx*0.35,y+ny*0.35,zb-0.05)){ok=false;break;}}
+        /* nothing standing against it on the sides either (a wing in a re-entrant corner) */
+        if(ok)for(const t of [t0-0.25,t1+0.25]){const [x,y]=pt(t);org.set(x+nx*0.05,y+ny*0.05,zc);dir.set(nx,ny,0);ray.set(org,dir);ray.far=1.2;if(ray.intersectObjects(objs,false).length){ok=false;break;}}
+        /* one window per place (two wall lines meeting at a slight angle) */
+        if(ok&&placed.some(q=>Math.hypot(q[0]-cx,q[1]-cy)<1.4&&Math.abs(q[2]-zc)<1.0))ok=false;
+        if(!ok){stat.air++;rec('a');continue;}
+        placed.push([cx,cy,zc]);
+        stat.ok++;rec('ok');const [x0,y0]=pt(t0),[x1,y1]=pt(t1),ox=nx*0.02,oy=ny*0.02;
+        const q=[[x0,y0,zb,0,0],[x1,y1,zb,1,0],[x1,y1,zt,1,1],[x0,y0,zb,0,0],[x1,y1,zt,1,1],[x0,y0,zt,0,1]];
+        q.forEach(v=>{P.push(v[0]+ox,v[1]+oy,v[2]);U.push(v[3],v[4]);});}}});
+  main.userData._v4.stat=stat;
+  if(!P.length)return;
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
+  const m=new THREE.Mesh(g,QS_WIN_MAT);m.position.z=-main.position.z;m.renderOrder=2;m.userData.winDecal=true;m.userData.hiRoof=true;m.raycast=()=>{};main.add(m);}
+/* a block selected beyond the processed radius: rebuilt on demand, ahead of the queue */
+if(typeof setHi==='function'){const _hi=setHi;setHi=function(m,on){_hi(m,on);try{const u=m&&m.userData;if(!on||!u||!u.lidar||u.monu||u.church||!QV4.pri)return;
+  const fam=family(m).filter(o=>o.userData.rings);if(fam.some(o=>o.userData.v4done||QV4.used.has(o)||(QV4.tried&&QV4.tried.has(o))||QV4.pri.some(it=>it.fam.includes(o))))return;
+  if(fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0)>4000)return;const bc=m.geometry.boundingSphere;if(bc&&bc.center.length()>RECENTER_D&&!(S.qsExt||[]).some(e=>e.T===S.T&&Math.hypot(e.cx-bc.center.x,e.cy-bc.center.y)<40))return; /* far: after the laser extension (recenterOn) */QV4.pri.push({fam,d:0});}catch(e){}};}
+/* the model's slope pass and ground-floor bands, kept consistent with these buildings: no texture grid laid back on their walls,
+   windows laid again when the ground data changes, ground-floor bands no higher than the wall as drawn */
+if(typeof slopeWalls==='function'){const _sw=slopeWalls;slopeWalls=function(m){const u=m&&m.userData;
+  if(u&&u.v4done){try{if(u.lidar&&u.facades&&nFloorsRaw(u)<=2){const off=floorBase(u)-u.zBase,sh=u._gl?u._glH:3,F=nFloors(u);u._swK=(off>=0.3||u._gl)?Math.round(off*20)+'|'+Math.round(sh*20)+'|'+F:0;}}catch(e){}}
+  return _sw(m);};}
+if(typeof applySlopeWalls==='function'){const _a=applySlopeWalls;applySlopeWalls=function(){_a();(QV4.done||[]).forEach(m=>{if(m.parent)try{qsWindows(m);}catch(e){}});};}
+if(typeof buildGroundFloors==='function'){const _g=buildGroundFloors;buildGroundFloors=function(w){const sw=[];S.meshes.forEach(m=>{const u=m.userData;if(u&&u.v4done&&u._v4top!=null){sw.push([u,u.h]);u.h=u._v4top;}});
+  try{return _g(w);}finally{sw.forEach(([u,h])=>u.h=h);}};}
+/* square an outline: every edge within 12° of the axis (or its perpendicular) is turned onto it, consecutive edges on the
+   same line are merged, a jog shorter than 60 cm between two parallel edges is removed; other edges (a real slant, a curve) stay */
+function qsSquare(R,th){R=qsDespike(R);const n=R.length;if(n<4)return R;const Q=Math.PI/2;
+  let E=[];for(let k=0;k<n;k++){const a=R[k],b=R[(k+1)%n],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<1e-6)continue;let ang=Math.atan2(b[1]-a[1],b[0]-a[0]);
+    const kk=Math.round((ang-th)/Q),dev=ang-th-kk*Q,snap=Math.abs(dev)<0.21;if(snap)ang=th+kk*Q;E.push({p:[(a[0]+b[0])/2,(a[1]+b[1])/2],d:[Math.cos(ang),Math.sin(ang)],L,snap,a,b});}
+  /* the edges off the main axes (a wing set at a slant): grouped by direction (within 8°), each group turned onto its mean direction,
+     so the two long walls of a slanted wing come out exactly parallel */
+  {const G=[];E.filter(e=>!e.snap).forEach(e=>{let a=Math.atan2(e.d[1],e.d[0]);a=((a%Math.PI)+Math.PI)%Math.PI;
+     let g=G.find(g=>{let d=Math.abs(g.a-a);d=Math.min(d,Math.PI-d);return d<0.14;});if(!g){g={a,w:0,s:0,c:0,E:[]};G.push(g);}
+     let aa=a;if(aa-g.a>Math.PI/2)aa-=Math.PI;if(g.a-aa>Math.PI/2)aa+=Math.PI;g.c+=Math.cos(2*aa)*e.L;g.s+=Math.sin(2*aa)*e.L;g.E.push(e);});
+   G.forEach(g=>{if(g.E.length<2)return;const m=Math.atan2(g.s,g.c)/2;g.E.forEach(e=>{const sgn=Math.cos(Math.atan2(e.d[1],e.d[0])-m)>=0?1:-1;e.d=[sgn*Math.cos(m),sgn*Math.sin(m)];e.snap=true;});});}
+  /* aligned walls: parallel edges whose lines pass within 30 cm of each other (a wall continued past a wing, the two halves of a
+     facade) are set on one line, the mean of theirs weighted by length */
+  {const G=[];E.filter(e=>e.snap).forEach(e=>{const nx=-e.d[1],ny=e.d[0];let g=G.find(g=>Math.abs(g.nx*nx+g.ny*ny)>0.9999&&Math.abs(Math.sign(g.nx*nx+g.ny*ny)*(e.p[0]*nx+e.p[1]*ny)-g.o)<0.4);
+     const o=e.p[0]*nx+e.p[1]*ny;if(!g){g={nx,ny,o,w:0,s:0,E:[]};G.push(g);}const sg=Math.sign(g.nx*nx+g.ny*ny);g.s+=sg*o*e.L;g.w+=e.L;g.o=g.s/g.w;g.E.push(e);});
+   G.forEach(g=>{if(g.E.length<2)return;g.E.forEach(e=>{const nx=-e.d[1],ny=e.d[0],sg=Math.sign(g.nx*nx+g.ny*ny),o=e.p[0]*nx+e.p[1]*ny,t=sg*g.o-o;e.p=[e.p[0]+nx*t,e.p[1]+ny*t];});});}
+  const par=(e,f)=>e.snap&&f.snap&&Math.abs(e.d[0]*f.d[1]-e.d[1]*f.d[0])<1e-6&&e.d[0]*f.d[0]+e.d[1]*f.d[1]>0;
+  const off=(e,f)=>Math.abs((f.p[0]-e.p[0])*e.d[1]-(f.p[1]-e.p[1])*e.d[0]);
+  const merge=(e,f)=>{const L=e.L+f.L,t=f.L/L;return {p:[e.p[0]+(f.p[0]-e.p[0])*t,e.p[1]+(f.p[1]-e.p[1])*t],d:e.d,L,snap:true,a:e.a,b:f.b};};
+  for(let it=0;it<4*n;it++){let ch=false;const m=E.length;if(m<4)break;
+    for(let i=0;i<E.length&&E.length>=4;i++){const e=E[i],f=E[(i+1)%E.length],g=E[(i+2)%E.length];
+      if(par(e,f)&&off(e,f)<0.4){E=E.slice(i).concat(E.slice(0,i));E.splice(0,2,merge(e,f));ch=true;break;}
+      if(f.L<0.6&&par(e,g)&&off(e,g)<0.5){E=E.slice(i).concat(E.slice(0,i));E.splice(0,3,merge(e,g));ch=true;break;}}
+    if(!ch)break;}
+  if(E.length<3)return R;
+  const out=[];for(let i=0;i<E.length;i++){const e=E[i],f=E[(i+1)%E.length],cr=e.d[0]*f.d[1]-e.d[1]*f.d[0];
+    if(Math.abs(cr)<0.05){ /* parallel neighbours (a real jog): the shared corner projected on each line */
+      const q=e.b,pe=(q[0]-e.p[0])*e.d[0]+(q[1]-e.p[1])*e.d[1],pf=(q[0]-f.p[0])*f.d[0]+(q[1]-f.p[1])*f.d[1];
+      out.push([e.p[0]+e.d[0]*pe,e.p[1]+e.d[1]*pe],[f.p[0]+f.d[0]*pf,f.p[1]+f.d[1]*pf]);continue;}
+    const t=((f.p[0]-e.p[0])*f.d[1]-(f.p[1]-e.p[1])*f.d[0])/cr;out.push([e.p[0]+e.d[0]*t,e.p[1]+e.d[1]*t]);}
+  /* a corner that moved more than 1.5 m: something went wrong, keep the outline as it was */
+  for(const q of out){let dm=1e9;R.forEach(r=>{dm=Math.min(dm,Math.hypot(r[0]-q[0],r[1]-q[1]));});if(dm>1.5)return R;}
+  return out;}
+/* the ground-floor bands of the model are laid on the IGN outlines: not on these buildings, whose walls stand under the roof edge */
+if(typeof buildGroundFloors==='function'){const _g2=buildGroundFloors;buildGroundFloors=function(w){
+  const v=S.meshes.filter(m=>m.userData&&m.userData.v4done).map(m=>m.userData.rings[0]);
+  return _g2(v.length&&w?w.filter(x=>{const mx=(x.a.x+x.b.x)/2-x.nx*0.6,my=(x.a.y+x.b.y)/2-x.ny*0.6;return !v.some(r=>pointInPoly(mx,my,r));}):w);};}
+
+/* a ring without slits: a vertex where the outline turns back on itself (a zero-width spike left by the clipping) is dropped */
+function qsDespike(R){R=R.slice();for(let it=0;it<R.length*2&&R.length>3;it++){let ch=false;
+  for(let k=0;k<R.length;k++){const p=R[(k+R.length-1)%R.length],q=R[k],r=R[(k+1)%R.length],ax=q[0]-p[0],ay=q[1]-p[1],bx=r[0]-q[0],by=r[1]-q[1],la=Math.hypot(ax,ay),lb=Math.hypot(bx,by);
+    if(la<0.02||lb<0.02||(ax*bx+ay*by)/(la*lb)<-0.97){R.splice(k,1);ch=true;break;}}
+  if(!ch)break;}return R;}
+
+/* neighbouring pans meet exactly: where two pans share an edge (a ridge, a hip, a valley) and their heights there differ by less
+   than 60 cm, both are brought to the mean (each plane refitted by least squares on its corners, shared points weighted);
+   a larger difference is a real step and stays */
+function qsJoinPans(D,th){if(!D.length)return;
+  const onEdge=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2<1e-6)continue;
+    const t=((q[0]-a[0])*ex+(q[1]-a[1])*ey)/L2;if(t<-0.01||t>1.01)continue;if(Math.abs((q[0]-a[0])*ey-(q[1]-a[1])*ex)/Math.sqrt(L2)<0.06)return true;}return false;};
+  /* each pan's plane as z = a x + b y + c, from its own function */
+  D.forEach(d=>{const z0=d.zf(0,0);d.pl=[d.zf(1,0)-z0,d.zf(0,1)-z0,z0];});
+  /* a pan runs down square to its eave wall: its slope turned onto the nearest wall axis (within 20°), the pan kept at its mean height;
+     a flat roof stays flat. Eaves and ridges along the walls are then level. */
+  if(th!=null)D.forEach(d=>{const [a,b,c]=d.pl,g=Math.hypot(a,b);let cx=0,cy=0;d.outer.forEach(q=>{cx+=q[0];cy+=q[1];});cx/=d.outer.length;cy/=d.outer.length;const zc=a*cx+b*cy+c;
+    if(g<0.06){d.pl=[0,0,zc];d.dir=[0,0];return;}
+    const ang=Math.atan2(b,a),k=Math.round((ang-th)/(Math.PI/2)),dev=ang-th-k*Math.PI/2;if(Math.abs(dev)>0.35)return;
+    const ua=th+k*Math.PI/2,ux=Math.cos(ua),uy=Math.sin(ua),s=a*ux+b*uy;d.dir=[ux,uy];d.pl=[s*ux,s*uy,zc-s*(ux*cx+uy*cy)];});
+  for(let it=0;it<4;it++){
+    const T=D.map(d=>d.outer.map(q=>({q,z:null,w:1})));const extra=D.map(()=>[]);
+    D.forEach((d,i)=>d.outer.forEach((q,k)=>{const zi=d.pl[0]*q[0]+d.pl[1]*q[1]+d.pl[2];const zs=[zi],js=[];
+      const qn=d.outer[(k+1)%d.outer.length],qp=d.outer[(k+d.outer.length-1)%d.outer.length],mn=[(q[0]+qn[0])/2,(q[1]+qn[1])/2],mp=[(q[0]+qp[0])/2,(q[1]+qp[1])/2];
+      D.forEach((e,j)=>{if(j===i||!onEdge(q,e)||!(onEdge(mn,e)||onEdge(mp,e)))return; /* a neighbour along an edge, not one touching only at this corner */const zj=e.pl[0]*q[0]+e.pl[1]*q[1]+e.pl[2],same=d.dir&&e.dir&&d.dir[0]*e.dir[0]+d.dir[1]*e.dir[1]>0.99;if(Math.abs(zj-zi)<(same?0.08:0.6)){zs.push(zj);js.push(j);}}); /* two roofs side by side running down the same way: a step over 8 cm is kept */
+      if(!js.length)return;const m=zs.reduce((s,v)=>s+v,0)/zs.length;T[i][k].z=m;T[i][k].w=4;js.forEach(j=>extra[j].push({q,z:m,w:4}));}));
+    D.forEach((d,i)=>{const pts=T[i].map(t=>({q:t.q,z:t.z!=null?t.z:d.pl[0]*t.q[0]+d.pl[1]*t.q[1]+d.pl[2],w:t.w})).concat(extra[i]);if(pts.length<3)return;
+      /* weighted least squares for a, b, c (centred for stability) */
+      let sw=0,mx=0,my=0;pts.forEach(p=>{sw+=p.w;mx+=p.w*p.q[0];my+=p.w*p.q[1];});mx/=sw;my/=sw;
+      let sxx=0,sxy=0,syy=0,sxz=0,syz=0,sz=0;pts.forEach(p=>{const x=p.q[0]-mx,y=p.q[1]-my;sxx+=p.w*x*x;sxy+=p.w*x*y;syy+=p.w*y*y;sxz+=p.w*x*p.z;syz+=p.w*y*p.z;sz+=p.w*p.z;});
+      if(d.dir){const [ux,uy]=d.dir;let suu=0,suz=0;pts.forEach(p=>{const t=(p.q[0]-mx)*ux+(p.q[1]-my)*uy;suu+=p.w*t*t;suz+=p.w*t*p.z;});
+        const s0=d.pl[0]*ux+d.pl[1]*uy;let s1=(ux||uy)&&suu>1e-6?suz/suu:0;if(!(ux||uy))s1=0;if(Math.abs(s1-s0)>0.12)s1=s0;
+        d.pl=[s1*ux,s1*uy,sz/sw-s1*(ux*mx+uy*my)];return;}
+      const det=sxx*syy-sxy*sxy;if(Math.abs(det)<1e-6)return;const a=(sxz*syy-syz*sxy)/det,b=(syz*sxx-sxz*sxy)/det,c=sz/sw-a*mx-b*my;
+      /* a refit that tilts the pan noticeably is refused (the laser slope stays the reference) */
+      if(Math.hypot(a-d.pl[0],b-d.pl[1])>0.12)return;d.pl=[a,b,c];});}
+  D.forEach(d=>{const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const L=Math.hypot(a,b,1);d.n=[-a/L,-b/L,1/L];});
+  try{qsCoplanar(D);qsHipPitch(D);qsCoplanar(D);}catch(e){console.warn('v4 hips',e);}
+  try{qsRidges(D);}catch(e){console.warn('v4 ridges',e);}}
+/* two pans that meet (a ridge, a hip, a valley) share the line where their planes cross: the dividing line cut by the laser model
+   (often a few degrees off) is replaced by that line, so the ridge runs level and parallel to the eaves and both pans start from it */
+function qsRidges(D){const PC=PCSYNC;if(!PC)return;
+  const area=R=>{let a=0;for(let k=0,j=R.length-1;k<R.length;j=k++)a+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);return Math.abs(a/2);};
+  const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2<1e-6)continue;
+    const t=((q[0]-a[0])*ex+(q[1]-a[1])*ey)/L2;if(t<-0.01||t>1.01)continue;if(Math.abs((q[0]-a[0])*ey-(q[1]-a[1])*ex)/Math.sqrt(L2)<0.06)return true;}return false;};
+  const shared=(d,e)=>{let L=0,dx=0,dy=0;const R=d.outer;for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],m=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+    if(onB(m,e)&&onB(a,e)&&onB(b,e)){const l=Math.hypot(b[0]-a[0],b[1]-a[1]);L+=l;dx=(b[0]-a[0])/l;dy=(b[1]-a[1])/l;}}return {L,dx,dy};};
+  for(let i=0;i<D.length;i++)for(let j=i+1;j<D.length;j++){const d=D[i],e=D[j],sh=shared(d,e);if(sh.L<1.0)continue;
+    const A=d.pl[0]-e.pl[0],B=d.pl[1]-e.pl[1],C=d.pl[2]-e.pl[2],g=Math.hypot(A,B);if(g<0.05)continue; /* same slope: no crossing line */
+    const lx=-B/g,ly=A/g;if(Math.abs(lx*sh.dx+ly*sh.dy)<0.94)continue; /* the crossing line far from the shared edge's direction: leave it */
+    /* the two pans meet there (not a step): heights at the shared edge within 60 cm */
+    let mx=0,my=0,n=0;d.outer.forEach(q=>{if(onB(q,e)){mx+=q[0];my+=q[1];n++;}});if(!n)continue;mx/=n;my/=n;if(Math.abs(A*mx+B*my+C)>0.6)continue;
+    const p0=[mx-(A*mx+B*my+C)*A/(g*g),my-(A*mx+B*my+C)*B/(g*g)],nx=A/g,ny=B/g,F=300;
+    const half=s=>[[[p0[0]-lx*F,p0[1]-ly*F],[p0[0]+lx*F,p0[1]+ly*F],[p0[0]+lx*F+s*nx*F,p0[1]+ly*F+s*ny*F],[p0[0]-lx*F+s*nx*F,p0[1]-ly*F+s*ny*F],[p0[0]-lx*F,p0[1]-ly*F]]];
+    let cx=0,cy=0;d.outer.forEach(q=>{cx+=q[0];cy+=q[1];});cx/=d.outer.length;cy/=d.outer.length;const sd=Math.sign((cx-p0[0])*nx+(cy-p0[1])*ny)||1;
+    let U,Pd,Pe;try{U=PC.union([d.outer,...d.holes],[e.outer,...e.holes]);Pd=PC.intersection(U,half(sd));Pe=PC.intersection(U,half(-sd));}catch(err){continue;}
+    const big=P=>P.map(poly=>({outer:poly[0].slice(0,-1),holes:poly.slice(1).map(h=>h.slice(0,-1))})).filter(x=>x.outer.length>=3).sort((x,y)=>area(y.outer)-area(x.outer));
+    const bd=big(Pd),be=big(Pe);if(!bd.length||!be.length)continue;
+    /* a crossing line that would hand most of a pan to its neighbour is not the ridge: leave it */
+    if(area(bd[0].outer)<0.5*area(d.outer)||area(be[0].outer)<0.5*area(e.outer))continue;
+    d.outer=bd[0].outer;d.holes=bd[0].holes;e.outer=be[0].outer;e.holes=be[0].holes;
+    bd.slice(1).concat(be.slice(1)).forEach((x,k)=>{if(area(x.outer)<0.3)return;const src=k<bd.length-1?d:e;D.push({outer:x.outer,holes:x.holes,zf:src.zf,n:src.n,pl:src.pl});});}}
+
+/* the main wall axis of a building: the direction of the longest edge of its main footprint */
+function qsAxis(main){const mr=main.userData.rings[0];let th=0,best=0;for(let k=0;k<mr.length;k++){const a=mr[k],b=mr[(k+1)%mr.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L>best){best=L;th=Math.atan2(b.y-a.y,b.x-a.x);}}return th;}
+
+/* weld the pans into one mesh: corners closer than 25 cm become one point (an outline corner wins: the walls stay put), a corner lying on
+   a neighbour's edge is inserted into it (no T-junction), slivers left between two pans vanish. Each shared point then gets one height
+   for the pans that meet there (within 60 cm: a ridge, a hip, a valley); pans further apart keep their own (a real step). */
+function qsWeld(D,OUT,th){const tol=0.25,reps=[];let nid=0;
+  const add=(x,y,fixed)=>{const r={x,y,fixed,out:!!fixed,n:1,id:nid++};reps.push(r);return r;};
+  (OUT||[]).forEach(poly=>poly.forEach(R=>R.slice(0,-1).forEach(q=>{if(!reps.some(r=>Math.hypot(r.x-q[0],r.y-q[1])<0.01))add(q[0],q[1],true);})));
+  const snap=q=>{let best=null,bd=tol;reps.forEach(r=>{const dd=Math.hypot(r.x-q[0],r.y-q[1]);if(dd<bd){bd=dd;best=r;}});
+    if(!best)return add(q[0],q[1],false);if(!best.fixed){best.x=(best.x*best.n+q[0])/(best.n+1);best.y=(best.y*best.n+q[1])/(best.n+1);best.n++;}return best;};
+  D.forEach(d=>{d.rings=[d.outer,...d.holes].map(R=>R.map(snap));});
+  /* a pan corner within 25 cm of the outline goes onto it (no strip of missing roof along a wall) */
+  const OS=[];(OUT||[]).forEach(poly=>poly.forEach(R=>{for(let k=0;k+1<R.length;k++)OS.push([R[k],R[k+1]]);}));
+  reps.forEach(r=>{if(r.fixed)return;let best=null,bd=0.25;OS.forEach(([a,b])=>{const ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2<1e-6)return;const t=Math.max(0,Math.min(1,((r.x-a[0])*ex+(r.y-a[1])*ey)/L2));
+    const px=a[0]+ex*t,py=a[1]+ey*t,dd=Math.hypot(px-r.x,py-r.y);if(dd<bd){bd=dd;best=[px,py,a,b];}});if(best){r.x=best[0];r.y=best[1];r.fixed=true;r.seg=[best[2],best[3]];}});
+  const segD=(r,a,b)=>{const ex=b.x-a.x,ey=b.y-a.y,L2=ex*ex+ey*ey;if(L2<1e-6)return null;const t=((r.x-a.x)*ex+(r.y-a.y)*ey)/L2;if(t<=0.02||t>=0.98)return null;
+    const d=Math.hypot(a.x+ex*t-r.x,a.y+ey*t-r.y);return d<0.12?t:null;};
+  const area=R=>{let s=0;for(let k=0,q=R.length-1;k<R.length;q=k++)s+=(R[q].x-R[k].x)*(R[q].y+R[k].y);return Math.abs(s/2);};
+  const clean=R=>{let out=R.filter((r,k)=>r!==R[(k+1)%R.length]);for(let it=0;it<out.length&&out.length>2;it++){let ch=false;
+      for(let k=0;k<out.length;k++){if(out[(k+out.length-1)%out.length]===out[(k+1)%out.length]){out.splice(k,1);out=out.filter((r,q)=>r!==out[(q+1)%out.length]);ch=true;break;}}if(!ch)break;}return out;};
+  D.forEach(d=>{d.rings=d.rings.map(R=>{const out=[];for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length];out.push(a);if(a===b)continue;
+      const ins=[];reps.forEach(r=>{if(r===a||r===b)return;const t=segD(r,a,b);if(t!=null)ins.push([t,r]);});ins.sort((x,y)=>x[0]-y[0]).forEach(([,r])=>out.push(r));}return clean(out);});});
+  for(let i=D.length-1;i>=0;i--){const d=D[i];if(d.rings[0].length<3||area(d.rings[0])<0.2){D.splice(i,1);continue;}d.rings=[d.rings[0]].concat(d.rings.slice(1).filter(R=>R.length>=3&&area(R)>0.2));
+    d.outer=d.rings[0].map(r=>[r.x,r.y]);d.holes=d.rings.slice(1).map(R=>R.map(r=>[r.x,r.y]));}
+  try{qsRelax(D,reps,th);}catch(e){console.warn('v4 relax',e);}
+  D.forEach(d=>{d.outer=d.rings[0].map(r=>[r.x,r.y]);d.holes=d.rings.slice(1).map(R=>R.map(r=>[r.x,r.y]));});
+  /* one height per shared point, for the pans that meet there */
+  const at=new Map();D.forEach(d=>{d.vz=new Map();d.rings.forEach(R=>R.forEach(r=>{if(!at.has(r.id))at.set(r.id,[]);const L=at.get(r.id);if(!L.some(x=>x.d===d))L.push({d,z:d.zf(r.x,r.y)});}));});
+  at.forEach((L,id)=>{L.sort((x,y)=>x.z-y.z);let g=[L[0]];const flush=()=>{const m=g.reduce((s,x)=>s+x.z,0)/g.length;g.forEach(x=>x.d.vz.set(id,m));};
+    const same=(p,q)=>p.dir&&q.dir&&(p.dir[0]||p.dir[1])&&p.dir[0]*q.dir[0]+p.dir[1]*q.dir[1]>0.99;
+    /* pans meeting at this point are given one height only when they share an edge here (not across a corner), and are close in height */
+    const nb=d=>{const s=new Set();d.rings.forEach(R=>{for(let k=0;k<R.length;k++)if(R[k].id===id){s.add(R[(k+1)%R.length].id);s.add(R[(k+R.length-1)%R.length].id);}});return s;};
+    const P=L.map(x=>({x,nb:nb(x.d)})),par=P.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i]));
+    for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){const a=P[i],b=P[j];if(![...a.nb].some(v=>b.nb.has(v)))continue;if(Math.abs(a.x.z-b.x.z)<0.05)par[f(i)]=f(j);} /* only where their planes already meet: each pan stays a true plane, a larger gap gets its step wall */
+    const G2=new Map();P.forEach((p,i)=>{const r=f(i);if(!G2.has(r))G2.set(r,[]);G2.get(r).push(p.x);});G2.forEach(gr=>{g=gr;flush();});});
+  const byXY=new Map();reps.forEach(r=>byXY.set(r.x.toFixed(4)+','+r.y.toFixed(4),r));
+  D.forEach(d=>{d.vzOf=q=>{const r=byXY.get(q[0].toFixed(4)+','+q[1].toFixed(4));return r&&d.vz.has(r.id)?d.vz.get(r.id):d.zf(q[0],q[1]);};});}
+
+/* the strips of the outline no pan covers: each to the nearest pan, its slope carried on */
+function qsFill(D,OUT){const PC=PCSYNC;if(!OUT||!PC||!D.length)return;let gaps=[];try{gaps=PC.difference(OUT,...D.map(d=>[d.outer,...d.holes]));}catch(e){return;}
+  gaps.forEach(g=>{const R=g[0].slice(0,-1);if(R.length<3)return;let cx=0,cy=0;R.forEach(([x,y])=>{cx+=x;cy+=y;});cx/=R.length;cy/=R.length;
+    let bi=-1,bd=1e9;D.forEach((d,i)=>{d.outer.forEach((a,k)=>{const b=d.outer[(k+1)%d.outer.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey||1;const t=Math.max(0,Math.min(1,((cx-a[0])*ex+(cy-a[1])*ey)/L2));const dd=Math.hypot(a[0]+ex*t-cx,a[1]+ey*t-cy);if(dd<bd){bd=dd;bi=i;}});});
+    if(bi<0)return;const d=D[bi];let un;try{un=PC.union([d.outer,...d.holes],g);}catch(e){return;}
+    D.splice(bi,1);un.forEach(poly=>D.push(Object.assign({},d,{outer:poly[0].slice(0,-1),holes:poly.slice(1).map(h=>h.slice(0,-1))})));});}
+
+/* a hipped roof: the pans joined by a hip (their slopes at right angles) share one pitch, the mean of theirs, each keeping its eave
+   height; the hip, where the two planes cross, then runs at exactly 45° to the walls */
+function qsHipPitch(D){const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2<1e-6)continue;
+    const t=((q[0]-a[0])*ex+(q[1]-a[1])*ey)/L2;if(t<-0.01||t>1.01)continue;if(Math.abs((q[0]-a[0])*ey-(q[1]-a[1])*ex)/Math.sqrt(L2)<0.08)return true;}return false;};
+  const par=D.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i]));
+  for(let i=0;i<D.length;i++)for(let j=i+1;j<D.length;j++){const d=D[i],e=D[j];if(!d.dir||!e.dir||!(d.dir[0]||d.dir[1])||!(e.dir[0]||e.dir[1]))continue;
+    if(Math.abs(d.dir[0]*e.dir[0]+d.dir[1]*e.dir[1])>0.1)continue;let n=0;d.outer.forEach(q=>{if(onB(q,e))n++;});if(n>=2)par[f(i)]=f(j);}
+  const G=new Map();D.forEach((d,i)=>{if(!d.dir||!(d.dir[0]||d.dir[1]))return;const r=f(i);if(!G.has(r))G.set(r,[]);G.get(r).push(d);});
+  G.forEach(L=>{if(L.length<2)return;const k=L.reduce((s,d)=>s+Math.hypot(d.pl[0],d.pl[1]),0)/L.length;
+    L.forEach(d=>{const [a,b,c]=d.pl,s0=a*d.dir[0]+b*d.dir[1],sg=s0>=0?1:-1;let lo=null;d.outer.forEach(q=>{const z=a*q[0]+b*q[1]+c;if(!lo||z<lo[2])lo=[q[0],q[1],z];});
+      const na=sg*k*d.dir[0],nb=sg*k*d.dir[1];d.pl=[na,nb,lo[2]-na*lo[0]-nb*lo[1]];});});
+  D.forEach(d=>{const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const L=Math.hypot(a,b,1);d.n=[-a/L,-b/L,1/L];});}
+/* every line of the plan in a family of directions: the two wall axes, and the two 45° diagonals of the hips. Each shared edge within
+   12° of a family is turned onto it (both corners pulled to the turned edge, many passes); an outline corner stays, a corner on an
+   outline edge slides along it; no corner moves more than 60 cm */
+function qsRelax(D,reps,th){if(th==null)return;const fam=[0,1,2,3].map(k=>th+k*Math.PI/4);
+  const seen=new Set(),ed=[];D.forEach(d=>d.rings.forEach(R=>{for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length];if(a===b)continue;const key=a.id<b.id?a.id+'_'+b.id:b.id+'_'+a.id;if(seen.has(key))continue;seen.add(key);
+    if(a.out&&b.out)continue;let ang=Math.atan2(b.y-a.y,b.x-a.x),best=null,bd=0.21;fam.forEach(f=>{let dv=((ang-f)%Math.PI+Math.PI)%Math.PI;dv=Math.min(dv,Math.PI-dv);if(dv<bd){bd=dv;best=f;}});
+    if(best!=null&&bd>1e-4)ed.push({a,b,f:best});}}));
+  if(!ed.length)return;const o0=new Map();reps.forEach(r=>o0.set(r,[r.x,r.y]));
+  const place=(r,x,y)=>{if(r.seg){const [a,b]=r.seg,ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2>1e-6){const t=Math.max(0,Math.min(1,((x-a[0])*ex+(y-a[1])*ey)/L2));x=a[0]+ex*t;y=a[1]+ey*t;}}
+    const o=o0.get(r),dd=Math.hypot(x-o[0],y-o[1]);if(dd>0.8){x=o[0]+(x-o[0])*0.8/dd;y=o[1]+(y-o[1])*0.8/dd;}r.x=x;r.y=y;};
+  /* one edge at a time, turned exactly onto its family (about its fixed end if it has one, else about its middle), many passes */
+  for(let it=0;it<300;it++){let mv=0;ed.forEach(({a,b,f})=>{let dx=Math.cos(f),dy=Math.sin(f);const vx=b.x-a.x,vy=b.y-a.y;if(dx*vx+dy*vy<0){dx=-dx;dy=-dy;}const l=dx*vx+dy*vy;
+      const ax=a.x,ay=a.y,bx=b.x,by=b.y;
+      if(a.out&&b.out)return;if(a.out)place(b,a.x+dx*l,a.y+dy*l);else if(b.out)place(a,b.x-dx*l,b.y-dy*l);
+      else{const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;place(a,mx-dx*l/2,my-dy*l/2);place(b,mx+dx*l/2,my+dy*l/2);}
+      mv=Math.max(mv,Math.hypot(a.x-ax,a.y-ay),Math.hypot(b.x-bx,b.y-by));});if(mv<1e-4)break;}
+  /* the measure kept for the check: worst remaining deviation of a shared edge from its family */
+  let worst=0;ed.forEach(({a,b,f})=>{let dv=((Math.atan2(b.y-a.y,b.x-a.x)-f)%Math.PI+Math.PI)%Math.PI;dv=Math.min(dv,Math.PI-dv);worst=Math.max(worst,dv);});
+  (QV4.relax=QV4.relax||[]).push({edges:ed.length,worstDeg:+(worst*180/Math.PI).toFixed(2),list:ed.map(({a,b,f})=>{let dv=((Math.atan2(b.y-a.y,b.x-a.x)-f)%Math.PI+Math.PI)%Math.PI;dv=Math.min(dv,Math.PI-dv);return [+(dv*180/Math.PI).toFixed(1),+Math.hypot(b.x-a.x,b.y-a.y).toFixed(1),!!a.out,!!b.out,!!a.seg,!!b.seg];}).filter(x=>x[0]>0.3)});}
+
+/* one slope, one plane: two neighbouring pans running down the same way and meeting at the same height (within 30 cm) are one
+   side of the roof; they get one plane, fitted on all their corners (weighted by area) */
+function qsCoplanar(D){const onB=(q,d)=>{const R=d.outer;for(let k=0;k<R.length;k++){const a=R[k],b=R[(k+1)%R.length],ex=b[0]-a[0],ey=b[1]-a[1],L2=ex*ex+ey*ey;if(L2<1e-6)continue;
+    const t=((q[0]-a[0])*ex+(q[1]-a[1])*ey)/L2;if(t<-0.01||t>1.01)continue;if(Math.abs((q[0]-a[0])*ey-(q[1]-a[1])*ex)/Math.sqrt(L2)<0.08)return true;}return false;};
+  const z=(d,q)=>d.pl[0]*q[0]+d.pl[1]*q[1]+d.pl[2];
+  const area=R=>{let s=0;for(let k=0,j=R.length-1;k<R.length;j=k++)s+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);return Math.abs(s/2);};
+  const par=D.map((_,i)=>i),f=i=>par[i]===i?i:(par[i]=f(par[i])),side=[];
+  for(let i=0;i<D.length;i++)for(let j=i+1;j<D.length;j++){const d=D[i],e=D[j];if(!d.dir||!e.dir)continue;
+    const flat=v=>!(v.dir[0]||v.dir[1]);if(flat(d)!==flat(e))continue;if(!flat(d)&&d.dir[0]*e.dir[0]+d.dir[1]*e.dir[1]<0.99)continue;
+    const sh=d.outer.filter(q=>onB(q,e)).concat(e.outer.filter(q=>onB(q,d)));if(sh.length<2)continue;
+    let span=0,sa=null,sb=null;sh.forEach(a=>sh.forEach(b=>{const l=Math.hypot(a[0]-b[0],a[1]-b[1]);if(l>span){span=l;sa=a;sb=b;}}));if(span<1.0)continue;
+    /* one slope continued: the two pans meet on a level line (one above the other down the slope). Side by side (their common
+       edge running down the slope) they are two roofs, each keeps its own height: a step between them stays */
+    if(!flat(d)&&Math.abs(((sb[0]-sa[0])*d.dir[0]+(sb[1]-sa[1])*d.dir[1])/span)>0.3){if(!flat(d))side.push([i,j]);continue;}
+    if(sh.some(q=>Math.abs(z(d,q)-z(e,q))>0.3))continue;par[f(i)]=f(j);}
+  const G=new Map();D.forEach((d,i)=>{const r=f(i);if(!G.has(r))G.set(r,[]);G.get(r).push(d);});
+  G.forEach(L=>{if(L.length<2)return;const pts=[];L.forEach(d=>{const w=area(d.outer)/d.outer.length;d.outer.forEach(q=>pts.push({q,z:z(d,q),w}));});
+    const dir=L[0].dir;let sw=0,mx=0,my=0;pts.forEach(p=>{sw+=p.w;mx+=p.w*p.q[0];my+=p.w*p.q[1];});mx/=sw;my/=sw;let zm=0;pts.forEach(p=>zm+=p.w*p.z);zm/=sw;
+    let pl;if(!(dir[0]||dir[1]))pl=[0,0,zm];else{const [ux,uy]=dir;let suu=0,suz=0;pts.forEach(p=>{const t=(p.q[0]-mx)*ux+(p.q[1]-my)*uy;suu+=p.w*t*t;suz+=p.w*t*(p.z-zm);});const k=suu>1e-6?suz/suu:0;pl=[k*ux,k*uy,zm-k*(ux*mx+uy*my)];}
+    L.forEach(d=>{d.pl=pl.slice();const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const n=Math.hypot(a,b,1);d.n=[-a/n,-b/n,1/n];});});
+  /* two roofs side by side running down the same way are built alike: one pitch (their mean, weighted by area), each kept at its
+     own mean height, so the step between them is the same all along */
+  const sp=D.map((_,i)=>i),g=i=>sp[i]===i?i:(sp[i]=g(sp[i]));side.forEach(([i,j])=>{sp[g(i)]=g(j);});
+  const SG=new Map();D.forEach((d,i)=>{const r=g(i);if(!SG.has(r))SG.set(r,[]);SG.get(r).push(d);});
+  SG.forEach(L=>{if(L.length<2)return;let sw=0,sk=0;L.forEach(d=>{const w=area(d.outer);sk+=w*(d.pl[0]*d.dir[0]+d.pl[1]*d.dir[1]);sw+=w;});const k=sk/sw;
+    L.forEach(d=>{let cx=0,cy=0;d.outer.forEach(q=>{cx+=q[0];cy+=q[1];});cx/=d.outer.length;cy/=d.outer.length;
+      /* the pan turns about its eave (the wall top, the surest laser height): the eave stays, the ridge follows the common pitch */
+      {let zmin=Infinity;d.outer.forEach(q=>{zmin=Math.min(zmin,z(d,q));});const eq=d.outer.filter(q=>z(d,q)<zmin+0.05);
+       if(eq.length){cx=eq.reduce((s,q)=>s+q[0],0)/eq.length;cy=eq.reduce((s,q)=>s+q[1],0)/eq.length;}}
+      const zc=z(d,[cx,cy]),[ux,uy]=d.dir;
+      d.pl=[k*ux,k*uy,zc-k*(ux*cx+uy*cy)];const [a,b,c]=d.pl;d.zf=(x,y)=>a*x+b*y+c;const n=Math.hypot(a,b,1);d.n=[-a/n,-b/n,1/n];});});}
+
+/* polygon union that survives the clipping library's precision failures: retried on coordinates rounded to the millimetre */
+function qsUnion(list){const PC=PCSYNC;try{return PC.union(...list);}catch(e){}
+  const r=v=>Math.round(v*1000)/1000,L2=list.map(poly=>poly.map(R=>R.map(([x,y])=>[r(x),r(y)])));try{return PC.union(...L2);}catch(e){}
+  const r2=v=>Math.round(v*100)/100;return PC.union(...list.map(poly=>poly.map(R=>R.map(([x,y])=>[r2(x),r2(y)]))));}
+/* ===== a building chosen away from the address: the laser is extended around it instead of reloading the whole neighbourhood
+   (ground, gardens, trees and buildings stay as they are; only the fine laser rasters gain a square centred on it) ===== */
+const QS_EXT_D=180; /* within the laser-rebuilt zone (200 m); beyond, the neighbourhood is reloaded as before */
+async function qsRasterAt(kind,R,res,cx,cy){const W=Math.round(2*R/res),[lo0,la0]=unproj(cx-R,cy-R),[lo1,la1]=unproj(cx+R,cy+R);
+  const u=`https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=IGNF_LIDAR-HD_${kind}_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G&STYLES=&CRS=EPSG:4326&BBOX=${la0.toFixed(7)},${lo0.toFixed(7)},${la1.toFixed(7)},${lo1.toFixed(7)}&WIDTH=${W}&HEIGHT=${W}&FORMAT=image/x-bil;bits=32`;
+  const r=await gpf(u);if(!r.ok)return null;const buf=await r.arrayBuffer();if(buf.byteLength!==W*W*4)return null;
+  const f=new Float32Array(buf),ok=v=>v>-500&&v<9000;let nv=0;for(let k=0;k<f.length;k+=97)if(ok(f[k]))nv++;if(nv<(f.length/97)*0.6)return null;return {f,W,R,res,cx,cy};}
+/* several rasters as one: the newest square first, then the older ones (the one around the address keeps the rest) */
+function qsMosaic(old,part){const parts=[part].concat(old?(old.parts||[{f:old.f,W:old.W,R:old.R,res:old.res,cx:0,cy:0}]):[]),ok=v=>v>-500&&v<9000;
+  const at=(x,y)=>{for(const p of parts){const i=Math.floor((x-p.cx+p.R)/p.res),j=Math.floor((p.R-(y-p.cy))/p.res);if(i<0||j<0||i>=p.W||j>=p.W)continue;const v=p.f[j*p.W+i];if(ok(v))return v;}return null;};
+  const res=Math.min(...parts.map(p=>p.res));const max=(x,y,rad)=>{let m=null;for(let dy=-rad;dy<=rad+1e-6;dy+=res)for(let dx=-rad;dx<=rad+1e-6;dx+=res){const v=at(x+dx,y+dy);if(v!=null&&(m==null||v>m))m=v;}return m;};
+  return {R:1e9,res,W:parts[0].W,f:parts[0].f,at,max,parts};}
+if(typeof recenterOn==='function'){const _rc=recenterOn;recenterOn=async function(obj){
+  const b=obj.geometry.boundingSphere||(obj.geometry.computeBoundingSphere(),obj.geometry.boundingSphere),c=b.center,d=Math.hypot(c.x,c.y),L=S.lidarR;
+  if(d>QS_EXT_D||S.loading||!L||!L.mnh||!S.T)return _rc(obj);
+  const T=S.T,fam=family(obj).filter(o=>o.userData.rings);
+  if(!(S.qsExt||(S.qsExt=[])).some(e=>e.T===T&&Math.hypot(e.cx-c.x,e.cy-c.y)<40)){
+    if(QV4.extBusy)return;QV4.extBusy=true;
+    try{toast('Laser fin autour de ce bâtiment…');
+      const [F2,C2,H2]=await Promise.all([qsRasterAt('MNS',120,0.5,c.x,c.y),qsRasterAt('MNS',330,1,c.x,c.y),qsRasterAt('MNH',320,1,c.x,c.y)].map(p=>p.catch(()=>null)));
+      if(S.T!==T)return;if(!F2)return _rc(obj); /* no fine laser there: as before */
+      const nF=qsMosaic(L.mnsFine||S.mnsF,F2),nC=C2?qsMosaic(L.mns,C2):L.mns,nH=H2?qsMosaic(L.mnh,H2):L.mnh;
+      L.mnsFine=nF;S.mnsF=nF;L.mns=nC;L.mnh=nH;S.lidarP={mnsFine:Promise.resolve(nF),mns:Promise.resolve(nC),mnh:Promise.resolve(nH)};
+      S.qsExt.push({T,cx:c.x,cy:c.y});
+      /* the roofs around it rebuilt with this laser, the chosen building first */
+      const seen=new Set(),near=[];S.meshes.forEach(m=>{const u=m.userData;if(!u||!u.rings||!u.lidar||u.monu||u.church||u.v4done)return;const g=u.gid||m.uuid;if(seen.has(g))return;seen.add(g);
+        const f=family(m).filter(o=>o.userData.rings);if(f.some(o=>QV4.used.has(o)))return;let dd=1e9;f.forEach(o=>o.userData.rings[0].forEach(p=>{dd=Math.min(dd,Math.hypot(p.x-c.x,p.y-c.y));}));
+        if(f.some(o=>fam.includes(o)))dd=-1;if(dd<=50&&f.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0)<=2000){f.forEach(o=>QV4.tried&&QV4.tried.delete(o));near.push({fam:f,d:dd});}});
+      near.sort((a,p)=>a.d-p.d);if(QV4.pri)QV4.pri.unshift(...near);
+      /* the window study again, now on the fine laser */
+      try{if(S.building&&S.win)chooseFacade(+$('facade').value||0);}catch(e){}
+      toast('Laser fin chargé autour de ce bâtiment');}
+    finally{QV4.extBusy=false;}}};}
+
+/* ===== Quartier Soleil v5: the v4 roof model, own copy (Toit Soleil untouched), faster and returning its rectangles ===== */
+function qsModel5(R,opt){opt=opt||{};
+  const TT={},tk=k=>{const n=performance.now();TT[k]=(TT[k]||0)+n-TT._;TT._=n;};TT._=performance.now();const t0=performance.now(), raw=S.rawOrtho, MH=S.lidarR&&S.lidarR.mnh, Zl=R.Z; if(!MH||!Zl)return null;
+  const rings=R.rings.map(r=>r.map(p=>[p.x+(opt.noShift?0:R.sh.dx),p.y+(opt.noShift?0:R.sh.dy)])); if(!rings.length)return null;
+  const inPoly=(p,P)=>{let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const a=P[i],b=P[j];if((a[1]>p[1])!=(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;};
+  const segD=(x,y,q,r2)=>{const dx=r2[0]-q[0],dy=r2[1]-q[1],L2=dx*dx+dy*dy||1;let t=((x-q[0])*dx+(y-q[1])*dy)/L2;t=Math.max(0,Math.min(1,t));return Math.hypot(x-q[0]-t*dx,y-q[1]-t*dy);};
+  const nearRing=(x,y,dm)=>rings.some(rg=>inPoly([x,y],rg)||rg.some((q,i)=>segD(x,y,q,rg[(i+1)%rg.length])<dm));
+  const area=rings.reduce((a,rg)=>a+Math.abs(MK.area(rg)),0), ud=((RF.sel||S.building)||{}).userData||{}, big=opt.big!=null?opt.big:((ud.floors||0)>=3||(ud.h||0)>9.5||area>800);
+  let rx0=1e9,rx1=-1e9,ry0=1e9,ry1=-1e9;rings.forEach(rg=>rg.forEach(p=>{rx0=Math.min(rx0,p[0]);rx1=Math.max(rx1,p[0]);ry0=Math.min(ry0,p[1]);ry1=Math.max(ry1,p[1]);}));
+  const cx=(rx0+rx1)/2,cy=(ry0+ry1)/2;
+  /* ground: laser minus height above ground, around the building */
+  const zg=[];for(let x=rx0-1;x<=rx1+1;x+=1)for(let y=ry0-1;y<=ry1+1;y+=1){const z=Zl(x,y),h=MH.at(x,y);if(z!=null&&h!=null)zg.push(z-h);}if(!zg.length)return null;zg.sort((a,b)=>a-b);const Z0=zg[zg.length>>1];
+  /* axis: directions of the roof slopes in the laser (mod 90°), the outline edges as a weak prior */
+  const rb=new Array(90).fill(0);rings.forEach(rg=>rg.forEach((a,i)=>{const c=rg[(i+1)%rg.length];let g=Math.atan2(c[1]-a[1],c[0]-a[0])/RAD;g=((g%90)+90)%90;rb[Math.round(g)%90]+=Math.hypot(c[0]-a[0],c[1]-a[1]);}));
+  const lb=new Array(90).fill(0);for(let x=rx0-1;x<=rx1+1;x+=0.5)for(let y=ry0-1;y<=ry1+1;y+=0.5){const z=Zl(x,y);if(z==null||z-Z0<2.5)continue;const a1=Zl(x+0.5,y),a0=Zl(x-0.5,y),b1=Zl(x,y+0.5),b0=Zl(x,y-0.5);if([a1,a0,b1,b0].some(v=>v==null))continue;const gx=a1-a0,gy=b1-b0,m=Math.hypot(gx,gy);if(m<0.25||m>2)continue;let g=Math.atan2(gy,gx)/RAD;g=((g%90)+90)%90;lb[Math.round(g)%90]+=1;}
+  const tl=lb.reduce((s,v)=>s+v,0)||1,tr=rb.reduce((s,v)=>s+v,0)||1;const sm=lb.map((_,i)=>[-3,-2,-1,0,1,2,3].reduce((s,d)=>s+lb[(i+d+90)%90]/tl+(big?1:0.3)*rb[(i+d+90)%90]/tr,0));const ai=sm.indexOf(Math.max(...sm));
+  const yA=sm[(ai+89)%90],yB=sm[ai],yC=sm[(ai+1)%90],dd=(yA-yC)/(2*(yA-2*yB+yC)||1);const Ad=((ai+(Math.abs(dd)<1?dd:0))%90)*RAD;
+  const t=[Math.cos(Ad),Math.sin(Ad)],n=[-t[1],t[0]];const U=(x,y)=>x*t[0]+y*t[1],V=(x,y)=>x*n[0]+y*n[1],XY=(u,v)=>[u*t[0]+v*n[0],u*t[1]+v*n[1]];
+  let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;const rUV=rings.map(rg=>rg.map(p=>[U(...p),V(...p)]));rUV.forEach(rg=>rg.forEach(p=>{u0=Math.min(u0,p[0]);u1=Math.max(u1,p[0]);v0=Math.min(v0,p[1]);v1=Math.max(v1,p[1]);}));u0-=2;u1+=2;v0-=2;v1+=2;
+  const g=big?1.0:0.5;const NU=Math.round((u1-u0)/g),NV=Math.round((v1-v0)/g);const H=[];
+  for(let i=0;i<NU;i++){H.push([]);for(let j=0;j<NV;j++){const [x,y]=XY(u0+(i+.5)*g,v0+(j+.5)*g);const z=Zl(x,y);let h=z==null?0:z-Z0;if(!nearRing(x,y,1.5))h=Math.min(h,0);else if(opt.green&&h>2&&opt.green(x,y)>12)h=NaN;H[i].push(h);}}
+  /* foliage over a roof (green on the photo): unknown for the fit; elsewhere filled from its known neighbours */
+  const HR=H.map(r=>r.slice());for(let i=0;i<NU;i++)for(let j=0;j<NV;j++){if(HR[i][j]===HR[i][j])continue;let s=0,c=0;for(let rr=1;rr<=4&&!c;rr++)for(let a=-rr;a<=rr;a++)for(let b=-rr;b<=rr;b++){const v=HR[i+a]&&HR[i+a][j+b];if(v!=null&&v===v){s+=v;c++;}}H[i][j]=c?s/c:0;}
+  const mask=H.map(r=>r.map(h=>h>2?1:0)),maskD=(i,j)=>{for(let a=-2;a<=2;a++)for(let c=-2;c<=2;c++){const ii=i+a,jj=j+c;if(ii>=0&&jj>=0&&ii<NU&&jj<NV&&mask[ii][jj])return 1;}return 0;};
+  tk('grid');
+  /* candidate lines */
+  let cu=[],cv=[],off=[0,0];
+  if(!big&&raw&&raw.raw){
+    const W=raw.raw.width,Hh=raw.raw.height;let pd=null;try{pd=raw.raw.getContext('2d').getImageData(0,0,W,Hh).data;}catch(e){pd=null;}
+    if(pd){const lum=(x,y)=>{const fx=(x-raw.w)/(raw.e-raw.w)*W-0.5,fy=(raw.n-y)/(raw.n-raw.s)*Hh-0.5;const i=Math.floor(fx),j=Math.floor(fy),a=fx-i,c=fy-j;if(i<0||j<0||i>=W-1||j>=Hh-1)return 0;const L=(ii,jj)=>{const k=(jj*W+ii)*4;return 0.3*pd[k]+0.59*pd[k+1]+0.11*pd[k+2];};return L(i,j)*(1-a)*(1-c)+L(i+1,j)*a*(1-c)+L(i,j+1)*(1-a)*c+L(i+1,j+1)*a*c;};
+      const pgrad=(u,v)=>{const [xa,ya]=XY(u+0.2,v),[xb,yb]=XY(u-0.2,v),[xc,yc]=XY(u,v+0.2),[xd,yd]=XY(u,v-0.2);return Math.abs(lum(xa,ya)-lum(xb,yb))+Math.abs(lum(xc,yc)-lum(xd,yd));};
+      /* photo / laser offset: laser edges against photo edges (centred weights) */
+      const Gl=[];for(let i=1;i<NU-1;i++)for(let j=1;j<NV-1;j++){if(!maskD(i,j))continue;Gl.push([u0+(i+.5)*g,v0+(j+.5)*g,Math.min(Math.abs(H[i+1][j]-H[i-1][j])+Math.abs(H[i][j+1]-H[i][j-1]),4)]);}
+      const mE=Gl.reduce((s,p)=>s+p[2],0)/(Gl.length||1);Gl.forEach(p=>p[2]-=mE);
+      const sc=(du,dv,G)=>{let s=0;G.forEach(([u,v,e])=>{s+=e*pgrad(u+du,v+dv);});return s;};
+      if(R._v4off&&R._v4off.ad===Ad)off=R._v4off.off.slice();else{
+        const Gs=Gl.filter((_,k)=>k%3===0);let bo=-1e18;for(let du=-4;du<=4.01;du+=0.5)for(let dv=-4;dv<=4.01;dv+=0.5){const s=sc(du,dv,Gs);if(s>bo){bo=s;off=[du,dv];}}
+        for(const stp of [0.25,0.1]){const c0=off.slice();bo=-1e18;for(let a=-2;a<=2;a++)for(let b=-2;b<=2;b++){const du=c0[0]+a*stp,dv=c0[1]+b*stp,s=sc(du,dv,Gl);if(s>bo){bo=s;off=[du,dv];}}}
+        R._v4off={ad:Ad,off:off.slice()};}tk('offset');
+      const lumUV=(u,v)=>{const [x,y]=XY(u+off[0],v+off[1]);return lum(x,y);};const pg=0.1,PU=Math.round((u1-u0)/pg),PV=Math.round((v1-v0)/pg);
+      const prof=ax=>{const N1=ax=='u'?PU:PV,N2=ax=='u'?PV:PU,out=new Float64Array(N1);for(let i=2;i<N1-2;i++){let s=0,c=0;for(let j=0;j<N2;j+=2){const u=ax=='u'?u0+(i+.5)*pg:u0+(j+.5)*pg,v=ax=='u'?v0+(j+.5)*pg:v0+(i+.5)*pg;const gi=Math.min(NU-1,Math.floor((u-u0)/g)),gj=Math.min(NV-1,Math.floor((v-v0)/g));if(!maskD(gi,gj))continue;s+=ax=='u'?Math.abs(lumUV(u+0.15,v)-lumUV(u-0.15,v)):Math.abs(lumUV(u,v+0.15)-lumUV(u,v-0.15));c++;}out[i]=c?s:0;}return out;};
+      const lprof=ax=>{const N1=ax=='u'?PU:PV,out=new Float64Array(N1);for(let i=0;i<N1;i++){const p=ax=='u'?u0+(i+.5)*pg:v0+(i+.5)*pg;let s=0;if(ax=='u'){const gi=Math.floor((p-u0)/g);if(gi<1||gi>=NU-1)continue;for(let j=0;j<NV;j++)s+=Math.abs(H[gi+1][j]-H[gi-1][j])>1?1:0;}else{const gj=Math.floor((p-v0)/g);if(gj<1||gj>=NV-1)continue;for(let k=0;k<NU;k++)s+=Math.abs(H[k][gj+1]-H[k][gj-1])>1?1:0;}out[i]=s;}return out;};
+      const peaks=(arr,lo)=>{const N=arr.length,sv=new Float64Array(N);for(let i=2;i<N-2;i++)sv[i]=(arr[i-2]+2*arr[i-1]+3*arr[i]+2*arr[i+1]+arr[i+2])/9;let m=0,s=0,c=0;for(let i=0;i<N;i++)if(sv[i]>0){m+=sv[i];c++;}m/=c||1;for(let i=0;i<N;i++)if(sv[i]>0)s+=(sv[i]-m)**2;s=Math.sqrt(s/(c||1));const pk=[];for(let i=3;i<N-3;i++){if(sv[i]<m+0.6*s)continue;let ok=true;for(let d=-5;d<=5;d++)if(d&&sv[i+d]>sv[i])ok=false;if(ok)pk.push([lo+(i+.5)*pg,(sv[i]-m)/(s||1)]);}return pk;};
+      /* slope breaks: where the laser changes slope without a step (eave of a pitched part against a flat one, a ridge, a lower pan) */
+      const kprof=ax=>{const N1=ax=='u'?PU:PV,out=new Float64Array(N1);const kink=(a,b,c)=>{if(a<=2||b<=2||c<=2)return 0;const d1=b-a,d2=c-b;return Math.abs(d1)<1.5&&Math.abs(d2)<1.5&&Math.abs(d2-d1)>0.35?1:0;};
+        for(let i=0;i<N1;i++){const p=ax=='u'?u0+(i+.5)*pg:v0+(i+.5)*pg;let s=0;if(ax=='u'){const gi=Math.floor((p-u0)/g);if(gi<2||gi>=NU-2)continue;for(let j=0;j<NV;j++)s+=kink(H[gi-2][j],H[gi][j],H[gi+2][j]);}else{const gj=Math.floor((p-v0)/g);if(gj<2||gj>=NV-2)continue;for(let k=0;k<NU;k++)s+=kink(H[k][gj-2],H[k][gj],H[k][gj+2]);}out[i]=s;}return out;};
+      const nm=a=>{const mx=Math.max(...a)||1;return a.map(v=>v/mx);};const comb=ax=>{const p=nm(Array.from(prof(ax))),l=nm(Array.from(lprof(ax)));const k=opt.kinks?nm(Array.from(kprof(ax))):null;return p.map((v,i)=>v+0.8*l[i]+(k?0.8*k[i]:0));};
+      const NK=opt.kinks?8:6;cu=peaks(comb('u'),u0).sort((a,b)=>b[1]-a[1]).slice(0,NK).map(p=>p[0]);cv=peaks(comb('v'),v0).sort((a,b)=>b[1]-a[1]).slice(0,NK).map(p=>p[0]);}}
+  tk('profiles');rUV.forEach(rg=>rg.forEach(p=>{cu.push(p[0]);cv.push(p[1]);}));
+  const dedupe=(arr,lo,hi,gap)=>{arr=arr.filter(x=>x>lo+0.5&&x<hi-0.5).sort((a,b)=>a-b);const out=[];arr.forEach(x=>{if(!out.length||x-out[out.length-1]>gap)out.push(x);});return [lo,...out,hi];};
+  let CU=dedupe(cu,u0,u1,0.7),CV=dedupe(cv,v0,v1,0.7);for(let gp=1;(CU.length>10||CV.length>10)&&gp<4;gp+=0.5){CU=dedupe(cu,u0,u1,gp);CV=dedupe(cv,v0,v1,gp);}
+  /* fitting */
+  const pts=[];for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)pts.push([u0+(i+.5)*g,v0+(j+.5)*g,HR[i][j]]);
+  /* fitting on the grid itself (typed arrays, no per-point allocation): same models, same order, same solver as v4 */
+  const PZ=new Float64Array(NU*NV);for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)PZ[i*NV+j]=HR[i][j];
+  const rngOf=Rc=>[Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1)];
+  const ptsIn=Rc=>{const [i0,i1,j0,j1]=rngOf(Rc),out=[];for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)out.push(pts[i*NV+j]);return out;};
+  const solveN=(Mx,bb,np)=>{for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
+  const CL=0.6;
+  const fitM=(I,feat,np)=>{const f=new Float64Array(np);
+    const pass=x=>{const Mx=[...Array(np)].map(()=>Array(np).fill(0)),bb=Array(np).fill(0);let n=0;
+      for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const v=v0+(j+.5)*g,z=PZ[i*NV+j];feat(u,v,f);
+        if(z!==z)continue;if(x){let pz=0;for(let a=0;a<np;a++)pz+=f[a]*x[a];if(!(Math.abs(z-pz)<0.5))continue;}n++;
+        for(let a=0;a<np;a++){bb[a]+=f[a]*z;const fa=f[a],Ma=Mx[a];for(let c=0;c<np;c++)Ma[c]+=fa*f[c];}}}return {Mx,bb,n};};
+    const p0=pass(null);let x=solveN(p0.Mx,p0.bb,np);const p1=pass(x);if(p1.n>np+3)x=solveN(p1.Mx,p1.bb,np);return x;};
+  const costI=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const d=Math.abs(zz-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
+  const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){r=leafFit0(Rc);LFC.set(key,r);}return r;};
+  const leafFit0=Rc=>{const I=rngOf(Rc),none={type:'none',pred:()=>0,cost:0,cr:0,R:Rc,np:0};if(I[1]<I[0]||I[3]<I[2])return none;
+    let nP=0,n2=0,zmax=-1e9;const hi=[];for(let i=I[0];i<=I[1];i++)for(let j=I[2];j<=I[3];j++){const z=PZ[i*NV+j];if(z!==z)continue;nP++;if(z>2)n2++;if(z>1)hi.push(z);if(z>zmax)zmax=z;}
+    if(!nP)return none;const occ=n2/nP;const cands=[{type:'none',pred:()=>0,np:0}];
+    if(occ>0.3){hi.sort((x,y)=>x-y);const md=hi.length?hi[hi.length>>1]:0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
+      const su=fitM(I,(u,v,f)=>{f[0]=1;f[1]=u-Rc[0];},2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
+      const sv=fitM(I,(u,v,f)=>{f[0]=1;f[1]=v-Rc[2];},2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
+      const w=Rc[3]-Rc[2],l=Rc[1]-Rc[0];
+      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[2]+fr*w,x=fitM(I,(u,v,f)=>{f[0]=1;f[1]=-Math.max(0,r-v);f[2]=-Math.max(0,v-r);},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableU',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-v)-x[2]*Math.max(0,v-r),np:3});}
+      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[0]+fr*l,x=fitM(I,(u,v,f)=>{f[0]=1;f[1]=-Math.max(0,r-u);f[2]=-Math.max(0,u-r);},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableV',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-u)-x[2]*Math.max(0,u-r),np:3});}
+      const dm=(u,v)=>Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);const hx=fitM(I,(u,v,f)=>{f[0]=1;f[1]=dm(u,v);},2);if(hx[1]>0.15&&hx[1]<1.8)cands.push({type:'hip',x:hx,pred:(u,v)=>hx[0]+hx[1]*dm(u,v),np:2});
+      if(big)for(const w0 of [0.8,1.2,1.6]){if(Math.min(w,l)<2*w0+1)continue;const x=fitM(I,(u,v,f)=>{const d=dm(u,v);f[0]=1;f[1]=Math.min(d,w0);f[2]=Math.max(0,d-w0);},3);if(x[1]>1.2&&x[1]<4&&x[2]>=0&&x[2]<0.8)cands.push({type:'mansard',w0,x,pred:(u,v)=>{const d=dm(u,v);return x[0]+x[1]*Math.min(d,w0)+x[2]*Math.max(0,d-w0);},np:3});}}
+    const hmax=zmax+0.5;let best=null;
+    cands.forEach(c=>{if((c.type=='shedU'||c.type=='shedV')&&c.k>1)return;if(c.type!='none'){let bad=false;[[Rc[0],Rc[2]],[Rc[1],Rc[2]],[Rc[0],Rc[3]],[Rc[1],Rc[3]],[(Rc[0]+Rc[1])/2,(Rc[2]+Rc[3])/2]].forEach(([u,v])=>{const z=c.pred(u,v);if(z>hmax||z<-0.5)bad=true;});if(bad)return;}
+      const cr=costI(I,c.pred),co=cr+0.15*c.np*Math.sqrt(nP);if(!best||co<best.cost)best={...c,cost:co,cr};});best.R=Rc;return best;};
+  const LAM=(opt.lam||8)*(g*g/0.25)**0.5, memo=new Map(), tS=performance.now();
+  const solve=(a,b,c,d)=>{const key=a+','+b+','+c+','+d;if(memo.has(key))return memo.get(key);const lf=leafFit([CU[a],CU[b],CV[c],CV[d]]);let best={cost:lf.cost+(lf.type=='none'?0:LAM),leaves:[lf]};
+    if(performance.now()-tS<6000){
+      for(let k=a+1;k<b;k++){if(CU[k]-CU[a]<1.2||CU[b]-CU[k]<1.2)continue;const L=solve(a,k,c,d),Rr=solve(k,b,c,d);if(L.cost+Rr.cost<best.cost)best={cost:L.cost+Rr.cost,leaves:[...L.leaves,...Rr.leaves]};}
+      for(let k=c+1;k<d;k++){if(CV[k]-CV[c]<1.2||CV[d]-CV[k]<1.2)continue;const L=solve(a,b,c,k),Rr=solve(a,b,k,d);if(L.cost+Rr.cost<best.cost)best={cost:L.cost+Rr.cost,leaves:[...L.leaves,...Rr.leaves]};}}
+    memo.set(key,best);return best;};
+  let IX;
+  if(big){ /* wings: greedy largest rectangles of the IGN outline, no search */
+    const st=0.5,NU2=Math.ceil((u1-u0)/st),NV2=Math.ceil((v1-v0)/st),occ=[],used=[];let tot=0;
+    for(let i=0;i<NU2;i++){occ.push(new Uint8Array(NV2));used.push(new Uint8Array(NV2));for(let j=0;j<NV2;j++){const o=rUV.some(rg=>inPoly([u0+(i+.5)*st,v0+(j+.5)*st],rg))?1:0;occ[i][j]=o;tot+=o;}}
+    const rects=[];for(let it=0;it<6;it++){const hg=new Array(NV2).fill(0);let best=null;for(let i=0;i<NU2;i++){for(let j=0;j<NV2;j++)hg[j]=(occ[i][j]&&!used[i][j])?hg[j]+1:0;const stk=[];for(let j=0;j<=NV2;j++){const h=j<NV2?hg[j]:0;let start=j;while(stk.length&&stk[stk.length-1][1]>=h){const [sj,sh]=stk.pop();const ar=sh*(j-sj);if(!best||ar>best.ar)best={ar,i1:i,i0:i-sh+1,j0:sj,j1:j-1};start=sj;}stk.push([start,h]);}}
+      if(!best||best.ar*st*st<12||(it>0&&best.ar<0.06*tot))break;for(let i=best.i0;i<=best.i1;i++)for(let j=best.j0;j<=best.j1;j++)used[i][j]=1;rects.push([u0+best.i0*st,u0+(best.i1+1)*st,v0+best.j0*st,v0+(best.j1+1)*st]);}
+    if(!rects.length)return null;
+    /* each wing is split along its length where the laser steps (a row of houses of different heights), chosen by a 1-D optimum */
+    const Hat=(u,v)=>{const i=Math.floor((u-u0)/g),j=Math.floor((v-v0)/g);return (i>=0&&j>=0&&i<NU&&j<NV)?H[i][j]:0;};
+    const segs=[];rects.forEach(r=>{const longU=(r[1]-r[0])>=(r[3]-r[2]),a=longU?r[0]:r[2],b=longU?r[1]:r[3],c0=longU?r[2]:r[0],c1=longU?r[3]:r[1];
+      const cand=[a];for(let p=a+1.5;p<=b-1.5;p+=0.5){const st2=[];for(let q=c0+0.5;q<c1;q+=1){const d=longU?Math.abs(Hat(p+0.75,q)-Hat(p-0.75,q)):Math.abs(Hat(q,p+0.75)-Hat(q,p-0.75));st2.push(d);}st2.sort((x,y)=>x-y);const m=st2.length?st2[st2.length>>1]:0;if(m>0.8)cand.push([p,m]);}
+      let cs=[a];cand.slice(1).forEach(([p,m])=>{const last=cs[cs.length-1];if(p-last<1.2){if(cs.length>1&&cs._m!=null&&m>cs._m){cs[cs.length-1]=p;cs._m=m;}}else{cs.push(p);cs._m=m;}});cs=cs.concat([b]);
+      const mk=(x0,x1)=>longU?[x0,x1,r[2],r[3]]:[r[0],r[1],x0,x1];const nC=cs.length,best=new Array(nC).fill(1e18),from=new Array(nC).fill(-1);best[0]=0;
+      for(let i=1;i<nC;i++)for(let j=0;j<i;j++){const lf=leafFit(mk(cs[j],cs[i]));const c=best[j]+lf.cost+LAM;if(c<best[i]){best[i]=c;from[i]=j;}}
+      const parts=[];for(let i=nC-1;i>0;i=from[i])parts.push(mk(cs[from[i]],cs[i]));parts.forEach(q=>segs.push(q));});
+    rects.length=0;segs.forEach(q=>rects.push(q));
+    const eu=[...new Set(rects.flatMap(r=>[r[0],r[1]]).map(v=>+v.toFixed(3)))].sort((a,b)=>a-b),ev=[...new Set(rects.flatMap(r=>[r[2],r[3]]).map(v=>+v.toFixed(3)))].sort((a,b)=>a-b);
+    CU=[u0,...eu.filter(v=>v>u0&&v<u1),u1];CV=[v0,...ev.filter(v=>v>v0&&v<v1),v1];
+    IX=rects.map(r=>[CU.indexOf(+r[0].toFixed(3)),CU.indexOf(+r[1].toFixed(3)),CV.indexOf(+r[2].toFixed(3)),CV.indexOf(+r[3].toFixed(3))]);
+  }else{const sol=solve(0,CU.length-1,0,CV.length-1);IX=sol.leaves.filter(l=>l.type!='none').map(l=>[CU.indexOf(l.R[0]),CU.indexOf(l.R[1]),CV.indexOf(l.R[2]),CV.indexOf(l.R[3])]);}
+  tk('dp');if(!IX.length||IX.some(ix=>ix.some(k=>k<0)))return null;
+  const inside=(Rc,u,v)=>u>=Rc[0]&&u<Rc[1]&&v>=Rc[2]&&v<Rc[3];
+  const SAT=new Float64Array((NU+1)*(NV+1));for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)SAT[(i+1)*(NV+1)+j+1]=(HR[i][j]===HR[i][j]?Math.min(Math.abs(HR[i][j]),CL):0)+SAT[i*(NV+1)+j+1]+SAT[(i+1)*(NV+1)+j]-SAT[i*(NV+1)+j];
+  const c0In=Rc=>{const i0=Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),i1=Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),j0=Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),j1=Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1);if(i1<i0||j1<j0)return 0;const W=NV+1;return SAT[(i1+1)*W+j1+1]-SAT[i0*W+j1+1]-SAT[(i1+1)*W+j0]+SAT[i0*W+j0];};
+  const ALL=SAT[NU*(NV+1)+NV];
+  const total=(A,B)=>{const ls=IX.map(ix=>leafFit([A[ix[0]],A[ix[1]],B[ix[2]],B[ix[3]]]));let s=ALL;ls.forEach(l=>{s+=l.cr-c0In(l.R);});return {s,ls};};
+  const CUr=CU.slice(),CVr=CV.slice();let cur=total(CUr,CVr);
+  const refine=(onlyU,onlyV)=>{for(let pass=0;pass<(big?1:3);pass++){let imp=false;const uU=[...new Set(IX.flatMap(ix=>[ix[0],ix[1]]))],uV=[...new Set(IX.flatMap(ix=>[ix[2],ix[3]]))];
+    for(const [arr,used,only] of [[CUr,uU,onlyU],[CVr,uV,onlyV]])for(const k of used){if(only&&!only.includes(k))continue;const base=arr[k];let bv=base,bs=cur.s;const us=used.slice().sort((p,q)=>p-q),pi=us.indexOf(k);
+      for(let d=-0.8;d<=0.801;d+=(big?0.2:0.1)){const v=base+d;if(pi>0&&v<arr[us[pi-1]]+1)continue;if(pi<us.length-1&&v>arr[us[pi+1]]-1)continue;arr[k]=v;const c=total(CUr,CVr);if(c.s<bs-1e-6){bs=c.s;bv=v;}}
+      arr[k]=bv;if(bv!==base){imp=true;cur=total(CUr,CVr);}}if(!imp)break;}};
+  refine();tk('refine');
+  /* merge neighbours whose union is a rectangle when the simpler roof explains the laser as well */
+  for(let it=0;it<6;it++){const base=cur.s+LAM*IX.length;let bm=null;
+    for(let i=0;i<IX.length;i++)for(let j=i+1;j<IX.length;j++){const A=IX[i],B=IX[j];let Mx=null;
+      if(A[0]==B[0]&&A[1]==B[1]&&(A[3]==B[2]||B[3]==A[2]))Mx=[A[0],A[1],Math.min(A[2],B[2]),Math.max(A[3],B[3])];else if(A[2]==B[2]&&A[3]==B[3]&&(A[1]==B[0]||B[1]==A[0]))Mx=[Math.min(A[0],B[0]),Math.max(A[1],B[1]),A[2],A[3]];if(!Mx)continue;
+      const save=IX.slice(),sU=CUr.slice(),sV=CVr.slice(),sc=cur;IX.splice(j,1);IX[i]=Mx;cur=total(CUr,CVr);refine([Mx[0],Mx[1]],[Mx[2],Mx[3]]);const cc=cur.s+LAM*IX.length;
+      if(cc<=base+0.5&&(!bm||cc<bm.cc))bm={cc,IX:IX.slice(),c:cur,U:CUr.slice(),V:CVr.slice()};
+      IX.length=0;save.forEach(x=>IX.push(x));sU.forEach((v,q)=>CUr[q]=v);sV.forEach((v,q)=>CVr[q]=v);cur=sc;}
+    if(!bm)break;IX.length=0;bm.IX.forEach(x=>IX.push(x));bm.U.forEach((v,q)=>CUr[q]=v);bm.V.forEach((v,q)=>CVr[q]=v);cur=bm.c;refine();}
+  tk('merge');const leaves=cur.ls.filter(l=>l.type!='none'&&(l.R[1]-l.R[0])>=1&&(l.R[3]-l.R[2])>=1);if(!leaves.length)return null;
+  /* quality: median |laser - model| over the building */
+  const ds=[];pts.forEach(p=>{const lf=leaves.find(l=>inside(l.R,p[0],p[1]));const m=lf?lf.pred(p[0],p[1]):0;const [x,y]=XY(p[0],p[1]);if(p[2]===p[2]&&(p[2]>2||m>2)&&nearRing(x,y,1))ds.push(Math.abs(p[2]-m));});ds.sort((a,b)=>a-b);
+  const rms=ds.length?ds[ds.length>>1]:9;
+  /* ---- the model in the page's format: pieces (outline + roofZ), pans (planes, tris on the energy grid), cells, verts */
+  const s=R.s, cells=[], pans=[], verts=[], pieces=[];
+  const faceSet=l=>{const [a,b,c,d]=l.R,p=l.pred,F=[];const q=pp=>F.push(pp.map(([u,v])=>[u,v,p(u,v)]));
+    if(l.type=='flat'||l.type=='shedU'||l.type=='shedV')q([[a,c],[b,c],[b,d],[a,d]]);
+    else if(l.type=='gableU'){q([[a,c],[b,c],[b,l.r],[a,l.r]]);q([[a,l.r],[b,l.r],[b,d],[a,d]]);}
+    else if(l.type=='gableV'){q([[a,c],[l.r,c],[l.r,d],[a,d]]);q([[l.r,c],[b,c],[b,d],[l.r,d]]);}
+    else if(l.type=='hip'||l.type=='mansard'){const ring=(R4,he,k)=>{const poly=[[R4[0],R4[2]],[R4[1],R4[2]],[R4[1],R4[3]],[R4[0],R4[3]]];const ccw=MK.area(poly)>0;
+        const D=poly.map((A,i)=>{const B=poly[(i+1)%4],dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy);let nx=-dy/L,ny=dx/L;if(!ccw){nx=-nx;ny=-ny;}return P=>(P[0]-A[0])*nx+(P[1]-A[1])*ny;});
+        return poly.map((_,i)=>{let Q=poly.slice();for(let j=0;j<4;j++){if(j==i)continue;Q=MK.clipHalf(Q,P=>D[i](P)-D[j](P));if(Q.length<3)break;}return Q.length>=3?Q.map(P=>[P[0],P[1],he+k*D[i](P)]):null;}).filter(Boolean);};
+      if(l.type=='hip')ring(l.R,l.x[0],l.x[1]).forEach(f=>F.push(f));
+      else{const w0=l.w0,Ri=[a+w0,b-w0,c+w0,d-w0],hb=l.x[0]+l.x[1]*w0;ring(Ri,hb,l.x[2]).forEach(f=>F.push(f));
+        const O=[[a,c],[b,c],[b,d],[a,d]],I=[[Ri[0],Ri[2]],[Ri[1],Ri[2]],[Ri[1],Ri[3]],[Ri[0],Ri[3]]];for(let i=0;i<4;i++){const j=(i+1)%4;F.push([[...O[i],l.x[0]],[...O[j],l.x[0]],[...I[j],hb],[...I[i],hb]]);}}}
+    return F;};
+  leaves.forEach((l,li)=>{const Puv=[[l.R[0],l.R[2]],[l.R[1],l.R[2]],[l.R[1],l.R[3]],[l.R[0],l.R[3]]];let P=Puv.map(([u,v])=>XY(u,v));if(MK.area(P)<0)P=P.reverse();
+    const pc={P,v4:l.type,F:{best:{score:0,rms}},pans:[]};pc.roofZ=(x,y)=>l.pred(U(x,y),V(x,y))+Z0;pieces.push(pc);
+    faceSet(l).forEach(f=>{const W3=f.map(([u,v,z])=>[...XY(u,v),z+Z0]);
+      /* plane through the face: z = a x + b y + c */
+      const [p0,p1,p2]=[W3[0],W3[1],W3[W3.length-1]];const e1=[p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]],e2=[p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]];let nr=[e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]];if(nr[2]<0)nr=nr.map(v=>-v);const ln=Math.hypot(...nr);if(ln<1e-9)return;nr=nr.map(v=>v/ln);if(nr[2]<0.05)return;
+      const pa=-nr[0]/nr[2],pb=-nr[1]/nr[2],pcc=p0[2]-pa*p0[0]-pb*p0[1];let Q=W3.map(p=>[p[0],p[1]]);if(MK.area(Q)<0)Q=Q.reverse();if(Math.abs(MK.area(Q))<0.05)return;
+      const tilt=Math.acos(nr[2]),az=((Math.atan2(nr[0],nr[1])/RAD)+360)%360,pan={id:pans.length,piece:li,Q,a:pa,b:pb,c:pcc,n:nr,tilt,az,flat:tilt<8*RAD,area:Math.abs(MK.area(Q))/Math.cos(tilt)};pan.small=pan.area<4;pans.push(pan);pc.pans.push(pan);
+      const z=(x,y)=>pa*x+pb*y+pcc;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;Q.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);});
+      const i0=Math.floor(x0/s),i1=Math.ceil(x1/s),j0=Math.floor(y0/s),j1=Math.ceil(y1/s),node=new Map();
+      const nodeAt=(i,j)=>{const key=i+','+j;let ci=node.get(key);if(ci==null){const x=i*s,y=j*s;ci=cells.length;cells.push({x,y,z:z(x,y),n:nr,tilt,az,pan:pan.id,w:0});node.set(key,ci);}return ci;};
+      const half=[];for(let q=0;q<Q.length;q++){const A=Q[q],B=Q[(q+1)%Q.length];half.push(p=>-((B[0]-A[0])*(p[1]-A[1])-(B[1]-A[1])*(p[0]-A[0])));}
+      pan.tris=[];
+      for(let i=i0;i<i1;i++)for(let j=j0;j<j1;j++){let sq=[[i*s,j*s],[(i+1)*s,j*s],[(i+1)*s,(j+1)*s],[i*s,(j+1)*s]];for(const h of half){sq=MK.clipHalf(sq,h);if(sq.length<3)break;}if(sq.length<3)continue;
+        const ar=Math.abs(MK.area(sq));if(ar<1e-6)continue;const ids=[nodeAt(i,j),nodeAt(i+1,j),nodeAt(i+1,j+1),nodeAt(i,j+1)];ids.forEach(ci=>cells[ci].w+=ar/4/(s*s));
+        const Vv=sq.map(([x,y])=>{const uu=x/s-i,vv=y/s-j;return {x,y,z:z(x,y),ids,ws:[(1-uu)*(1-vv),uu*(1-vv),uu*vv,(1-uu)*vv]};});for(let q=1;q<Vv.length-1;q++)pan.tris.push(Vv[0],Vv[q],Vv[q+1]);}});});
+  /* outlines along the walls (with the gable apex as a breakpoint), gables counted as vertical faces */
+  const outerSeg=(pc,a,b)=>{const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,L=Math.hypot(b[0]-a[0],b[1]-a[1]),ox=(b[1]-a[1])/L,oy=-(b[0]-a[0])/L;return !pieces.some(o=>o!==pc&&inPoly([mx+ox*0.3,my+oy*0.3],o.P));};
+  pieces.forEach(pc=>{pc.edgeProfiles=[];const P=pc.P;for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<0.05)continue;
+      const ts=[0,1];pc.pans.forEach(p=>p.Q.forEach(([x,y])=>{const tt=((x-a[0])*(b[0]-a[0])+(y-a[1])*(b[1]-a[1]))/(L*L),dist=Math.abs((x-a[0])*(b[1]-a[1])-(y-a[1])*(b[0]-a[0]))/L;if(dist<0.02&&tt>0.001&&tt<0.999)ts.push(tt);}));
+      ts.sort((p,q)=>p-q);const prof=ts.map(tt=>{const x=a[0]+(b[0]-a[0])*tt,y=a[1]+(b[1]-a[1])*tt;return [x,y,pc.roofZ(x,y)];});const outer=outerSeg(pc,a,b);pc.edgeProfiles.push({a,b,prof,outer});
+      if(!outer)continue;const zm=Math.min(...prof.map(p=>p[2]));if(Math.max(...prof.map(p=>p[2]))-zm<0.6)continue;
+      const quads=[];for(let k=0;k<prof.length-1;k++){const p=prof[k],q=prof[k+1];if(p[2]-zm<0.02&&q[2]-zm<0.02)continue;quads.push([[p[0],p[1],zm],[q[0],q[1],zm],[q[0],q[1],q[2]],[p[0],p[1],p[2]]]);}
+      let ar=0,mx=0,my=0,mz=0;quads.forEach(q=>{const w=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1])*((q[2][2]-q[1][2])+(q[3][2]-q[0][2]))/2;ar+=w;mx+=(q[0][0]+q[1][0])/2*w;my+=(q[0][1]+q[1][1])/2*w;mz+=(q[0][2]+q[3][2]+q[1][2]+q[2][2])/4*w;});
+      if(ar<1)continue;const nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;verts.push({quads,a:ar,x:mx/ar+nx*0.3,y:my/ar+ny*0.3,z:mz/ar,n:[nx,ny,0],tilt:Math.PI/2,az:((Math.atan2(nx,ny)/RAD)+360)%360});}});
+  tk('out');delete TT._;return {pieces,pans,cells,verts,rms,TT,L5:{leaves,XY,U,V,Z0,Ad,faceSet},v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
+
+
+
+/* ===== Quartier Soleil v5: the building is a union of straight volumes (the model's rectangles, in the axis frame of its walls).
+   The construction rules act on their parameters; roof, walls and outline are drawn from them directly: walls parallel or
+   perpendicular by construction, ridges level, no welding, no straightening, no hole possible. ===== */
+function qsV5Pred(l){const [a,b,c,d]=l.R,x=l.x;
+  switch(l.type){
+    case 'flat':return ()=>x[0];
+    case 'shedU':return u=>x[0]+x[1]*(u-a);
+    case 'shedV':return (u,v)=>x[0]+x[1]*(v-c);
+    case 'gableU':return (u,v)=>x[0]-x[1]*Math.max(0,l.r-v)-x[2]*Math.max(0,v-l.r);
+    case 'gableV':return u=>x[0]-x[1]*Math.max(0,l.r-u)-x[2]*Math.max(0,u-l.r);
+    case 'hip':return (u,v)=>x[0]+x[1]*Math.min(u-a,b-u,v-c,d-v);
+    case 'mansard':return (u,v)=>{const dd=Math.min(u-a,b-u,v-c,d-v);return x[0]+x[1]*Math.min(dd,l.w0)+x[2]*Math.max(0,dd-l.w0);};
+  }return l.pred;}
+/* the walls on the cadastre: an outer edge of the volumes up to 1.5 m outside a parallel footprint edge (or 50 cm inside it) is moved onto it
+   (the laser sees the roof with its overhang; the walls stand under it, on the footprint). A cut is one value shared by every
+   volume that uses it, so neighbours move together and stay joined. */
+function qsV5Snap(L,fam,M,log){const L5=M.L5,sx=M.sh0.dx,sy=M.sh0.dy,E=1e-6;
+  const seg=[];fam.forEach(o=>o.userData.rings.forEach(r=>{for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length],A=[L5.U(a.x+sx,a.y+sy),L5.V(a.x+sx,a.y+sy)],B=[L5.U(b.x+sx,b.y+sy),L5.V(b.x+sx,b.y+sy)],du=B[0]-A[0],dv=B[1]-A[1],len=Math.hypot(du,dv);if(len<0.5)continue;
+    if(Math.abs(du)<len*0.087)seg.push({o:'u',c:(A[0]+B[0])/2,t0:Math.min(A[1],B[1]),t1:Math.max(A[1],B[1])});else if(Math.abs(dv)<len*0.087)seg.push({o:'v',c:(A[1]+B[1])/2,t0:Math.min(A[0],B[0]),t1:Math.max(A[0],B[0])});}}));
+  /* outer edges: the parts of a rectangle side no other rectangle touches */
+  const outer=(l,o,c,t0,t1)=>{let iv=[[t0,t1]];L.forEach(m=>{if(m===l)return;const [a,b,cc,d]=m.R;let hit=null;if(o=='u'&&(Math.abs(a-c)<E||Math.abs(b-c)<E))hit=[cc,d];if(o=='v'&&(Math.abs(cc-c)<E||Math.abs(d-c)<E))hit=[a,b];if(!hit)return;
+      iv=iv.flatMap(([p,q])=>{if(hit[1]<=p||hit[0]>=q)return [[p,q]];const out=[];if(hit[0]>p)out.push([p,hit[0]]);if(hit[1]<q)out.push([hit[1],q]);return out;});});return iv;};
+  const best=(o,cc,sd,p,q)=>{let b=null;seg.forEach(sg=>{if(sg.o!==o)return;const ov=Math.min(q,sg.t1)-Math.max(p,sg.t0);if(ov<0.3*(q-p))return;const dd=sg.c-cc,out=dd*sd;if(out<=0.5&&out>=-1.5&&(!b||Math.abs(dd)<Math.abs(b.dd)))b={dd,w:ov};});return b;};
+  /* a side wholly on the outline moves on its own (two wings in line but not on one footprint line get each their wall);
+     a side partly shared with a neighbour moves with every side on that cut, only if they all agree */
+  const own=[],vote=new Map();
+  L.forEach((l,li)=>{const [a,b,c,d]=l.R;[['u',a,c,d,-1,0],['u',b,c,d,1,1],['v',c,a,b,-1,2],['v',d,a,b,1,3]].forEach(([o,cc,t0,t1,sd,ix])=>{const iv=outer(l,o,cc,t0,t1),ext=iv.reduce((s,[p,q])=>s+q-p,0);
+    if(ext>=t1-t0-1e-6){const bb=best(o,cc,sd,t0,t1);if(bb&&Math.abs(bb.dd)>=0.02)own.push([li,ix,Math.round((cc+bb.dd)*1000)/1000]);return;}
+    const k=o+cc.toFixed(3);const V=vote.get(k)||vote.set(k,{o,c:cc,ext:0,tg:[]}).get(k);iv.forEach(([p,q])=>{if(q-p<0.3)return;V.ext+=q-p;const bb=best(o,cc,sd,p,q);if(bb)V.tg.push(bb);});});});
+  const mv=new Map();vote.forEach(V=>{if(!V.tg.length)return;const w=V.tg.reduce((s,t)=>s+t.w,0);if(w<0.5*V.ext)return;const m=V.tg.reduce((s,t)=>s+t.dd*t.w,0)/w;if(V.tg.some(t=>Math.abs(t.dd-m)>0.15)||Math.abs(m)<0.02)return;mv.set(V.o+V.c.toFixed(3),Math.round((V.c+m)*1000)/1000);});
+  /* a value moved as a shared cut is not moved again on its own */
+  const own2=own.filter(([li,ix])=>{const l=L[li],k=(ix<2?'u':'v')+l.R[ix].toFixed(3);return !mv.has(k);});
+  if(!mv.size&&!own2.length)return;const R0s=L.map(l=>l.R.slice());
+  L.forEach(l=>{const R=l.R;[0,1].forEach(i=>{const k='u'+R[i].toFixed(3);if(mv.has(k))R[i]=mv.get(k);});[2,3].forEach(i=>{const k='v'+R[i].toFixed(3);if(mv.has(k))R[i]=mv.get(k);});});
+  own2.forEach(([li,ix,v])=>{L[li].R[ix]=v;});
+  L.forEach((l,li)=>{const R0=R0s[li],R=l.R;
+    if(R[1]-R[0]<0.8||R[3]-R[2]<0.8){l.R=R0;return;}
+    if(l.type=='hip'||l.type=='mansard'){const sh=Math.min(R[0]-R0[0],R0[1]-R[1],R[2]-R0[2],R0[3]-R[3]);if(sh>0)l.x=[l.x[0]+l.x[1]*sh,...l.x.slice(1)];} /* the eave stays on the laser roof */
+    if(l.type=='shedU'&&R[0]!==R0[0])l.x=[l.x[0]+l.x[1]*(R[0]-R0[0]),l.x[1]];if(l.type=='shedV'&&R[2]!==R0[2])l.x=[l.x[0]+l.x[1]*(R[2]-R0[2]),l.x[1]];});
+  log.push(['snap',[...mv.entries()].map(([k,v])=>k[0]+(v-+k.slice(1)).toFixed(2)).join(' '),own2.length]);}
+/* the rules of the trade, on the parameters */
+function qsV5Rules(L,log){const E=1e-6,ov=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0),deg=k=>Math.atan(k)*180/Math.PI;
+  const adj=[];for(let i=0;i<L.length;i++)for(let j=0;j<L.length;j++){if(i==j)continue;const A=L[i].R,B=L[j].R;
+    if(Math.abs(A[1]-B[0])<E&&ov(A[2],A[3],B[2],B[3])>0.3)adj.push({w:i,e:j,ori:'u',at:A[1]}); /* A west of B */
+    if(Math.abs(A[3]-B[2])<E&&ov(A[0],A[1],B[0],B[1])>0.3)adj.push({w:i,e:j,ori:'v',at:A[3]});} /* A south of B */
+  /* gable: eaves (low edges) and pitches; a pan pivots about its eave */
+  const G=l=>{const lo=l.type=='gableU'?l.R[2]:l.R[0],hi=l.type=='gableU'?l.R[3]:l.R[1];return {lo,hi,e1:l.x[0]-l.x[1]*(l.r-lo),e2:l.x[0]-l.x[2]*(hi-l.r)};};
+  const setG=(l,k1,k2,e1,e2)=>{const {lo,hi}=G(l),r=(e2-e1+k1*lo+k2*hi)/(k1+k2);if(!(r>lo+0.3&&r<hi-0.3))return false;l.r=r;l.x=[e1+k1*(r-lo),k1,k2];return true;};
+  /* 1. gables side by side along their ridge (a row of houses, a step in height): one pitch per side for the row, each pan about its eave;
+        eaves within 8 cm made level */
+  const par=L.map((_,i)=>i),fd=i=>par[i]==i?i:(par[i]=fd(par[i]));
+  adj.forEach(a=>{const A=L[a.w],B=L[a.e];if(A.type!=B.type)return;if(!((A.type=='gableU'&&a.ori=='u')||(A.type=='gableV'&&a.ori=='v')))return;
+    if(Math.abs(deg(A.x[1])-deg(B.x[1]))<12&&Math.abs(deg(A.x[2])-deg(B.x[2]))<12)par[fd(a.w)]=fd(a.e);});
+  const groups=new Map();L.forEach((l,i)=>{if(l.type!='gableU'&&l.type!='gableV')return;const r=fd(i);(groups.get(r)||groups.set(r,[]).get(r)).push(i);});
+  groups.forEach(ix=>{if(ix.length<2)return;let w1=0,s1=0,w2=0,s2=0;
+    ix.forEach(i=>{const l=L[i],len=l.type=='gableU'?l.R[1]-l.R[0]:l.R[3]-l.R[2],{lo,hi}=G(l);w1+=len*(l.r-lo);s1+=len*(l.r-lo)*l.x[1];w2+=len*(hi-l.r);s2+=len*(hi-l.r)*l.x[2];});
+    const k1=s1/w1,k2=s2/w2,ee=ix.map(i=>G(L[i]));
+    /* eaves on the same line and within 8 cm: one height */
+    const snap=(key,lk)=>{const C=[];ix.forEach((i,q)=>{const lin=ee[q][lk];let c=C.find(c=>Math.abs(c.lin-lin)<0.3&&Math.abs(c.z-ee[q][key])<0.08);if(!c){c={lin,z:ee[q][key],n:0,s:0,m:[]};C.push(c);}c.s+=ee[q][key];c.n++;c.m.push(q);c.z=c.s/c.n;});C.forEach(c=>c.m.forEach(q=>ee[q][key]=c.z));};
+    snap('e1','lo');snap('e2','hi');
+    ix.forEach((i,q)=>{const l=L[i],o={r:l.r,x:l.x.slice()};if(setG(l,k1,k2,ee[q].e1,ee[q].e2))log.push(['pitch',i,+(deg(o.x[1])).toFixed(1)+'>'+deg(k1).toFixed(1),+(deg(o.x[2])).toFixed(1)+'>'+deg(k2).toFixed(1)]);});});
+  /* 2. a lean-to continuing the slope of the roof next to it: one plane */
+  const zAt=(l,u,v)=>qsV5Pred(l)(u,v);
+  adj.forEach(a=>{const A=L[a.w],B=L[a.e],sh=a.ori=='u'?'shedU':'shedV',gb=a.ori=='u'?'gableV':'gableU';
+    /* slope across the shared edge, of the face of l touching it (positive: rising towards +ori) */
+    const slope=(l,side)=>{if(l.type==sh)return l.x[1];if(l.type==gb)return side=='lo'?l.x[1]:-l.x[2];return null;};
+    const mid=a.ori=='u'?[a.at,(Math.max(A.R[2],B.R[2])+Math.min(A.R[3],B.R[3]))/2]:[(Math.max(A.R[0],B.R[0])+Math.min(A.R[1],B.R[1]))/2,a.at];
+    const sA=slope(A,'hi'),sB=slope(B,'lo');if(sA==null||sB==null||Math.abs(sA)<0.1||Math.sign(sA)!=Math.sign(sB)||Math.abs(deg(sA)-deg(sB))>12)return;
+    const zA=zAt(A,...mid),zB=zAt(B,...mid);if(Math.abs(zA-zB)>0.3)return;
+    if(B.type==sh){B.x=[zA,sA];log.push(['plane',a.e,'<',a.w]);}else if(A.type==sh){const lo=a.ori=='u'?A.R[0]:A.R[2];A.x=[zB-sB*(a.at-lo),sB];log.push(['plane',a.w,'<',a.e]);}});
+  L.forEach(l=>{l.pred=qsV5Pred(l);});
+  /* 3. a wing meeting a cross roof: its roof carried on into the other volume up to that ridge, the envelope makes the valleys */
+  const ext=[];adj.forEach(a=>{for(const [wi,mi] of [[a.w,a.e],[a.e,a.w]]){const W=L[wi],Mn=L[mi];
+      const along=a.ori=='u'?'gableU':'gableV',cross=a.ori=='u'?'gableV':'gableU';if(W.type!=along||Mn.type!=cross)continue;
+      const [s0,s1]=a.ori=='u'?[W.R[2],W.R[3]]:[W.R[0],W.R[1]],[m0,m1]=a.ori=='u'?[Mn.R[2],Mn.R[3]]:[Mn.R[0],Mn.R[1]];if(s0<m0-0.05||s1>m1+0.05)continue;
+      if(W.x[0]>Mn.x[0]+0.6)continue; /* a taller wing stands on its own walls */
+      const e0=a.at,e1=Mn.r;if(Math.abs(e1-e0)<0.3)continue;const lo=Math.min(e0,e1),hi=Math.max(e0,e1);
+      const R=a.ori=='u'?[lo,hi,W.R[2],W.R[3]]:[W.R[0],W.R[1],lo,hi];const X=Object.assign({},W,{R,ext:wi});X.pred=qsV5Pred(X);ext.push(X);log.push(['wing',wi,'into',mi]);}});
+  return ext;}
+function qsV5Build(M,fam,main){const L5=M.L5;if(!L5||!PCSYNC)return null;const PC=PCSYNC,A0=S.alt0,dx=-M.sh0.dx,dy=-M.sh0.dy,log=[];
+  const r3=v=>Math.round(v*1000)/1000;
+  const L=L5.leaves.map(l=>{const c=Object.assign({},l);c.R=l.R.map(r3);c.x=l.x?l.x.slice():l.x;c.pred=qsV5Pred(c);return c;});
+  qsV5Snap(L,fam,M,log);
+  /* no roof under 2.2 m above the ground (a laser fit that took in the yard or a hedge): the low edge is lifted, the high one kept */
+  {const zmin=Math.min(...fam.map(o=>o.userData.zBase))+2.2+A0-L5.Z0;L.forEach((l,i)=>{const x=l.x,[a,b,c,d]=l.R;let ch=false;
+    if(l.type=='flat'||l.type=='hip'||l.type=='mansard'){if(x[0]<zmin){x[0]=zmin;ch=true;}}
+    else if(l.type=='shedU'||l.type=='shedV'){const w=l.type=='shedU'?b-a:d-c,z0=x[0],z1=x[0]+x[1]*w;if(Math.min(z0,z1)<zmin){ch=true;if(Math.max(z0,z1)<=zmin+0.05){l.type='flat';l.x=[zmin];}else if(z0<z1)l.x=[zmin,(z1-zmin)/w];else l.x=[z0,(zmin-z0)/w];}}
+    else if(l.type=='gableU'||l.type=='gableV'){const lo=l.type=='gableU'?c:a,hi=l.type=='gableU'?d:b,e1=x[0]-x[1]*(l.r-lo),e2=x[0]-x[2]*(hi-l.r);
+      if(Math.min(e1,e2)<zmin){ch=true;if(x[0]<=zmin+0.3){l.type='flat';l.x=[Math.max(x[0],zmin)];}else l.x=[x[0],e1<zmin?(x[0]-zmin)/(l.r-lo):x[1],e2<zmin?(x[0]-zmin)/(hi-l.r):x[2]];}}
+    if(ch)log.push(['lift',i]);});}
+  const EXT=qsV5Rules(L,log),PR=L.concat(EXT);
+  const W=(u,v)=>{const p=L5.XY(u,v);return [p[0]+dx,p[1]+dy];},Wd=(u,v)=>L5.XY(u,v),zW=z=>z+L5.Z0-A0;
+  const env=(u,v)=>{let z=-Infinity;for(const l of PR){const R=l.R;if(u>R[0]&&u<R[1]&&v>R[2]&&v<R[3]){const q=l.pred(u,v);if(q>z)z=q;}}return z;};
+  /* faces: each volume's roof faces, minus where another volume's roof stands higher */
+  const F=[];PR.forEach((l,pi)=>L5.faceSet(l).forEach(f=>{const Q=f.map(p=>[r3(p[0]),r3(p[1])]);
+    let i1=1,i2=2,best=0;for(let a=1;a<f.length;a++)for(let b=a+1;b<f.length;b++){const ar=Math.abs((f[a][0]-f[0][0])*(f[b][1]-f[0][1])-(f[a][1]-f[0][1])*(f[b][0]-f[0][0]));if(ar>best){best=ar;i1=a;i2=b;}}
+    if(best<1e-6)return;const p0=f[0],p1=f[i1],p2=f[i2],e1=[p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]],e2=[p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]];
+    const nz=e1[0]*e2[1]-e1[1]*e2[0],pa=-(e1[1]*e2[2]-e1[2]*e2[1])/nz,pb=-(e1[2]*e2[0]-e1[0]*e2[2])/nz,pc=p0[2]-pa*p0[0]-pb*p0[1];
+    let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;Q.forEach(([u,v])=>{u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});
+    F.push({pi,Q:MK.area(Q)<0?Q.reverse():Q,z:(u,v)=>pa*u+pb*v+pc,pa,pb,bb:[u0,u1,v0,v1]});}));
+  const drawn=[];
+  F.forEach(f=>{const sub=[];F.forEach(g=>{if(g.pi===f.pi||g.bb[0]>=f.bb[1]||g.bb[1]<=f.bb[0]||g.bb[2]>=f.bb[3]||g.bb[3]<=f.bb[2])return;
+      const H=MK.clipHalf(g.Q,P=>f.z(P[0],P[1])+0.005-g.z(P[0],P[1]));if(H.length>=3&&Math.abs(MK.area(H))>1e-4)sub.push([H.map(([u,v])=>[r3(u),r3(v)])]);});
+    const Qc=f.Q.concat([f.Q[0]]);let parts=[[Qc]];if(sub.length){try{parts=PC.difference([f.Q],...sub);}catch(e){try{const rr=v=>Math.round(v*100)/100;parts=PC.difference([f.Q.map(p=>p.map(rr))],...sub.map(s=>[s[0].map(p=>p.map(rr))]));}catch(e2){parts=[[Qc]];}}}
+    const gx=f.pa*L5.XY(1,0)[0]+f.pb*L5.XY(0,1)[0],gy=f.pa*L5.XY(1,0)[1]+f.pb*L5.XY(0,1)[1],nl=Math.hypot(gx,gy,1),n=[-gx/nl,-gy/nl,1/nl];
+    const t=L5.XY(1,0),nn=L5.XY(0,1),toUV=(x,y)=>{const X=x-dx,Y=y-dy;return [X*t[0]+Y*t[1],X*nn[0]+Y*nn[1]];};
+    const zf=(x,y)=>{const [u,v]=toUV(x,y);return zW(f.z(u,v));};
+    parts.forEach(poly=>{const ring=R=>{const o=R.slice(0,-1).map(([u,v])=>W(u,v));return o;};const outer=ring(poly[0]);if(outer.length<3)return;
+      let ar=0;for(let k=0,q=outer.length-1;k<outer.length;q=k++)ar+=(outer[q][0]-outer[k][0])*(outer[q][1]+outer[k][1]);if(Math.abs(ar)<0.02)return;
+      drawn.push({outer,holes:poly.slice(1).map(ring).filter(h=>h.length>=3),zf,n,v5:f.pi});});});
+  /* outline: the union of the volumes (the wing extensions lie inside another volume) */
+  let OUT=null;try{OUT=qsUnion(L.map(l=>{const [a,b,c,d]=l.R;return [[[a,c],[b,c],[b,d],[a,d],[a,c]]];})).map(poly=>poly.map(R=>R.map(([u,v])=>W(u,v))));}catch(e){OUT=null;} /* in the axis frame: exact, then turned */
+  /* walls: on every volume edge, where the envelope jumps (outline: from the ground; inside: from the lower roof) */
+  const lines=new Map();PR.forEach(l=>{const [a,b,c,d]=l.R;[['u',a,c,d],['u',b,c,d],['v',c,a,b],['v',d,a,b]].forEach(([o,e,t0,t1])=>{const k=o+Math.round(e*1000);(lines.get(k)||lines.set(k,{o,e,iv:[]}).get(k)).iv.push([t0,t1]);});});
+  const walls=[],XL=[],EPS=0.01,TH=0.03;
+  lines.forEach(Ln=>{Ln.iv.sort((p,q)=>p[0]-q[0]);const IV=[];Ln.iv.forEach(v=>{const l=IV[IV.length-1];if(l&&v[0]<=l[1]+1e-6)l[1]=Math.max(l[1],v[1]);else IV.push(v.slice());});
+    const P=t=>Ln.o=='u'?[Ln.e,t]:[t,Ln.e],N=Ln.o=='u'?[1,0]:[0,1];
+    const st=t=>{const p=P(t),zL=env(p[0]-N[0]*EPS,p[1]-N[1]*EPS),zR=env(p[0]+N[0]*EPS,p[1]+N[1]*EPS);
+      if(zL>zR+TH)return {s:1,top:zL,bot:zR,t};if(zR>zL+TH)return {s:-1,top:zR,bot:zL,t};return {s:0,t};};
+    IV.forEach(([t0,t1])=>{const n=Math.max(1,Math.ceil((t1-t0)/0.05)),S=[];for(let k=0;k<=n;k++)S.push(st(t0+(t1-t0)*k/n));
+      /* state changes found to 1 mm */
+      const S2=[S[0]];for(let k=1;k<S.length;k++){const A=S[k-1],B=S[k];if(A.s!==B.s||(A.s&&Math.abs((B.bot===-Infinity)-(A.bot===-Infinity))>0)){let lo=A.t,hi=B.t;for(let it=0;it<8;it++){const m=(lo+hi)/2,Sm=st(m);if(Sm.s===A.s&&((Sm.bot===-Infinity)===(A.bot===-Infinity)))lo=m;else hi=m;}
+          if(A.s){const q=st(lo);if(q.s===A.s)S2.push(q);}if(B.s){const q=st(hi);if(q.s===B.s)S2.push(q);}}S2.push(B);}
+      /* runs of one state (same side, same kind of bottom), simplified where top and bottom stay straight */
+      let run=[];const flush=()=>{if(run.length<2){run=[];return;}const keep=[run[0]];for(let k=1;k<run.length-1;k++){const a=keep[keep.length-1],c=run[k+1],b=run[k],f=(b.t-a.t)/(c.t-a.t||1);
+          const lin=v=>Math.abs(b[v]-(a[v]+(c[v]-a[v])*f))<0.002;if(!(lin('top')&&(b.bot===-Infinity||lin('bot'))))keep.push(b);}keep.push(run[run.length-1]);
+        const s=run[0].s,nu=N[0]*s,nv=N[1]*s,nw=Wd(nu,nv),gr=run[0].bot===-Infinity;
+        for(let k=0;k<keep.length-1;k++){const a=keep[k],b=keep[k+1];if(b.t-a.t<1e-4)continue;walls.push({a:W(...P(a.t)),b:W(...P(b.t)),za1:zW(a.top),zb1:zW(b.top),za0:gr?null:zW(a.bot),zb0:gr?null:zW(b.bot),nx:nw[0],ny:nw[1]});}
+        if(!gr&&run[run.length-1].t-run[0].t>=2.2){const a=W(...P(run[0].t)),b=W(...P(run[run.length-1].t));XL.push({a:{x:a[0],y:a[1]},b:{x:b[0],y:b[1]},nx:nw[0],ny:nw[1]});}
+        run=[];};
+      S2.forEach(q=>{if(!q.s){flush();return;}if(run.length&&(run[0].s!==q.s||(run[0].bot===-Infinity)!==(q.bot===-Infinity)))flush();run.push(q);});flush();});});
+  return {drawn,OUT,walls,XL,log,ext:EXT.length,n:L.length};}
+
+/* the roof faces of one volume (same as the model's) */
+function qsFaceSet(l){const [a,b,c,d]=l.R,p=l.pred,F=[];const q=pp=>F.push(pp.map(([u,v])=>[u,v,p(u,v)]));
+    if(l.type=='flat'||l.type=='shedU'||l.type=='shedV')q([[a,c],[b,c],[b,d],[a,d]]);
+    else if(l.type=='gableU'){q([[a,c],[b,c],[b,l.r],[a,l.r]]);q([[a,l.r],[b,l.r],[b,d],[a,d]]);}
+    else if(l.type=='gableV'){q([[a,c],[l.r,c],[l.r,d],[a,d]]);q([[l.r,c],[b,c],[b,d],[l.r,d]]);}
+    else if(l.type=='hip'||l.type=='mansard'){const ring=(R4,he,k)=>{const poly=[[R4[0],R4[2]],[R4[1],R4[2]],[R4[1],R4[3]],[R4[0],R4[3]]];const ccw=MK.area(poly)>0;
+        const D=poly.map((A,i)=>{const B=poly[(i+1)%4],dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy);let nx=-dy/L,ny=dx/L;if(!ccw){nx=-nx;ny=-ny;}return P=>(P[0]-A[0])*nx+(P[1]-A[1])*ny;});
+        return poly.map((_,i)=>{let Q=poly.slice();for(let j=0;j<4;j++){if(j==i)continue;Q=MK.clipHalf(Q,P=>D[i](P)-D[j](P));if(Q.length<3)break;}return Q.length>=3?Q.map(P=>[P[0],P[1],he+k*D[i](P)]):null;}).filter(Boolean);};
+      if(l.type=='hip')ring(l.R,l.x[0],l.x[1]).forEach(f=>F.push(f));
+      else{const w0=l.w0,Ri=[a+w0,b-w0,c+w0,d-w0],hb=l.x[0]+l.x[1]*w0;ring(Ri,hb,l.x[2]).forEach(f=>F.push(f));
+        const O=[[a,c],[b,c],[b,d],[a,d]],I=[[Ri[0],Ri[2]],[Ri[1],Ri[2]],[Ri[1],Ri[3]],[Ri[0],Ri[3]]];for(let i=0;i<4;i++){const j=(i+1)%4;F.push([[...O[i],l.x[0]],[...O[j],l.x[0]],[...I[j],hb],[...I[i],hb]]);}}}
+    return F;}
+
+/* ===== the model in a worker: the laser fit no longer freezes the view ===== */
+const QW={w:null,failed:false,seq:0,cb:new Map(),sent:null,ortho:null};
+function qsWorker(){if(QW.failed)return null;if(QW.w)return QW.w;
+  try{const src='const RAD=Math.PI/180;const MK={};MK.area='+MK.area.toString()+';MK.clipHalf='+MK.clipHalf.toString()+';const RF={};const S={};\n'+qsModel5.toString()+'\n('+qsWorkerMain.toString()+')();';
+    const w=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
+    w.onmessage=e=>{const f=QW.cb.get(e.data.id);if(f){QW.cb.delete(e.data.id);f(e.data);}};
+    w.onerror=e=>{console.warn('qs worker',e.message);QW.failed=true;QW.cb.forEach(f=>f({M:null,err:1}));QW.cb.clear();};
+    QW.w=w;return w;}catch(e){QW.failed=true;return null;}}
+function qsWorkerMain(){ /* runs inside the worker */
+  const mkAt=o=>{if(!o)return null;const parts=o.parts,ok=v=>v>-500&&v<9000;return {R:parts.length>1?1e9:parts[0].R,res:parts[0].res,W:parts[0].W,at:(x,y)=>{for(const p of parts){const i=Math.floor((x-p.cx+p.R)/p.res),j=Math.floor((p.R-(y-p.cy))/p.res);if(i<0||j<0||i>=p.W||j>=p.W)continue;const v=p.f[j*p.W+i];if(ok(v))return v;}return null;}};};
+  let F=null,C=null,GD=null;
+  self.onmessage=e=>{const m=e.data;
+    if(m.kind==='data'){if(m.mnh!==undefined){S.lidarR={mnh:mkAt(m.mnh)};F=mkAt(m.F);C=mkAt(m.C);}if(m.ortho!==undefined)GD=null,S.rawOrtho=m.ortho?{raw:{width:m.ortho.width,height:m.ortho.height,getContext:()=>({getImageData:()=>({data:m.ortho.data})})},w:m.ortho.w,e:m.ortho.e,n:m.ortho.n,s:m.ortho.s}:null;return;}
+    const t0=performance.now(),inF=(x,y)=>F&&Math.abs(x)<F.R-2&&Math.abs(y)<F.R-2;
+    const R=Object.assign({},m.R,{Z:(x,y)=>{let z=inF(x,y)?F.at(x,y):null;if(z==null&&C)z=C.at(x,y);return z;}});
+    const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0}))});
+    const ro=S.rawOrtho,green=ro?((x,y)=>{const W=ro.raw.width,H=ro.raw.height,mpp=(ro.e-ro.w)/W,d=GD||(GD=ro.raw.getContext().getImageData().data);const px=Math.round((x-ro.w)/mpp),py=Math.round((ro.n-y)/mpp);if(px<0||py<0||px>=W||py>=H)return -99;const k=(py*W+px)*4;return 2*d[k+1]-d[k]-d[k+2];}):null;
+    const run=o=>{try{const M=qsModel5(R,Object.assign({big:m.big,green},o));return M&&M.cells.length?pack(M,o):null;}catch(err){return null;}};
+    let M=run({});if(!M||(!m.big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
+    if(!M||M.rms>0.3){const M3=run({big:false,lam:4,kinks:true});if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
+    self.postMessage({id:m.id,M,ms:performance.now()-t0});};}
+function qsWorkerData(){const w=qsWorker();if(!w)return;const L=S.lidarR||{},pk=o=>o?{parts:o.parts||[{f:o.f,W:o.W,R:o.R,res:o.res,cx:0,cy:0}]}:null;
+  if(QW.sent!==S.T||QW.sentH!==L.mnh){QW.sent=S.T;QW.sentH=L.mnh;QW.ortho=null;w.postMessage({kind:'data',mnh:pk(L.mnh),F:pk(S.mnsF||L.mnsFine),C:pk(L.mns)});}
+  const ro=S.rawOrtho;if(ro&&ro.raw&&QW.ortho!==ro){QW.ortho=ro;let o=null;try{const W=ro.raw.width,H=ro.raw.height;o={width:W,height:H,data:ro.raw.getContext('2d').getImageData(0,0,W,H).data,w:ro.w,e:ro.e,n:ro.n,s:ro.s};}catch(e){}w.postMessage({kind:'data',ortho:o});}}
+/* the model of a group of blocks, computed in the worker; resolves to the same shape as qsV4Model (or null: the current roofs stay) */
+function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.userData.rings[0]))-Math.abs(areaOf(p.userData.rings[0])))[0];
+  const R=roofCells(main);if(!R||R.cells.length<16)return Promise.resolve(null);
+  const ud=main.userData,area=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0),big=(ud.floors||0)>=3||(ud.h||0)>9.5||area>800;
+  const w=qsWorker();if(!w)return Promise.resolve(undefined); /* no worker: done on the page */
+  qsWorkerData();const id=++QW.seq;
+  return new Promise(res=>{QW.cb.set(id,d=>{if(d.err)return res(undefined);const P=d.M;QV4.tWorker=(QV4.tWorker||0)+(d.ms||0);
+      if(P&&P.TT){QV4.TT=QV4.TT||{};for(const k in P.TT)QV4.TT[k]=(QV4.TT[k]||0)+P.TT[k];}
+      if(!P||P.rms>0.6)return res(null);
+      const t=[Math.cos(P.Ad),Math.sin(P.Ad)],n=[-t[1],t[0]],XY=(u,v)=>[u*t[0]+v*n[0],u*t[1]+v*n[1]],U=(x,y)=>x*t[0]+y*t[1],V=(x,y)=>x*n[0]+y*n[1];
+      const leaves=P.leaves.map(l=>{l.pred=qsV5Pred(l);return l;});
+      const pieces=leaves.map(l=>{const P4=[[l.R[0],l.R[2]],[l.R[1],l.R[2]],[l.R[1],l.R[3]],[l.R[0],l.R[3]]].map(([u,v])=>XY(u,v));return {P:P4,roofZ:(x,y)=>l.pred(U(x,y),V(x,y))+P.Z0};});
+      const M={rms:P.rms,v4:P.v4,pieces,sh0:P.noShift?{dx:0,dy:0}:R.sh,L5:{leaves,XY,U,V,Z0:P.Z0,Ad:P.Ad,faceSet:qsFaceSet}};
+      const cur=qsCurErr(fam,R),mine=qsV4Err(M,R);QV4.log.push({x:Math.round(main.userData.rings[0][0].x),y:Math.round(main.userData.rings[0][0].y),cur:+cur.toFixed(2),v4:+mine.toFixed(2),types:M.v4.types.join(',')});
+      res(mine<cur*0.8&&cur-mine>0.08?{M,main}:null);});
+    w.postMessage({kind:'model',id,big,R:{rings:R.rings,sh:R.sh,s:R.s}});});}
+/* windows on the v5 walls: the wall lines, their top and bottom are known along them, so no ray is needed to find the wall;
+   rays only for what stands in front (a neighbour, a wing in a corner). Same rules as before: the study's storeys, 3.5 m bays,
+   lintel under the eave, sill above the ground in front. */
+function qsWindows5(main){const V=main.userData._v4,{fam,w5}=V;
+  [...main.children].forEach(c=>{if(c.userData.winDecal){main.remove(c);c.geometry.dispose();}});
+  const objs=[];fam.forEach(o=>{objs.push(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal&&!c.userData.hiRoof)objs.push(c);});});
+  const bs=main.geometry.boundingSphere||(main.geometry.computeBoundingSphere(),main.geometry.boundingSphere);
+  const near=S.meshes.filter(m=>!fam.includes(m)&&m.geometry&&(m.geometry.boundingSphere||(m.geometry.computeBoundingSphere(),m.geometry.boundingSphere)).center.distanceTo(bs.center)<bs.radius+40);
+  const around=objs.concat(near,S.roofSetMeshes||[]);around.forEach(o=>o.updateMatrixWorld(true));
+  const ray=new THREE.Raycaster(),org=new THREE.Vector3(),dir=new THREE.Vector3(),down=new THREE.Vector3(0,0,-1);
+  const tallIn=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
+  const airAt=(x,y,z)=>{org.set(x,y,z+300);ray.set(org,down);ray.far=1000;const h=ray.intersectObjects(around,false);return !h.length||h[0].point.z<z;};
+  /* wall lines: segments on one straight line, same side, merged; cut where the wall top jumps (a tower corner) */
+  const G=[];w5.forEach(w=>{const ex=-w.ny,ey=w.nx,off=w.a[0]*w.nx+w.a[1]*w.ny;let g=G.find(g=>g.nx*w.nx+g.ny*w.ny>0.9999&&Math.abs(off-g.off)<0.02);if(!g){g={nx:w.nx,ny:w.ny,ex,ey,off,S:[]};G.push(g);}
+    let ta=w.a[0]*g.ex+w.a[1]*g.ey,tb=w.b[0]*g.ex+w.b[1]*g.ey,s={ta,tb,za1:w.za1,zb1:w.zb1,za0:w.za0,zb0:w.zb0};if(ta>tb)s={ta:tb,tb:ta,za1:w.zb1,zb1:w.za1,za0:w.zb0,zb0:w.za0};g.S.push(s);});
+  const runs=[];G.forEach(g=>{g.S.sort((p,q)=>p.ta-q.ta);let cur=null;const close=()=>{if(cur&&cur.t1-cur.t0>=1.6)runs.push(cur);cur=null;};
+    g.S.forEach(s=>{const gr=s.za0==null;if(cur&&(s.ta>cur.t1+0.01||gr!==cur.gr||Math.abs(s.za1-cur.S[cur.S.length-1].zb1)>0.8))close();if(!cur)cur={g,gr,t0:s.ta,t1:s.tb,S:[]};cur.S.push(s);cur.t1=Math.max(cur.t1,s.tb);});close();});
+  const at=(r,t,k1,k0)=>{for(const s of r.S)if(t>=s.ta-1e-6&&t<=s.tb+1e-6){const f=(t-s.ta)/((s.tb-s.ta)||1);return [s[k1]+(s[k0]-s[k1])*f];}return [null];};
+  const topOf=(r,t)=>at(r,t,'za1','zb1')[0],botOf=(r,t)=>r.gr?-Infinity:at(r,t,'za0','zb0')[0];
+  const P=[],U=[],stat={cells:0,ground:0,wall:0,air:0,ok:0,runs:runs.length},placed=[];
+  runs.forEach(r=>{const g=r.g,L=r.t1-r.t0,nx=g.nx,ny=g.ny,bays=Math.max(1,Math.round(L/3.5)),w=L/bays,pt=t=>[g.nx*g.off+g.ex*t,g.ny*g.off+g.ey*t];
+    for(let i=0;i<bays;i++){const ww=Math.min(1.3,w-0.5);if(ww<0.6)continue;const tc=r.t0+i*w+w/2,t0=tc-ww/2,t1=tc+ww/2,[cx,cy]=pt(tc);
+      const o=tallIn(cx-nx*0.3,cy-ny*0.3)||main,ub=o.userData;let fb,sh,nF;try{fb=floorBase(ub);sh=storeyH(ub);nF=nFloors(ub);}catch(e){continue;}
+      const gz=groundAt({x:cx,y:cy},{x:nx,y:ny});
+      const T3=[t0+0.1,tc,t1-0.1],tops=T3.map(t=>topOf(r,t));if(tops.some(v=>v==null))continue;const wt=Math.min(...tops);
+      for(let k=0;k<nF;k++){stat.cells++;
+        if(k<nF-1&&fb+k*sh+1.5<gz+WIN_SILL){stat.ground++;continue;}
+        const zc0=Math.max(fb+k*sh+1.5,gz+WIN_CLEAR),zt0=zc0+0.75,zt=Math.min(zt0,wt-0.25),zb=zc0-0.75,zc=(zb+zt)/2;
+        if(zt<zt0-0.45||zt-zb<1.0){stat.wall++;continue;}
+        /* the wall stands over the whole window: under its top, above the lower roof for a step wall */
+        let ok=true;for(const t of [t0+0.08,tc,t1-0.08]){const tp=topOf(r,t),bt=botOf(r,t);if(tp==null||tp<zt+0.12||bt>zb-0.1){ok=false;break;}}
+        if(!ok){stat.wall++;continue;}
+        for(const t of [t0,t1]){const [x,y]=pt(t);if(!airAt(x+nx*0.35,y+ny*0.35,zb-0.05)){ok=false;break;}}
+        if(ok)for(const t of [t0-0.25,t1+0.25]){const [x,y]=pt(t);org.set(x+nx*0.05,y+ny*0.05,zc);dir.set(nx,ny,0);ray.set(org,dir);ray.far=1.2;if(ray.intersectObjects(objs,false).length){ok=false;break;}}
+        if(ok&&placed.some(q=>Math.hypot(q[0]-cx,q[1]-cy)<1.4&&Math.abs(q[2]-zc)<1.0))ok=false;
+        if(!ok){stat.air++;continue;}
+        placed.push([cx,cy,zc]);stat.ok++;const [x0,y0]=pt(t0),[x1,y1]=pt(t1),ox=nx*0.02,oy=ny*0.02;
+        [[x0,y0,zb,0,0],[x1,y1,zb,1,0],[x1,y1,zt,1,1],[x0,y0,zb,0,0],[x1,y1,zt,1,1],[x0,y0,zt,0,1]].forEach(v=>{P.push(v[0]+ox,v[1]+oy,v[2]);U.push(v[3],v[4]);});}}});
+  V.stat=stat;if(!P.length)return;
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
+  const m=new THREE.Mesh(g,QS_WIN_MAT);m.position.z=-main.position.z;m.renderOrder=2;m.userData.winDecal=true;m.userData.hiRoof=true;m.raycast=()=>{};main.add(m);}
+
+/* how well the volumes' outline matches the footprints: intersection over union, sampled every 25 cm */
+function qsV5Fit(OUT,fam){if(!OUT||!OUT.length)return 0;const cad=fam.map(o=>o.userData.rings[0]);const inR=(x,y,R)=>{let o=false;for(let i=0,j=R.length-1;i<R.length;j=i++){const [a,b]=R[i],[c,d]=R[j];if((b>y)!==(d>y)&&x<(c-a)*(y-b)/(d-b)+a)o=!o;}return o;};
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;cad.forEach(r=>r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));OUT.forEach(p=>p[0].forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}));
+  const st=Math.max(0.25,Math.sqrt((x1-x0)*(y1-y0)/20000));let I=0,U=0;for(let x=x0+st/2;x<x1;x+=st)for(let y=y0+st/2;y<y1;y+=st){const a=cad.some(r=>pointInPoly(x,y,r)),b=OUT.some(p=>inR(x,y,p[0])&&!p.slice(1).some(h=>inR(x,y,h)));if(a&&b)I++;if(a||b)U++;}return U?I/U:0;}
+/* the roof planes of the rectangles, in the shape the v4 polygon method reads (laser frame, z absolute) */
+function qsPansFromLeaves(M){const L5=M.L5,pans=[];L5.leaves.forEach((l,li)=>{qsFaceSet(l).forEach(f=>{const W3=f.map(([u,v,z])=>[...L5.XY(u,v),z+L5.Z0]);
+    let i1=1,i2=2,best=0;for(let a=1;a<W3.length;a++)for(let b=a+1;b<W3.length;b++){const ar=Math.abs((W3[a][0]-W3[0][0])*(W3[b][1]-W3[0][1])-(W3[a][1]-W3[0][1])*(W3[b][0]-W3[0][0]));if(ar>best){best=ar;i1=a;i2=b;}}if(best<1e-4)return;
+    const p0=W3[0],p1=W3[i1],p2=W3[i2],e1=[p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]],e2=[p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]];let nr=[e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]];if(nr[2]<0)nr=nr.map(v=>-v);const ln=Math.hypot(...nr);nr=nr.map(v=>v/ln);if(nr[2]<0.05)return;
+    const a=-nr[0]/nr[2],b=-nr[1]/nr[2],c=p0[2]-a*p0[0]-b*p0[1];let Q=W3.map(p=>[p[0],p[1]]);if(MK.area(Q)<0)Q=Q.reverse();pans.push({id:pans.length,piece:li,Q,a,b,c,n:nr});});});return pans;}
+
+function registerFamily(fam,MH){
+  const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
+  const others=S.meshes.filter(m=>fam.indexOf(m)<0&&m.userData.rings).map(m=>m.userData.rings[0]);
+  const inAny=(x,y,rs)=>rs.some(r=>pointInPoly(x,y,r));
+  const pin=[],pout=[]; let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; rings.forEach(r=>r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
+  for(let x=x0;x<=x1;x+=0.5)for(let y=y0;y<=y1;y+=0.5)if(inAny(x,y,rings))pin.push([x,y]);
+  rings.forEach(r=>{for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[j],b=r[i],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.5)continue;let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;if(pointInPoly((a.x+b.x)/2+nx*0.4,(a.y+b.y)/2+ny*0.4,r)){nx=-nx;ny=-ny;}
+    for(let t=0.25;t<L;t+=0.5){const px=a.x+(b.x-a.x)*t/L,py=a.y+(b.y-a.y)*t/L;[0.75,1.5].forEach(o=>{const qx=px+nx*o,qy=py+ny*o;if(!inAny(qx,qy,rings)&&!inAny(qx,qy,others))pout.push([qx,qy]);});}}});
+  if(pin.length<8)return {dx:0,dy:0};
+  /* edge samples: a point just inside and one just outside each wall; the roof edge is where the laser height drops */
+  const Zs=S.mnsF||(S.lidarR&&S.lidarR.mnsFine)||(S.lidarR&&S.lidarR.mns), ed=[];
+  rings.forEach(r=>{for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[j],b=r[i],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<0.8)continue;let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;if(pointInPoly((a.x+b.x)/2+nx*0.4,(a.y+b.y)/2+ny*0.4,r)){nx=-nx;ny=-ny;}
+    for(let t=0.4;t<L-0.3;t+=0.5){const px=a.x+(b.x-a.x)*t/L,py=a.y+(b.y-a.y)*t/L,ox=px+nx*1.0,oy=py+ny*1.0;ed.push([px-nx*0.6,py-ny*0.6,ox,oy,inAny(ox,oy,others)?0.3:1]);}}});
+  const frac=(pts,dx,dy)=>{let s=0,n=0;for(const [x,y] of pts){const v=MH.at(x+dx,y+dy);if(v!=null){n++;if(v>1.8)s++;}}return n?s/n:0;};
+  const edge=(dx,dy)=>{if(!Zs)return 0;let s=0,w=0;for(const [ix,iy,ox,oy,wt] of ed){const zi=Zs.at(ix+dx,iy+dy),zo=Zs.at(ox+dx,oy+dy);if(zi==null||zo==null)continue;s+=wt*Math.max(-2,Math.min(2,zi-zo));w+=wt;}return w?s/w:0;};
+  const score=(dx,dy)=>frac(pin,dx,dy)-0.8*frac(pout,dx,dy)+0.12*edge(dx,dy);
+  const s0=score(0,0); let best={dx:0,dy:0,s:s0};
+  for(let dx=-2;dx<=2.001;dx+=0.25)for(let dy=-2;dy<=2.001;dy+=0.25){const sc=score(dx,dy)-0.02*Math.hypot(dx,dy);if(sc>best.s)best={dx,dy,s:sc};}
+  if(best.s<s0+0.04||Math.abs(best.dx)>=1.99||Math.abs(best.dy)>=1.99)best={dx:0,dy:0,s:s0}; /* a best shift at the edge of the search means the laser shows something else there: no shift */
+  RF.reg={dx:best.dx,dy:best.dy,s0,s:best.s,nin:pin.length,nout:pout.length,e0:edge(0,0),e:edge(best.dx,best.dy)};
+  return {dx:best.dx,dy:best.dy};}
+function roofCells(obj){
+  const F=S.mnsF||(S.lidarR&&S.lidarR.mnsFine), MH=S.lidarR&&S.lidarR.mnh, C=S.lidarR&&S.lidarR.mns; if(!(F||C)||!MH)return null;
+  const fam=family(obj), rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]), blocks=fam.filter(m=>m.userData.rings).map(m=>({r:m.userData.rings[0],top:S.alt0+m.userData.zBase+m.userData.h}));
+  const sh=registerFamily(fam,MH);
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; rings.forEach(r=>r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
+  const area=rings.reduce((a,r)=>a+Math.abs(areaOf(r)),0), s=area>500?1:0.5;
+  const inF=(x,y)=>F&&Math.abs(x)<F.R-2&&Math.abs(y)<F.R-2;
+  const Z=(x,y)=>{let z=inF(x,y)?F.at(x,y):null;if(z==null&&C)z=C.at(x,y);return z;};
+  const cells=[];
+  for(let x=Math.floor(x0/s)*s+s/2;x<x1;x+=s)for(let y=Math.floor(y0/s)*s+s/2;y<y1;y+=s){
+    if(!rings.some(r=>pointInPoly(x,y,r)))continue; const X=x+sh.dx,Y=y+sh.dy;
+    const hg=MH.at(X,Y); if(hg==null||hg<1.8)continue; const z=Z(X,Y); if(z==null)continue;
+    const zx1=Z(X+1,Y),zx0=Z(X-1,Y),zy1=Z(X,Y+1),zy0=Z(X,Y-1); if([zx1,zx0,zy1,zy0].some(v=>v==null))continue;
+    const bl=blocks.find(b=>pointInPoly(x,y,b.r)); cells.push({x:X,y:Y,z,gx:(zx1-zx0)/2,gy:(zy1-zy0)/2,top:bl?bl.top:-1e9});}
+  if(!cells.length)return null;
+  /* smoothed slope: average gradient of the neighbours (the laser surface is noisy at 50 cm) */
+  const key=(x,y)=>Math.round(x/s)+','+Math.round(y/s), idx=new Map(); cells.forEach((c,i)=>idx.set(key(c.x,c.y),i));
+  cells.forEach(c=>{let gx=0,gy=0,n=0;for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){const k=idx.get(key(c.x+i*s,c.y+j*s));if(k!=null){gx+=cells[k].gx;gy+=cells[k].gy;n++;}}c.sx=gx/n;c.sy=gy/n;});
+  const out=[]; cells.forEach(c=>{const nx=-c.sx,ny=-c.sy,l=Math.hypot(nx,ny,1);const n=[nx/l,ny/l,1/l];const tilt=Math.acos(n[2]);if(tilt>65*RAD)return; /* a wall edge, not a roof */
+    out.push({x:c.x,y:c.y,z:c.z,top:c.top,gx:c.sx,gy:c.sy,n,tilt,az:((Math.atan2(n[0],n[1])/RAD)+360)%360});});
+  return {cells:out,s,Z,sh,rings,blocks};}
+
+/* ---------- polygon helpers for the v4 roof ---------- */
+const MK={};
+MK.area=P=>{let a=0;for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length];a+=p[0]*q[1]-q[0]*p[1];}return a/2;};
+MK.clipHalf=(P,f)=>{ /* keep f(p) <= 0, f linear */ const out=[];for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length],fp=f(p),fq=f(q);
+  if(fp<=0)out.push(p); if((fp<0&&fq>0)||(fp>0&&fq<0)){const t=fp/(fp-fq);out.push([p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t]);}} return out;};
+/* ===== Toit v4 : volumes rectangulaires alignés sur l'axe de la maison (murs parallèles / perpendiculaires),
+   lignes de découpe prises sur la photo, le laser et le contour IGN, un type de toit par volume, bords ajustés au laser.
+   Immeubles (> 300 m²) : découpe en ailes depuis le seul contour IGN, toit mansardé possible. ===== */
+function roofModelV4(R,opt){opt=opt||{};
+  const t0=performance.now(), raw=S.rawOrtho, MH=S.lidarR&&S.lidarR.mnh, Zl=R.Z; if(!MH||!Zl)return null;
+  const rings=R.rings.map(r=>r.map(p=>[p.x+(opt.noShift?0:R.sh.dx),p.y+(opt.noShift?0:R.sh.dy)])); if(!rings.length)return null;
+  const inPoly=(p,P)=>{let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const a=P[i],b=P[j];if((a[1]>p[1])!=(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;};
+  const segD=(x,y,q,r2)=>{const dx=r2[0]-q[0],dy=r2[1]-q[1],L2=dx*dx+dy*dy||1;let t=((x-q[0])*dx+(y-q[1])*dy)/L2;t=Math.max(0,Math.min(1,t));return Math.hypot(x-q[0]-t*dx,y-q[1]-t*dy);};
+  const nearRing=(x,y,dm)=>rings.some(rg=>inPoly([x,y],rg)||rg.some((q,i)=>segD(x,y,q,rg[(i+1)%rg.length])<dm));
+  const area=rings.reduce((a,rg)=>a+Math.abs(MK.area(rg)),0), ud=((RF.sel||S.building)||{}).userData||{}, big=opt.big!=null?opt.big:((ud.floors||0)>=3||(ud.h||0)>9.5||area>800);
+  let rx0=1e9,rx1=-1e9,ry0=1e9,ry1=-1e9;rings.forEach(rg=>rg.forEach(p=>{rx0=Math.min(rx0,p[0]);rx1=Math.max(rx1,p[0]);ry0=Math.min(ry0,p[1]);ry1=Math.max(ry1,p[1]);}));
+  const cx=(rx0+rx1)/2,cy=(ry0+ry1)/2;
+  /* ground: laser minus height above ground, around the building */
+  const zg=[];for(let x=rx0-1;x<=rx1+1;x+=1)for(let y=ry0-1;y<=ry1+1;y+=1){const z=Zl(x,y),h=MH.at(x,y);if(z!=null&&h!=null)zg.push(z-h);}if(!zg.length)return null;zg.sort((a,b)=>a-b);const Z0=zg[zg.length>>1];
+  /* axis: directions of the roof slopes in the laser (mod 90°), the outline edges as a weak prior */
+  const rb=new Array(90).fill(0);rings.forEach(rg=>rg.forEach((a,i)=>{const c=rg[(i+1)%rg.length];let g=Math.atan2(c[1]-a[1],c[0]-a[0])/RAD;g=((g%90)+90)%90;rb[Math.round(g)%90]+=Math.hypot(c[0]-a[0],c[1]-a[1]);}));
+  const lb=new Array(90).fill(0);for(let x=rx0-1;x<=rx1+1;x+=0.5)for(let y=ry0-1;y<=ry1+1;y+=0.5){const z=Zl(x,y);if(z==null||z-Z0<2.5)continue;const a1=Zl(x+0.5,y),a0=Zl(x-0.5,y),b1=Zl(x,y+0.5),b0=Zl(x,y-0.5);if([a1,a0,b1,b0].some(v=>v==null))continue;const gx=a1-a0,gy=b1-b0,m=Math.hypot(gx,gy);if(m<0.25||m>2)continue;let g=Math.atan2(gy,gx)/RAD;g=((g%90)+90)%90;lb[Math.round(g)%90]+=1;}
+  const tl=lb.reduce((s,v)=>s+v,0)||1,tr=rb.reduce((s,v)=>s+v,0)||1;const sm=lb.map((_,i)=>[-3,-2,-1,0,1,2,3].reduce((s,d)=>s+lb[(i+d+90)%90]/tl+(big?1:0.3)*rb[(i+d+90)%90]/tr,0));const ai=sm.indexOf(Math.max(...sm));
+  const yA=sm[(ai+89)%90],yB=sm[ai],yC=sm[(ai+1)%90],dd=(yA-yC)/(2*(yA-2*yB+yC)||1);const Ad=((ai+(Math.abs(dd)<1?dd:0))%90)*RAD;
+  const t=[Math.cos(Ad),Math.sin(Ad)],n=[-t[1],t[0]];const U=(x,y)=>x*t[0]+y*t[1],V=(x,y)=>x*n[0]+y*n[1],XY=(u,v)=>[u*t[0]+v*n[0],u*t[1]+v*n[1]];
+  let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;const rUV=rings.map(rg=>rg.map(p=>[U(...p),V(...p)]));rUV.forEach(rg=>rg.forEach(p=>{u0=Math.min(u0,p[0]);u1=Math.max(u1,p[0]);v0=Math.min(v0,p[1]);v1=Math.max(v1,p[1]);}));u0-=2;u1+=2;v0-=2;v1+=2;
+  const g=big?1.0:0.5;const NU=Math.round((u1-u0)/g),NV=Math.round((v1-v0)/g);const H=[];
+  for(let i=0;i<NU;i++){H.push([]);for(let j=0;j<NV;j++){const [x,y]=XY(u0+(i+.5)*g,v0+(j+.5)*g);const z=Zl(x,y);let h=z==null?0:z-Z0;if(!nearRing(x,y,1.5))h=Math.min(h,0);H[i].push(h);}}
+  const mask=H.map(r=>r.map(h=>h>2?1:0)),maskD=(i,j)=>{for(let a=-2;a<=2;a++)for(let c=-2;c<=2;c++){const ii=i+a,jj=j+c;if(ii>=0&&jj>=0&&ii<NU&&jj<NV&&mask[ii][jj])return 1;}return 0;};
+  /* candidate lines */
+  let cu=[],cv=[],off=[0,0];
+  if(!big&&raw&&raw.raw){
+    const W=raw.raw.width,Hh=raw.raw.height;let pd=null;try{pd=raw.raw.getContext('2d').getImageData(0,0,W,Hh).data;}catch(e){pd=null;}
+    if(pd){const lum=(x,y)=>{const fx=(x-raw.w)/(raw.e-raw.w)*W-0.5,fy=(raw.n-y)/(raw.n-raw.s)*Hh-0.5;const i=Math.floor(fx),j=Math.floor(fy),a=fx-i,c=fy-j;if(i<0||j<0||i>=W-1||j>=Hh-1)return 0;const L=(ii,jj)=>{const k=(jj*W+ii)*4;return 0.3*pd[k]+0.59*pd[k+1]+0.11*pd[k+2];};return L(i,j)*(1-a)*(1-c)+L(i+1,j)*a*(1-c)+L(i,j+1)*(1-a)*c+L(i+1,j+1)*a*c;};
+      const pgrad=(u,v)=>{const [xa,ya]=XY(u+0.2,v),[xb,yb]=XY(u-0.2,v),[xc,yc]=XY(u,v+0.2),[xd,yd]=XY(u,v-0.2);return Math.abs(lum(xa,ya)-lum(xb,yb))+Math.abs(lum(xc,yc)-lum(xd,yd));};
+      /* photo / laser offset: laser edges against photo edges (centred weights) */
+      const Gl=[];for(let i=1;i<NU-1;i++)for(let j=1;j<NV-1;j++){if(!maskD(i,j))continue;Gl.push([u0+(i+.5)*g,v0+(j+.5)*g,Math.min(Math.abs(H[i+1][j]-H[i-1][j])+Math.abs(H[i][j+1]-H[i][j-1]),4)]);}
+      const mE=Gl.reduce((s,p)=>s+p[2],0)/(Gl.length||1);Gl.forEach(p=>p[2]-=mE);
+      const sc=(du,dv,G)=>{let s=0;G.forEach(([u,v,e])=>{s+=e*pgrad(u+du,v+dv);});return s;};
+      if(R._v4off&&R._v4off.ad===Ad)off=R._v4off.off.slice();else{
+        const Gs=Gl.filter((_,k)=>k%3===0);let bo=-1e18;for(let du=-4;du<=4.01;du+=0.5)for(let dv=-4;dv<=4.01;dv+=0.5){const s=sc(du,dv,Gs);if(s>bo){bo=s;off=[du,dv];}}
+        for(const stp of [0.25,0.1]){const c0=off.slice();bo=-1e18;for(let a=-2;a<=2;a++)for(let b=-2;b<=2;b++){const du=c0[0]+a*stp,dv=c0[1]+b*stp,s=sc(du,dv,Gl);if(s>bo){bo=s;off=[du,dv];}}}
+        R._v4off={ad:Ad,off:off.slice()};}
+      const lumUV=(u,v)=>{const [x,y]=XY(u+off[0],v+off[1]);return lum(x,y);};const pg=0.1,PU=Math.round((u1-u0)/pg),PV=Math.round((v1-v0)/pg);
+      const prof=ax=>{const N1=ax=='u'?PU:PV,N2=ax=='u'?PV:PU,out=new Float64Array(N1);for(let i=2;i<N1-2;i++){let s=0,c=0;for(let j=0;j<N2;j+=2){const u=ax=='u'?u0+(i+.5)*pg:u0+(j+.5)*pg,v=ax=='u'?v0+(j+.5)*pg:v0+(i+.5)*pg;const gi=Math.min(NU-1,Math.floor((u-u0)/g)),gj=Math.min(NV-1,Math.floor((v-v0)/g));if(!maskD(gi,gj))continue;s+=ax=='u'?Math.abs(lumUV(u+0.15,v)-lumUV(u-0.15,v)):Math.abs(lumUV(u,v+0.15)-lumUV(u,v-0.15));c++;}out[i]=c?s:0;}return out;};
+      const lprof=ax=>{const N1=ax=='u'?PU:PV,out=new Float64Array(N1);for(let i=0;i<N1;i++){const p=ax=='u'?u0+(i+.5)*pg:v0+(i+.5)*pg;let s=0;if(ax=='u'){const gi=Math.floor((p-u0)/g);if(gi<1||gi>=NU-1)continue;for(let j=0;j<NV;j++)s+=Math.abs(H[gi+1][j]-H[gi-1][j])>1?1:0;}else{const gj=Math.floor((p-v0)/g);if(gj<1||gj>=NV-1)continue;for(let k=0;k<NU;k++)s+=Math.abs(H[k][gj+1]-H[k][gj-1])>1?1:0;}out[i]=s;}return out;};
+      const peaks=(arr,lo)=>{const N=arr.length,sv=new Float64Array(N);for(let i=2;i<N-2;i++)sv[i]=(arr[i-2]+2*arr[i-1]+3*arr[i]+2*arr[i+1]+arr[i+2])/9;let m=0,s=0,c=0;for(let i=0;i<N;i++)if(sv[i]>0){m+=sv[i];c++;}m/=c||1;for(let i=0;i<N;i++)if(sv[i]>0)s+=(sv[i]-m)**2;s=Math.sqrt(s/(c||1));const pk=[];for(let i=3;i<N-3;i++){if(sv[i]<m+0.6*s)continue;let ok=true;for(let d=-5;d<=5;d++)if(d&&sv[i+d]>sv[i])ok=false;if(ok)pk.push([lo+(i+.5)*pg,(sv[i]-m)/(s||1)]);}return pk;};
+      /* slope breaks: where the laser changes slope without a step (eave of a pitched part against a flat one, a ridge, a lower pan) */
+      const kprof=ax=>{const N1=ax=='u'?PU:PV,out=new Float64Array(N1);const kink=(a,b,c)=>{if(a<=2||b<=2||c<=2)return 0;const d1=b-a,d2=c-b;return Math.abs(d1)<1.5&&Math.abs(d2)<1.5&&Math.abs(d2-d1)>0.35?1:0;};
+        for(let i=0;i<N1;i++){const p=ax=='u'?u0+(i+.5)*pg:v0+(i+.5)*pg;let s=0;if(ax=='u'){const gi=Math.floor((p-u0)/g);if(gi<2||gi>=NU-2)continue;for(let j=0;j<NV;j++)s+=kink(H[gi-2][j],H[gi][j],H[gi+2][j]);}else{const gj=Math.floor((p-v0)/g);if(gj<2||gj>=NV-2)continue;for(let k=0;k<NU;k++)s+=kink(H[k][gj-2],H[k][gj],H[k][gj+2]);}out[i]=s;}return out;};
+      const nm=a=>{const mx=Math.max(...a)||1;return a.map(v=>v/mx);};const comb=ax=>{const p=nm(Array.from(prof(ax))),l=nm(Array.from(lprof(ax)));const k=opt.kinks?nm(Array.from(kprof(ax))):null;return p.map((v,i)=>v+0.8*l[i]+(k?0.8*k[i]:0));};
+      const NK=opt.kinks?8:6;cu=peaks(comb('u'),u0).sort((a,b)=>b[1]-a[1]).slice(0,NK).map(p=>p[0]);cv=peaks(comb('v'),v0).sort((a,b)=>b[1]-a[1]).slice(0,NK).map(p=>p[0]);}}
+  rUV.forEach(rg=>rg.forEach(p=>{cu.push(p[0]);cv.push(p[1]);}));
+  const dedupe=(arr,lo,hi,gap)=>{arr=arr.filter(x=>x>lo+0.5&&x<hi-0.5).sort((a,b)=>a-b);const out=[];arr.forEach(x=>{if(!out.length||x-out[out.length-1]>gap)out.push(x);});return [lo,...out,hi];};
+  let CU=dedupe(cu,u0,u1,0.7),CV=dedupe(cv,v0,v1,0.7);for(let gp=1;(CU.length>10||CV.length>10)&&gp<4;gp+=0.5){CU=dedupe(cu,u0,u1,gp);CV=dedupe(cv,v0,v1,gp);}
+  /* fitting */
+  const pts=[];for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)pts.push([u0+(i+.5)*g,v0+(j+.5)*g,H[i][j]]);
+  const ptsIn=Rc=>{const i0=Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),i1=Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),j0=Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),j1=Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1),out=[];for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)out.push(pts[i*NV+j]);return out;};
+  const lsq=(rows,np)=>{const Mx=[...Array(np)].map(()=>Array(np).fill(0)),bb=Array(np).fill(0);rows.forEach(([f,z])=>{for(let a=0;a<np;a++){bb[a]+=f[a]*z;for(let c=0;c<np;c++)Mx[a][c]+=f[a]*f[c];}});for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
+  const CL=0.6,costOf=(P,pr)=>{let s=0;P.forEach(p=>{s+=Math.min(Math.abs(p[2]-pr(p[0],p[1])),CL);});return s;};
+  const fitM=(P,feat,np)=>{const rows=P.map(p=>[feat(p[0],p[1]),p[2]]);let x=lsq(rows,np);for(let it=0;it<1;it++){const r2=rows.filter(([f,z])=>Math.abs(z-f.reduce((s,v,i)=>s+v*x[i],0))<0.5);if(r2.length>np+3)x=lsq(r2,np);}return x;};
+  const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){r=leafFit0(Rc);LFC.set(key,r);}return r;};
+  const leafFit0=Rc=>{const P=ptsIn(Rc),none={type:'none',pred:()=>0,cost:0,R:Rc,np:0};if(!P.length)return none;const occ=P.filter(p=>p[2]>2).length/P.length;const cands=[{type:'none',pred:()=>0,np:0}];
+    if(occ>0.3){const a=P.filter(p=>p[2]>1).map(p=>p[2]).sort((x,y)=>x-y),md=a.length?a[a.length>>1]:0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
+      const su=fitM(P,u=>[1,u-Rc[0]],2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
+      const sv=fitM(P,(u,v)=>[1,v-Rc[2]],2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
+      const w=Rc[3]-Rc[2],l=Rc[1]-Rc[0];
+      for(const f of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[2]+f*w,x=fitM(P,(u,v)=>[1,-Math.max(0,r-v),-Math.max(0,v-r)],3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableU',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-v)-x[2]*Math.max(0,v-r),np:3});}
+      for(const f of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[0]+f*l,x=fitM(P,u=>[1,-Math.max(0,r-u),-Math.max(0,u-r)],3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableV',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-u)-x[2]*Math.max(0,u-r),np:3});}
+      const dm=(u,v)=>Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);const hx=fitM(P,(u,v)=>[1,dm(u,v)],2);if(hx[1]>0.15&&hx[1]<1.8)cands.push({type:'hip',x:hx,pred:(u,v)=>hx[0]+hx[1]*dm(u,v),np:2});
+      if(big)for(const w0 of [0.8,1.2,1.6]){if(Math.min(w,l)<2*w0+1)continue;const x=fitM(P,(u,v)=>{const d=dm(u,v);return [1,Math.min(d,w0),Math.max(0,d-w0)];},3);if(x[1]>1.2&&x[1]<4&&x[2]>=0&&x[2]<0.8)cands.push({type:'mansard',w0,x,pred:(u,v)=>{const d=dm(u,v);return x[0]+x[1]*Math.min(d,w0)+x[2]*Math.max(0,d-w0);},np:3});}}
+    const hmax=Math.max(...P.map(p=>p[2]))+0.5;let best=null;
+    cands.forEach(c=>{if((c.type=='shedU'||c.type=='shedV')&&c.k>1)return;if(c.type!='none'){let bad=false;[[Rc[0],Rc[2]],[Rc[1],Rc[2]],[Rc[0],Rc[3]],[Rc[1],Rc[3]],[(Rc[0]+Rc[1])/2,(Rc[2]+Rc[3])/2]].forEach(([u,v])=>{const z=c.pred(u,v);if(z>hmax||z<-0.5)bad=true;});if(bad)return;}
+      const co=costOf(P,c.pred)+0.15*c.np*Math.sqrt(P.length);if(!best||co<best.cost)best={...c,cost:co};});best.R=Rc;return best;};
+  const LAM=(opt.lam||8)*(g*g/0.25)**0.5, memo=new Map(), tS=performance.now();
+  const solve=(a,b,c,d)=>{const key=a+','+b+','+c+','+d;if(memo.has(key))return memo.get(key);const lf=leafFit([CU[a],CU[b],CV[c],CV[d]]);let best={cost:lf.cost+(lf.type=='none'?0:LAM),leaves:[lf]};
+    if(performance.now()-tS<6000){
+      for(let k=a+1;k<b;k++){if(CU[k]-CU[a]<1.2||CU[b]-CU[k]<1.2)continue;const L=solve(a,k,c,d),Rr=solve(k,b,c,d);if(L.cost+Rr.cost<best.cost)best={cost:L.cost+Rr.cost,leaves:[...L.leaves,...Rr.leaves]};}
+      for(let k=c+1;k<d;k++){if(CV[k]-CV[c]<1.2||CV[d]-CV[k]<1.2)continue;const L=solve(a,b,c,k),Rr=solve(a,b,k,d);if(L.cost+Rr.cost<best.cost)best={cost:L.cost+Rr.cost,leaves:[...L.leaves,...Rr.leaves]};}}
+    memo.set(key,best);return best;};
+  let IX;
+  if(big){ /* wings: greedy largest rectangles of the IGN outline, no search */
+    const st=0.5,NU2=Math.ceil((u1-u0)/st),NV2=Math.ceil((v1-v0)/st),occ=[],used=[];let tot=0;
+    for(let i=0;i<NU2;i++){occ.push(new Uint8Array(NV2));used.push(new Uint8Array(NV2));for(let j=0;j<NV2;j++){const o=rUV.some(rg=>inPoly([u0+(i+.5)*st,v0+(j+.5)*st],rg))?1:0;occ[i][j]=o;tot+=o;}}
+    const rects=[];for(let it=0;it<6;it++){const hg=new Array(NV2).fill(0);let best=null;for(let i=0;i<NU2;i++){for(let j=0;j<NV2;j++)hg[j]=(occ[i][j]&&!used[i][j])?hg[j]+1:0;const stk=[];for(let j=0;j<=NV2;j++){const h=j<NV2?hg[j]:0;let start=j;while(stk.length&&stk[stk.length-1][1]>=h){const [sj,sh]=stk.pop();const ar=sh*(j-sj);if(!best||ar>best.ar)best={ar,i1:i,i0:i-sh+1,j0:sj,j1:j-1};start=sj;}stk.push([start,h]);}}
+      if(!best||best.ar*st*st<12||(it>0&&best.ar<0.06*tot))break;for(let i=best.i0;i<=best.i1;i++)for(let j=best.j0;j<=best.j1;j++)used[i][j]=1;rects.push([u0+best.i0*st,u0+(best.i1+1)*st,v0+best.j0*st,v0+(best.j1+1)*st]);}
+    if(!rects.length)return null;
+    /* each wing is split along its length where the laser steps (a row of houses of different heights), chosen by a 1-D optimum */
+    const Hat=(u,v)=>{const i=Math.floor((u-u0)/g),j=Math.floor((v-v0)/g);return (i>=0&&j>=0&&i<NU&&j<NV)?H[i][j]:0;};
+    const segs=[];rects.forEach(r=>{const longU=(r[1]-r[0])>=(r[3]-r[2]),a=longU?r[0]:r[2],b=longU?r[1]:r[3],c0=longU?r[2]:r[0],c1=longU?r[3]:r[1];
+      const cand=[a];for(let p=a+1.5;p<=b-1.5;p+=0.5){const st2=[];for(let q=c0+0.5;q<c1;q+=1){const d=longU?Math.abs(Hat(p+0.75,q)-Hat(p-0.75,q)):Math.abs(Hat(q,p+0.75)-Hat(q,p-0.75));st2.push(d);}st2.sort((x,y)=>x-y);const m=st2.length?st2[st2.length>>1]:0;if(m>0.8)cand.push([p,m]);}
+      let cs=[a];cand.slice(1).forEach(([p,m])=>{const last=cs[cs.length-1];if(p-last<1.2){if(cs.length>1&&cs._m!=null&&m>cs._m){cs[cs.length-1]=p;cs._m=m;}}else{cs.push(p);cs._m=m;}});cs=cs.concat([b]);
+      const mk=(x0,x1)=>longU?[x0,x1,r[2],r[3]]:[r[0],r[1],x0,x1];const nC=cs.length,best=new Array(nC).fill(1e18),from=new Array(nC).fill(-1);best[0]=0;
+      for(let i=1;i<nC;i++)for(let j=0;j<i;j++){const lf=leafFit(mk(cs[j],cs[i]));const c=best[j]+lf.cost+LAM;if(c<best[i]){best[i]=c;from[i]=j;}}
+      const parts=[];for(let i=nC-1;i>0;i=from[i])parts.push(mk(cs[from[i]],cs[i]));parts.forEach(q=>segs.push(q));});
+    rects.length=0;segs.forEach(q=>rects.push(q));
+    const eu=[...new Set(rects.flatMap(r=>[r[0],r[1]]).map(v=>+v.toFixed(3)))].sort((a,b)=>a-b),ev=[...new Set(rects.flatMap(r=>[r[2],r[3]]).map(v=>+v.toFixed(3)))].sort((a,b)=>a-b);
+    CU=[u0,...eu.filter(v=>v>u0&&v<u1),u1];CV=[v0,...ev.filter(v=>v>v0&&v<v1),v1];
+    IX=rects.map(r=>[CU.indexOf(+r[0].toFixed(3)),CU.indexOf(+r[1].toFixed(3)),CV.indexOf(+r[2].toFixed(3)),CV.indexOf(+r[3].toFixed(3))]);
+  }else{const sol=solve(0,CU.length-1,0,CV.length-1);IX=sol.leaves.filter(l=>l.type!='none').map(l=>[CU.indexOf(l.R[0]),CU.indexOf(l.R[1]),CV.indexOf(l.R[2]),CV.indexOf(l.R[3])]);}
+  if(!IX.length||IX.some(ix=>ix.some(k=>k<0)))return null;
+  const inside=(Rc,u,v)=>u>=Rc[0]&&u<Rc[1]&&v>=Rc[2]&&v<Rc[3];
+  const total=(A,B)=>{const ls=IX.map(ix=>leafFit([A[ix[0]],A[ix[1]],B[ix[2]],B[ix[3]]]));let s=0;pts.forEach(p=>{let m=0;for(const l of ls)if(l.type!='none'&&inside(l.R,p[0],p[1])){m=l.pred(p[0],p[1]);break;}s+=Math.min(Math.abs(p[2]-m),CL);});return {s,ls};};
+  const CUr=CU.slice(),CVr=CV.slice();let cur=total(CUr,CVr);
+  const refine=(onlyU,onlyV)=>{for(let pass=0;pass<(big?1:3);pass++){let imp=false;const uU=[...new Set(IX.flatMap(ix=>[ix[0],ix[1]]))],uV=[...new Set(IX.flatMap(ix=>[ix[2],ix[3]]))];
+    for(const [arr,used,only] of [[CUr,uU,onlyU],[CVr,uV,onlyV]])for(const k of used){if(only&&!only.includes(k))continue;const base=arr[k];let bv=base,bs=cur.s;const us=used.slice().sort((p,q)=>p-q),pi=us.indexOf(k);
+      for(let d=-0.8;d<=0.801;d+=(big?0.2:0.1)){const v=base+d;if(pi>0&&v<arr[us[pi-1]]+1)continue;if(pi<us.length-1&&v>arr[us[pi+1]]-1)continue;arr[k]=v;const c=total(CUr,CVr);if(c.s<bs-1e-6){bs=c.s;bv=v;}}
+      arr[k]=bv;if(bv!==base){imp=true;cur=total(CUr,CVr);}}if(!imp)break;}};
+  refine();
+  /* merge neighbours whose union is a rectangle when the simpler roof explains the laser as well */
+  for(let it=0;it<6;it++){const base=cur.s+LAM*IX.length;let bm=null;
+    for(let i=0;i<IX.length;i++)for(let j=i+1;j<IX.length;j++){const A=IX[i],B=IX[j];let Mx=null;
+      if(A[0]==B[0]&&A[1]==B[1]&&(A[3]==B[2]||B[3]==A[2]))Mx=[A[0],A[1],Math.min(A[2],B[2]),Math.max(A[3],B[3])];else if(A[2]==B[2]&&A[3]==B[3]&&(A[1]==B[0]||B[1]==A[0]))Mx=[Math.min(A[0],B[0]),Math.max(A[1],B[1]),A[2],A[3]];if(!Mx)continue;
+      const save=IX.slice(),sU=CUr.slice(),sV=CVr.slice(),sc=cur;IX.splice(j,1);IX[i]=Mx;cur=total(CUr,CVr);refine([Mx[0],Mx[1]],[Mx[2],Mx[3]]);const cc=cur.s+LAM*IX.length;
+      if(cc<=base+0.5&&(!bm||cc<bm.cc))bm={cc,IX:IX.slice(),c:cur,U:CUr.slice(),V:CVr.slice()};
+      IX.length=0;save.forEach(x=>IX.push(x));sU.forEach((v,q)=>CUr[q]=v);sV.forEach((v,q)=>CVr[q]=v);cur=sc;}
+    if(!bm)break;IX.length=0;bm.IX.forEach(x=>IX.push(x));bm.U.forEach((v,q)=>CUr[q]=v);bm.V.forEach((v,q)=>CVr[q]=v);cur=bm.c;refine();}
+  const leaves=cur.ls.filter(l=>l.type!='none'&&(l.R[1]-l.R[0])>=1&&(l.R[3]-l.R[2])>=1);if(!leaves.length)return null;
+  /* quality: median |laser - model| over the building */
+  const ds=[];pts.forEach(p=>{const lf=leaves.find(l=>inside(l.R,p[0],p[1]));const m=lf?lf.pred(p[0],p[1]):0;const [x,y]=XY(p[0],p[1]);if((p[2]>2||m>2)&&nearRing(x,y,1))ds.push(Math.abs(p[2]-m));});ds.sort((a,b)=>a-b);
+  const rms=ds.length?ds[ds.length>>1]:9;
+  /* ---- the model in the page's format: pieces (outline + roofZ), pans (planes, tris on the energy grid), cells, verts */
+  const s=R.s, cells=[], pans=[], verts=[], pieces=[];
+  const faceSet=l=>{const [a,b,c,d]=l.R,p=l.pred,F=[];const q=pp=>F.push(pp.map(([u,v])=>[u,v,p(u,v)]));
+    if(l.type=='flat'||l.type=='shedU'||l.type=='shedV')q([[a,c],[b,c],[b,d],[a,d]]);
+    else if(l.type=='gableU'){q([[a,c],[b,c],[b,l.r],[a,l.r]]);q([[a,l.r],[b,l.r],[b,d],[a,d]]);}
+    else if(l.type=='gableV'){q([[a,c],[l.r,c],[l.r,d],[a,d]]);q([[l.r,c],[b,c],[b,d],[l.r,d]]);}
+    else if(l.type=='hip'||l.type=='mansard'){const ring=(R4,he,k)=>{const poly=[[R4[0],R4[2]],[R4[1],R4[2]],[R4[1],R4[3]],[R4[0],R4[3]]];const ccw=MK.area(poly)>0;
+        const D=poly.map((A,i)=>{const B=poly[(i+1)%4],dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy);let nx=-dy/L,ny=dx/L;if(!ccw){nx=-nx;ny=-ny;}return P=>(P[0]-A[0])*nx+(P[1]-A[1])*ny;});
+        return poly.map((_,i)=>{let Q=poly.slice();for(let j=0;j<4;j++){if(j==i)continue;Q=MK.clipHalf(Q,P=>D[i](P)-D[j](P));if(Q.length<3)break;}return Q.length>=3?Q.map(P=>[P[0],P[1],he+k*D[i](P)]):null;}).filter(Boolean);};
+      if(l.type=='hip')ring(l.R,l.x[0],l.x[1]).forEach(f=>F.push(f));
+      else{const w0=l.w0,Ri=[a+w0,b-w0,c+w0,d-w0],hb=l.x[0]+l.x[1]*w0;ring(Ri,hb,l.x[2]).forEach(f=>F.push(f));
+        const O=[[a,c],[b,c],[b,d],[a,d]],I=[[Ri[0],Ri[2]],[Ri[1],Ri[2]],[Ri[1],Ri[3]],[Ri[0],Ri[3]]];for(let i=0;i<4;i++){const j=(i+1)%4;F.push([[...O[i],l.x[0]],[...O[j],l.x[0]],[...I[j],hb],[...I[i],hb]]);}}}
+    return F;};
+  leaves.forEach((l,li)=>{const Puv=[[l.R[0],l.R[2]],[l.R[1],l.R[2]],[l.R[1],l.R[3]],[l.R[0],l.R[3]]];let P=Puv.map(([u,v])=>XY(u,v));if(MK.area(P)<0)P=P.reverse();
+    const pc={P,v4:l.type,F:{best:{score:0,rms}},pans:[]};pc.roofZ=(x,y)=>l.pred(U(x,y),V(x,y))+Z0;pieces.push(pc);
+    faceSet(l).forEach(f=>{const W3=f.map(([u,v,z])=>[...XY(u,v),z+Z0]);
+      /* plane through the face: z = a x + b y + c */
+      const [p0,p1,p2]=[W3[0],W3[1],W3[W3.length-1]];const e1=[p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]],e2=[p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]];let nr=[e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]];if(nr[2]<0)nr=nr.map(v=>-v);const ln=Math.hypot(...nr);if(ln<1e-9)return;nr=nr.map(v=>v/ln);if(nr[2]<0.05)return;
+      const pa=-nr[0]/nr[2],pb=-nr[1]/nr[2],pcc=p0[2]-pa*p0[0]-pb*p0[1];let Q=W3.map(p=>[p[0],p[1]]);if(MK.area(Q)<0)Q=Q.reverse();if(Math.abs(MK.area(Q))<0.05)return;
+      const tilt=Math.acos(nr[2]),az=((Math.atan2(nr[0],nr[1])/RAD)+360)%360,pan={id:pans.length,piece:li,Q,a:pa,b:pb,c:pcc,n:nr,tilt,az,flat:tilt<8*RAD,area:Math.abs(MK.area(Q))/Math.cos(tilt)};pan.small=pan.area<4;pans.push(pan);pc.pans.push(pan);
+      const z=(x,y)=>pa*x+pb*y+pcc;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;Q.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);});
+      const i0=Math.floor(x0/s),i1=Math.ceil(x1/s),j0=Math.floor(y0/s),j1=Math.ceil(y1/s),node=new Map();
+      const nodeAt=(i,j)=>{const key=i+','+j;let ci=node.get(key);if(ci==null){const x=i*s,y=j*s;ci=cells.length;cells.push({x,y,z:z(x,y),n:nr,tilt,az,pan:pan.id,w:0});node.set(key,ci);}return ci;};
+      const half=[];for(let q=0;q<Q.length;q++){const A=Q[q],B=Q[(q+1)%Q.length];half.push(p=>-((B[0]-A[0])*(p[1]-A[1])-(B[1]-A[1])*(p[0]-A[0])));}
+      pan.tris=[];
+      for(let i=i0;i<i1;i++)for(let j=j0;j<j1;j++){let sq=[[i*s,j*s],[(i+1)*s,j*s],[(i+1)*s,(j+1)*s],[i*s,(j+1)*s]];for(const h of half){sq=MK.clipHalf(sq,h);if(sq.length<3)break;}if(sq.length<3)continue;
+        const ar=Math.abs(MK.area(sq));if(ar<1e-6)continue;const ids=[nodeAt(i,j),nodeAt(i+1,j),nodeAt(i+1,j+1),nodeAt(i,j+1)];ids.forEach(ci=>cells[ci].w+=ar/4/(s*s));
+        const Vv=sq.map(([x,y])=>{const uu=x/s-i,vv=y/s-j;return {x,y,z:z(x,y),ids,ws:[(1-uu)*(1-vv),uu*(1-vv),uu*vv,(1-uu)*vv]};});for(let q=1;q<Vv.length-1;q++)pan.tris.push(Vv[0],Vv[q],Vv[q+1]);}});});
+  /* outlines along the walls (with the gable apex as a breakpoint), gables counted as vertical faces */
+  const outerSeg=(pc,a,b)=>{const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,L=Math.hypot(b[0]-a[0],b[1]-a[1]),ox=(b[1]-a[1])/L,oy=-(b[0]-a[0])/L;return !pieces.some(o=>o!==pc&&inPoly([mx+ox*0.3,my+oy*0.3],o.P));};
+  pieces.forEach(pc=>{pc.edgeProfiles=[];const P=pc.P;for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<0.05)continue;
+      const ts=[0,1];pc.pans.forEach(p=>p.Q.forEach(([x,y])=>{const tt=((x-a[0])*(b[0]-a[0])+(y-a[1])*(b[1]-a[1]))/(L*L),dist=Math.abs((x-a[0])*(b[1]-a[1])-(y-a[1])*(b[0]-a[0]))/L;if(dist<0.02&&tt>0.001&&tt<0.999)ts.push(tt);}));
+      ts.sort((p,q)=>p-q);const prof=ts.map(tt=>{const x=a[0]+(b[0]-a[0])*tt,y=a[1]+(b[1]-a[1])*tt;return [x,y,pc.roofZ(x,y)];});const outer=outerSeg(pc,a,b);pc.edgeProfiles.push({a,b,prof,outer});
+      if(!outer)continue;const zm=Math.min(...prof.map(p=>p[2]));if(Math.max(...prof.map(p=>p[2]))-zm<0.6)continue;
+      const quads=[];for(let k=0;k<prof.length-1;k++){const p=prof[k],q=prof[k+1];if(p[2]-zm<0.02&&q[2]-zm<0.02)continue;quads.push([[p[0],p[1],zm],[q[0],q[1],zm],[q[0],q[1],q[2]],[p[0],p[1],p[2]]]);}
+      let ar=0,mx=0,my=0,mz=0;quads.forEach(q=>{const w=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1])*((q[2][2]-q[1][2])+(q[3][2]-q[0][2]))/2;ar+=w;mx+=(q[0][0]+q[1][0])/2*w;my+=(q[0][1]+q[1][1])/2*w;mz+=(q[0][2]+q[3][2]+q[1][2]+q[2][2])/4*w;});
+      if(ar<1)continue;const nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;verts.push({quads,a:ar,x:mx/ar+nx*0.3,y:my/ar+ny*0.3,z:mz/ar,n:[nx,ny,0],tilt:Math.PI/2,az:((Math.atan2(nx,ny)/RAD)+360)%360});}});
+  return {pieces,pans,cells,verts,rms,v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
+
+
+
 })();
 </script>
 
