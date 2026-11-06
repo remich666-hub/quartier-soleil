@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>try{var qsT=localStorage.getItem("qs-theme");if(qsT)document.documentElement.dataset.theme=qsT;}catch(e){}</script>
+<title>Quartier Soleil · L'ensoleillement réel d'une fenêtre</title>
+<meta name="description" content="Avant d'acheter ou de louer : les heures de soleil direct sur une fenêtre précise, toute l'année, calculées à partir des relevés laser de l'IGN.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f7f4ee; --card:#fdfbf7; --raised:#efe9df; --ink:#1f1b16; --ink2:#5e554a; --muted:#7b7266;
+  --line:rgba(31,27,22,.10); --line2:rgba(31,27,22,.18);
+  --sun:#e8772e; --sun-ink:#ad4f16; --sun-soft:#f8e2cd; --btn:#1f1b16; --btn-ink:#fdfbf7;
+  --sans:"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --serif:"Instrument Serif",ui-serif,Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --ease:cubic-bezier(.22,1,.36,1);
+  --gut:max(20px,env(safe-area-inset-left,0px));
+  --gutr:max(20px,env(safe-area-inset-right,0px));
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#161513; --card:#1c1a18; --raised:#262421; --ink:#efe9de; --ink2:#aaa398; --muted:#8a847a;
+  --line:rgba(239,233,222,.08); --line2:rgba(239,233,222,.16); --sun:#ef8a44; --sun-ink:#f2a066; --sun-soft:#3a2a1e; --btn:#efe9de; --btn-ink:#161513; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161513; --card:#1c1a18; --raised:#262421; --ink:#efe9de; --ink2:#aaa398; --muted:#8a847a;
+  --line:rgba(239,233,222,.08); --line2:rgba(239,233,222,.16); --sun:#ef8a44; --sun-ink:#f2a066; --sun-soft:#3a2a1e; --btn:#efe9de; --btn-ink:#161513; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--sans);font-feature-settings:"tnum" 1}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:30}
+a{color:inherit}
+img{max-width:100%;display:block}
+.wrap{max-width:1180px;margin:0 auto;padding-left:var(--gut);padding-right:var(--gutr)}
+h1,h2,h3{margin:0;font-weight:500;text-wrap:balance}
+p{margin:0}
+.kicker{font-size:14px;color:var(--sun-ink);font-weight:500}
+.mono{font-family:var(--mono)}
+
+/* nav */
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.2) blur(10px);-webkit-backdrop-filter:saturate(1.2) blur(10px);border-bottom:1px solid transparent;transition:border-color .2s var(--ease)}
+nav.scrolled{border-bottom-color:var(--line)}
+nav .wrap{height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:17px;text-decoration:none;letter-spacing:-.005em}
+.links{display:flex;align-items:center;gap:28px;font-size:15px;color:var(--ink2)}
+.links a{text-decoration:none;transition:color .15s var(--ease)}
+.links a:hover{color:var(--ink)}
+.tbtn{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line2);border-radius:10px;background:transparent;color:var(--ink2);cursor:pointer;transition:background-color .15s var(--ease),color .15s var(--ease)}
+.tbtn:hover{background:var(--raised);color:var(--ink)}
+.links{gap:20px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border-radius:10px;font:500 15px/1 var(--sans);text-decoration:none;border:1px solid transparent;cursor:pointer;transition:background-color .15s var(--ease),transform .12s var(--ease),border-color .15s var(--ease)}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--btn);color:var(--btn-ink)}
+.btn.primary:hover{background:color-mix(in srgb,var(--btn) 86%,var(--sun))}
+.btn.ghost{border-color:var(--line2);color:var(--ink);background:transparent}
+.btn.ghost:hover{background:var(--raised)}
+.btn.sm{height:36px;padding:0 14px;font-size:14px}
+:focus-visible{outline:2px solid var(--sun);outline-offset:2px;border-radius:6px}
+
+/* hero */
+.hero{padding-block:56px 72px}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:48px;align-items:center}
+.hero h1{font-family:var(--serif);font-weight:400;font-size:clamp(44px,6vw,76px);line-height:1.02;letter-spacing:-.02em;margin-top:12px}
+.hero h1 em{font-style:italic;color:var(--sun-ink)}
+.hero .sub{margin-top:20px;font-size:19px;line-height:1.5;color:var(--ink2);max-width:34rem}
+form.addr{margin-top:32px;display:flex;gap:8px;max-width:34rem;background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:6px;box-shadow:0 8px 24px rgba(31,27,22,.06)}
+form.addr input{flex:1;min-width:0;border:0;background:transparent;font:400 16px var(--sans);color:var(--ink);padding:0 12px;height:44px;outline:none}
+form.addr input::placeholder{color:var(--muted)}
+.hint{margin-top:12px;font-size:13px;color:var(--muted)}
+.stage{position:relative;aspect-ratio:1/0.92;max-width:100%}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.clock{position:absolute;left:4%;bottom:6%;display:flex;flex-direction:column;gap:2px;background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--line);border-radius:12px;padding:10px 14px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.clock .t{font-family:var(--mono);font-size:22px;font-weight:500;letter-spacing:.01em}
+.clock .l{font-size:12px;color:var(--ink2)}
+.clock .on{color:var(--sun-ink)}
+
+/* figures strip */
+.facts{border-block:1px solid var(--line)}
+.facts .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+.fact{padding:28px 24px 28px 0}
+.fact+.fact{padding-left:24px;border-left:1px solid var(--line)}
+.fact .v{font-family:var(--serif);font-size:40px;line-height:1}
+.fact .v small{font-family:var(--sans);font-size:15px;color:var(--ink2);margin-left:4px}
+.fact .d{margin-top:8px;font-size:14px;color:var(--ink2)}
+
+section.block{padding-block:96px}
+.head2{max-width:44rem}
+.head2 h2{font-size:clamp(30px,3.6vw,44px);line-height:1.1;letter-spacing:-.015em;margin-top:10px}
+.head2 p{margin-top:16px;font-size:18px;color:var(--ink2)}
+
+/* steps */
+.steps{margin-top:48px;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.step{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:12px}
+.step .n{font-family:var(--mono);font-size:13px;color:var(--sun-ink)}
+.step h3{font-size:20px}
+.step p{color:var(--ink2);font-size:15px}
+.step svg{display:block;width:100%;height:auto;margin-top:auto;padding-top:8px}
+
+/* example */
+.example .wrap{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:56px;align-items:center}
+.example ul{list-style:none;padding:0;margin:28px 0 32px;display:flex;flex-direction:column;gap:0;border-top:1px solid var(--line)}
+.example li{display:flex;gap:16px;padding:14px 0;border-bottom:1px solid var(--line);font-size:15px}
+.example li .mono{color:var(--muted);font-size:12px;padding-top:3px;min-width:22px}
+.example li b{font-weight:500}
+.example li span.d{color:var(--ink2)}
+.paper{position:relative;height:620px;border-radius:16px;overflow:hidden;background:#ebe6dc;border:1px solid var(--line)}
+.paper iframe{position:absolute;top:0;left:50%;width:880px;height:1700px;border:0;transform:translateX(-50%) scale(.62);transform-origin:top center;pointer-events:none}
+.paper::after{content:"";position:absolute;inset:auto 0 0;height:120px;background:linear-gradient(to bottom,transparent,#ebe6dc)}
+.paper a{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:2}
+
+/* trust */
+.trust{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:48px;border-top:1px solid var(--line)}
+.trust>div{padding:24px 24px 0 0}
+.trust>div+div{padding-left:24px;border-left:1px solid var(--line)}
+.trust h3{font-size:17px}
+.trust .src{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:4px}
+.trust p{margin-top:10px;font-size:15px;color:var(--ink2)}
+.limits{margin-top:40px;background:var(--raised);border-radius:14px;padding:20px 24px;display:flex;gap:16px;font-size:15px;color:var(--ink2)}
+.limits b{color:var(--ink);font-weight:500}
+
+/* who + pricing */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:48px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:14px}
+.card h3{font-size:22px}
+.card p{color:var(--ink2);font-size:15px}
+.card ul{margin:0;padding-left:18px;color:var(--ink2);font-size:15px;display:flex;flex-direction:column;gap:6px}
+.price{display:flex;align-items:baseline;gap:8px}
+.price .v{font-family:var(--serif);font-size:56px;line-height:1}
+.price .s{color:var(--ink2);font-size:15px}
+.badge{align-self:flex-start;font-size:13px;color:var(--sun-ink);background:var(--sun-soft);border-radius:6px;padding:4px 8px}
+.card .btn{align-self:flex-start;margin-top:auto}
+
+/* faq */
+.faq{margin-top:40px;border-top:1px solid var(--line);max-width:52rem}
+details{border-bottom:1px solid var(--line)}
+summary{list-style:none;cursor:pointer;padding:20px 0;font-size:17px;font-weight:500;display:flex;justify-content:space-between;gap:16px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font-family:var(--mono);color:var(--muted);transition:transform .2s var(--ease)}
+details[open] summary::after{transform:rotate(45deg)}
+details p{padding:0 0 20px;color:var(--ink2);font-size:15px;max-width:44rem}
+
+.cta{padding-block:96px;text-align:left}
+.cta .box{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:48px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:center}
+.cta h2{font-family:var(--serif);font-weight:400;font-size:clamp(32px,4vw,48px);line-height:1.05;letter-spacing:-.015em}
+footer{border-top:1px solid var(--line);padding-block:32px calc(32px + env(safe-area-inset-bottom,0px));font-size:13px;color:var(--muted)}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+.rise{opacity:0;transform:translateY(10px);transition:opacity .6s var(--ease),transform .6s var(--ease)}
+.rise.in{opacity:1;transform:none}
+
+@media (max-width:960px){
+  .links a.l{display:none}
+  .hero{padding-block:24px 48px}
+  .hero .wrap{grid-template-columns:1fr;gap:24px}
+  .stage{order:-1;aspect-ratio:1/0.72}
+  .facts .wrap{grid-template-columns:1fr 1fr}
+  .fact:nth-child(3){padding-left:0;border-left:0}
+  .fact:nth-child(n+3){border-top:1px solid var(--line)}
+  .steps,.cols{grid-template-columns:1fr}
+  .example .wrap{grid-template-columns:1fr;gap:32px}
+  .paper{height:520px}
+  .trust{grid-template-columns:1fr 1fr}
+  .trust>div:nth-child(3){padding-left:0;border-left:0}
+  section.block{padding-block:64px}
+  .cta .box{grid-template-columns:1fr;padding:32px 24px}
+}
+@media (max-width:560px){
+  .fact .v{font-size:32px}
+  .trust{grid-template-columns:1fr}
+  .trust>div+div{padding-left:0;border-left:0}
+  form.addr{flex-direction:column}
+  form.addr .btn{width:100%}
+  .paper iframe{transform:translateX(-50%) scale(.42)}
+  .paper{height:440px}
+}
+@media (prefers-reduced-motion:reduce){.rise{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
+</style>
+<style id="qsTheme">
+/* ===== « Aube givrée » on the home page: pale lavender air, night-blue ink, one warm orange-to-pink light, fine grain ===== */
+:root{--bg:#eef1f8;--card:rgba(248,249,253,.72);--raised:rgba(21,26,51,.05);--ink:#151a33;--ink2:#474e6d;--muted:#7a809b;
+  --line:rgba(21,26,51,.09);--line2:rgba(21,26,51,.16);--sun:#f0773a;--sun2:#e8678e;--sun-ink:#c2521c;--sun-soft:#fbe3d8;--btn:#151a33;--btn-ink:#f6f7fc;
+  --aura1:#f6c3b0;--aura2:#c9d3f0;--aura3:#efc6d8;--grain:.06;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0c1022;--card:rgba(16,20,40,.62);--raised:rgba(238,240,250,.06);--ink:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;
+  --line:rgba(238,240,250,.08);--line2:rgba(238,240,250,.16);--sun:#ff8a4c;--sun2:#f0679a;--sun-ink:#ffa070;--sun-soft:#3a2436;--btn:#eef0fa;--btn-ink:#0c1022;
+  --aura1:#4a2a4a;--aura2:#1e2858;--aura3:#3a2050;--grain:.08;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0c1022;--card:rgba(16,20,40,.62);--raised:rgba(238,240,250,.06);--ink:#eef0fa;--ink2:#aab0cb;--muted:#7e84a3;
+  --line:rgba(238,240,250,.08);--line2:rgba(238,240,250,.16);--sun:#ff8a4c;--sun2:#f0679a;--sun-ink:#ffa070;--sun-soft:#3a2436;--btn:#eef0fa;--btn-ink:#0c1022;
+  --aura1:#4a2a4a;--aura2:#1e2858;--aura3:#3a2050;--grain:.08;color-scheme:dark}
+/* the page sits in soft coloured air, with a fixed grain over everything */
+body{background:var(--bg)}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:40;opacity:var(--grain);mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+.hero{position:relative;isolation:isolate;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:-20% -10% -10%;z-index:-1;pointer-events:none;
+  background:radial-gradient(40% 50% at 78% 40%,var(--aura1),transparent 70%),radial-gradient(45% 55% at 15% 20%,var(--aura2),transparent 70%),radial-gradient(35% 40% at 60% 95%,var(--aura3),transparent 70%);filter:blur(30px);opacity:.9}
+nav{background:color-mix(in srgb,var(--bg) 70%,transparent);backdrop-filter:saturate(1.4) blur(16px);-webkit-backdrop-filter:saturate(1.4) blur(16px)}
+.hero h1 em{font-style:italic;color:transparent;background:linear-gradient(100deg,var(--sun),var(--sun2));-webkit-background-clip:text;background-clip:text;padding-right:.06em}
+.kicker{color:var(--sun-ink)}
+form.addr{background:var(--card);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);border-color:var(--line2);box-shadow:0 18px 44px -20px rgba(80,90,160,.45)}
+.btn.primary{background:linear-gradient(100deg,var(--sun),var(--sun2));color:#fff;box-shadow:0 10px 24px -10px color-mix(in srgb,var(--sun) 80%,transparent)}
+.btn.primary:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--sun) 88%,#000),color-mix(in srgb,var(--sun2) 88%,#000))}
+nav .btn.primary.sm{box-shadow:none}
+.step,.card{background:var(--card);backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3);border-color:var(--line);box-shadow:0 20px 50px -30px rgba(80,90,160,.5)}
+.limits{background:var(--raised)}
+.badge{background:var(--sun-soft);color:var(--sun-ink)}
+.paper{background:#e6e9f3}.paper::after{background:linear-gradient(to bottom,transparent,#e6e9f3)}
+/* hero: the window */
+.stage{aspect-ratio:1/1.02}
+.clock{background:color-mix(in srgb,var(--card) 80%,transparent);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border-color:var(--line);left:auto;right:5%;bottom:5%}
+.clock .on{color:var(--sun-ink)}
+</style>
+</head>
+<body>
+<nav id="nav"><div class="wrap">
+  <a class="brand" href="./" aria-label="Quartier Soleil, accueil"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="#e8772e" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="#e8772e"/><path d="M2 17h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Quartier Soleil</a>
+  <div class="links"><a class="l" href="#comment">Comment ça marche</a><a class="l" href="#exemple">Exemple</a><a class="l" href="#fiabilite">Fiabilité</a><a class="l" href="#tarifs">Tarifs</a><button class="tbtn" type="button" id="themeBtn" aria-label="Basculer clair / foncé"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" stroke-linejoin="round"/></svg></button><a class="btn primary sm" href="explorer.html">Essayer</a></div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div>
+    <div class="kicker">Ensoleillement réel, fenêtre par fenêtre</div>
+    <h1>Combien de soleil entre <em>vraiment</em> par cette fenêtre ?</h1>
+    <p class="sub">Avant d'acheter ou de louer, nous calculons les heures de soleil direct sur une fenêtre précise, tous les jours de l'année, à partir des relevés laser de l'IGN.</p>
+    <form class="addr" id="addrForm" action="explorer.html" method="post">
+      <input name="adresse" id="addr" autocomplete="street-address" placeholder="Adresse du logement" aria-label="Adresse du logement" required>
+      <button class="btn primary" type="submit">Voir l'ensoleillement</button>
+    </form>
+    <p class="hint">Gratuit pendant la phase de test · France métropolitaine · <a href="https://tally.so/r/ArzGWo?source=accueil" target="_blank" rel="noopener">Donner mon avis</a></p>
+  </div>
+  <div class="stage" id="stage" aria-label="Une fenêtre : le soleil traverse la journée, puis la nuit passe">
+    <canvas id="hero3d"></canvas>
+    <div class="clock" aria-hidden="true"><span class="t" id="clockT">08:00</span><span class="l" id="clockL">Soleil sur la fenêtre</span></div>
+  </div>
+</div></header>
+
+<div class="facts"><div class="wrap">
+  <div class="fact rise"><div class="v">50<small>cm</small></div><div class="d">Un relevé laser tous les 50 cm : bâtiments, arbres, haies</div></div>
+  <div class="fact rise"><div class="v">365<small>jours</small></div><div class="d">Calculés toutes les 10 minutes, du lever au coucher</div></div>
+  <div class="fact rise"><div class="v">320<small>m</small></div><div class="d">D'horizon analysé autour de la fenêtre, dans toutes les directions</div></div>
+  <div class="fact rise"><div class="v">15<small>s</small></div><div class="d">Pour obtenir le rapport complet d'une adresse</div></div>
+</div></div>
+
+<section class="block" id="comment"><div class="wrap">
+  <div class="head2 rise"><div class="kicker">Comment ça marche</div><h2>Trois étapes, sans visite</h2><p>Une annonce dit « lumineux ». Nous mesurons combien de temps le soleil touche réellement la vitre, en hiver comme en été.</p></div>
+  <div class="steps">
+    <div class="step rise"><span class="n">01</span><h3>Votre adresse</h3><p>Le quartier est reconstruit en 3D à partir des données de l'IGN : bâtiments, toitures, arbres, haies et relief.</p>
+      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><g fill="var(--card)" stroke="var(--line2)"><rect x="30" y="52" width="44" height="40"/><rect x="92" y="34" width="36" height="58"/><rect x="146" y="60" width="52" height="32"/><rect x="216" y="44" width="40" height="48"/></g><g fill="#a9bd9c"><circle cx="84" cy="80" r="9"/><circle cx="206" cy="78" r="11"/></g><line x1="20" y1="92" x2="280" y2="92" stroke="var(--line2)"/></svg></div>
+    <div class="step rise"><span class="n">02</span><h3>Votre fenêtre</h3><p>Choisissez la façade, l'étage et la position. L'horizon réel est mesuré depuis ce point précis.</p>
+      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="110" y="18" width="80" height="84" fill="var(--card)" stroke="var(--line2)"/><g fill="var(--raised)" stroke="var(--line2)"><rect x="122" y="30" width="16" height="16"/><rect x="162" y="30" width="16" height="16"/><rect x="122" y="76" width="16" height="16"/><rect x="162" y="76" width="16" height="16"/></g><rect x="162" y="53" width="16" height="16" fill="#e8772e"/><path d="M178 61h70" stroke="#e8772e" stroke-width="1.5" stroke-dasharray="3 3"/><circle cx="252" cy="61" r="3" fill="#e8772e"/></svg></div>
+    <div class="step rise"><span class="n">03</span><h3>Votre rapport</h3><p>Heures de soleil jour par jour, masque solaire, obstacles nommés, effet des nuages. Prêt à partager.</p>
+      <svg viewBox="0 0 300 120" aria-hidden="true"><rect x="0" y="0" width="300" height="120" rx="10" fill="var(--raised)"/><rect x="60" y="14" width="180" height="96" rx="4" fill="var(--card)" stroke="var(--line2)"/><path d="M80 92a70 70 0 0 1 140 0" fill="none" stroke="#e8772e" stroke-width="2"/><path d="M80 92l20-18 18 6 20-14 22 10 22-4 18 20z" fill="var(--raised)" stroke="var(--line2)"/><line x1="80" y1="92" x2="220" y2="92" stroke="var(--line2)"/></svg></div>
+  </div>
+</div></section>
+
+<section class="block example" id="exemple" style="background:var(--card);border-block:1px solid var(--line)"><div class="wrap">
+  <div class="rise">
+    <div class="kicker">Le rapport</div>
+    <h2 style="font-size:clamp(30px,3.6vw,44px);line-height:1.1;letter-spacing:-.015em;margin-top:10px">Un appartement réel, à Clichy</h2>
+    <p style="margin-top:16px;font-size:18px;color:var(--ink2)">Façade sud-ouest, 2e étage, face à la rue : 3 h 21 de soleil direct par jour en moyenne, 2 h 40 le 21 décembre. Voici ce que contient chaque rapport.</p>
+    <ul>
+      <li><span class="mono">01</span><span><b>Le chiffre clé</b> <span class="d">et un verdict en une phrase</span></span></li>
+      <li><span class="mono">02</span><span><b>Trois dates repères</b> <span class="d">solstices et équinoxe, avec les horaires</span></span></li>
+      <li><span class="mono">03</span><span><b>Le masque solaire</b> <span class="d">ce qui cache le ciel, mesuré au laser</span></span></li>
+      <li><span class="mono">04</span><span><b>L'année heure par heure</b> <span class="d">et la vue depuis la fenêtre</span></span></li>
+      <li><span class="mono">05</span><span><b>La méthode et les sources</b> <span class="d">pour vérifier chaque chiffre</span></span></li>
+    </ul>
+    <a class="btn ghost" href="rapport.html?ex=clichy">Lire le rapport d'exemple</a>
+  </div>
+  <div class="paper rise"><iframe src="rapport.html?ex=clichy&amp;embed=1&amp;v=2" title="Aperçu du rapport d'exemple" loading="lazy" tabindex="-1" aria-hidden="true"></iframe><a class="btn primary sm" href="rapport.html?ex=clichy">Ouvrir le rapport</a></div>
+</div></section>
+
+<section class="block" id="fiabilite"><div class="wrap">
+  <div class="head2 rise"><div class="kicker">Fiabilité</div><h2>Des données publiques, mesurées, vérifiables</h2><p>Aucune estimation à l'œil. Chaque chiffre vient d'une source officielle, citée dans le rapport.</p></div>
+  <div class="trust">
+    <div class="rise"><h3>Les bâtiments</h3><div class="src">IGN · BD TOPO</div><p>Contours, hauteurs à l'égout et au faîtage, toitures, murs et haies.</p></div>
+    <div class="rise"><h3>Les obstacles</h3><div class="src">IGN · LiDAR HD</div><p>Un relevé laser aérien tous les 50 cm. C'est lui qui voit les arbres, les haies et les bâtiments tels qu'ils sont.</p></div>
+    <div class="rise"><h3>Le soleil</h3><div class="src">Algorithme NOAA</div><p>La position exacte du soleil pour l'adresse, toutes les 10 minutes, en heure légale française.</p></div>
+    <div class="rise"><h3>Les nuages</h3><div class="src">Satellite · 2019-2024</div><p>La part de soleil qui traverse vraiment les nuages, mois par mois, à cet endroit.</p></div>
+  </div>
+  <div class="limits rise"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><p><b>Ce que le rapport ne voit pas.</b> Les arbres sont comptés opaques toute l'année, même sans feuilles en hiver. Un chantier ou un abattage postérieur au dernier relevé laser n'y figure pas. Les volets, balcons et débords de toit ne sont pas modélisés.</p></div>
+</div></section>
+
+<section class="block" id="tarifs" style="padding-top:0"><div class="wrap">
+  <div class="head2 rise"><div class="kicker">Tarifs</div><h2>Un rapport par fenêtre</h2><p>Pendant la phase de test, le calcul et le rapport sont gratuits. Vos retours nous aident à fixer le prix juste.</p></div>
+  <div class="cols">
+    <div class="card rise"><span class="badge">Gratuit pendant les tests</span><h3>Particuliers</h3><div class="price"><span class="v">14 €</span><span class="s">par rapport, à terme</span></div><p>Pour un achat ou une location : savoir avant de signer si le salon aura du soleil en hiver.</p><ul><li>Une fenêtre, toute l'année</li><li>Rapport web et PDF</li><li>Les obstacles nommés et mesurés</li></ul><a class="btn primary" href="explorer.html">Calculer pour mon adresse</a></div>
+    <div class="card rise"><span class="badge">Bientôt</span><h3>Professionnels</h3><div class="price"><span class="v">Forfait</span><span class="s">mensuel</span></div><p>Chasseurs immobiliers, agences, promoteurs : un argument chiffré pour chaque bien, à remettre à vos clients.</p><ul><li>Rapports illimités ou par lot</li><li>Comparaison de plusieurs logements</li><li>Votre nom sur le rapport</li></ul><a class="btn ghost" href="explorer.html">Tester l'outil</a></div>
+  </div>
+</div></section>
+
+<section class="block" style="padding-top:0"><div class="wrap">
+  <div class="head2 rise"><div class="kicker">Questions fréquentes</div><h2>Avant de commencer</h2></div>
+  <div class="faq">
+    <details><summary>Quelle différence avec une boussole ou une application de réalité augmentée ?</summary><p>Une boussole donne l'orientation, pas ce qui bloque le soleil. Une application de réalité augmentée demande d'être sur place. Ici, l'horizon réel est mesuré depuis la fenêtre avec le relevé laser de l'IGN, sans se déplacer, pour les 365 jours de l'année.</p></details>
+    <details><summary>Est-ce que ça marche pour un appartement en étage ?</summary><p>Oui. Vous choisissez la façade et l'étage : la fenêtre est placée à la bonne hauteur, et l'horizon change avec elle. C'est souvent là que les écarts sont les plus grands entre le rez-de-chaussée et les étages.</p></details>
+    <details><summary>Où l'outil fonctionne-t-il ?</summary><p>En France métropolitaine, partout où l'IGN a publié son relevé LiDAR HD, c'est-à-dire la quasi-totalité du territoire. Ailleurs, le calcul s'appuie sur les hauteurs de bâtiments de la BD TOPO, moins précises pour la végétation.</p></details>
+    <details><summary>Quelle est la précision ?</summary><p>L'horizon mesuré correspond à la vue réelle à quelques degrés près, et les heures de soleil sont données à 10 minutes près. La part de nuages est une moyenne sur six ans : une année donnée peut s'en écarter.</p></details>
+    <details><summary>Mes données sont-elles conservées ?</summary><p>Non, nous n'avons pas de serveur qui les reçoit. L'adresse est seulement transmise à la Base Adresse Nationale, le service public qui la convertit en coordonnées. Les données IGN et météo sont ensuite demandées avec ces coordonnées. La dernière adresse et le dernier rapport restent sur votre appareil, et un bouton « Effacer mes données » dans l'outil les supprime.</p></details>
+  </div>
+</div></section>
+
+<section class="cta"><div class="wrap"><div class="box rise">
+  <h2>Voyez le soleil avant de signer</h2>
+  <a class="btn primary" href="explorer.html">Calculer pour une adresse</a>
+</div></div></section>
+
+<footer><div class="wrap"><span>© 2026 Quartier Soleil · <a href="https://tally.so/r/ArzGWo?source=accueil" target="_blank" rel="noopener">Donner mon avis</a></span><span>Données : IGN (BD TOPO, LiDAR HD, BD ORTHO, RGE ALTI), Base Adresse Nationale, Open-Meteo</span></div></footer>
+
+<script>
+/* theme toggle */
+document.getElementById('themeBtn').addEventListener('click',()=>{const r=document.documentElement;const cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');const nx=cur==='dark'?'light':'dark';r.dataset.theme=nx;try{localStorage.setItem('qs-theme',nx);}catch(e){}});
+/* nav border on scroll */
+const nav=document.getElementById('nav');addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>8),{passive:true});
+/* reveal on scroll */
+const io='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{rootMargin:'0px 0px -8% 0px'}):null;
+document.querySelectorAll('.rise').forEach((el,i)=>{el.style.transitionDelay=((i%4)*50)+'ms';io?io.observe(el):el.classList.add('in');});
+/* address → tool */
+/* address autocomplete + disambiguation on the national address base (BAN) — shared by the home page and the explorer */
+function qsAddressAC(input,form,onResolved){
+  if(!document.getElementById('qsac-css')){const st=document.createElement('style');st.id='qsac-css';st.textContent=
+    '.qsac{list-style:none;margin:6px 0 0;padding:4px;border:1px solid var(--line);border-radius:12px;background:var(--raised,var(--card));box-shadow:0 10px 28px rgba(20,16,10,.12);max-width:100%;min-width:0}'+
+    '.qsac[hidden]{display:none}.qsac .hd{font:500 11px/1.3 var(--mono,monospace);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 10px 4px}'+
+    '.qsac li[role=option]{display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:8px;cursor:pointer;min-width:0}'+
+    '.qsac li[role=option] b{font-weight:500;color:var(--fg,var(--ink));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+    '.qsac li[role=option] small{color:var(--muted);font-size:12.5px}'+
+    '.qsac li[aria-selected=true],.qsac li[role=option]:hover{background:color-mix(in srgb,var(--sun,#d9731a) 14%,transparent)}';document.head.appendChild(st);}
+  const box=document.createElement('ul'); box.className='qsac'; box.setAttribute('role','listbox'); box.hidden=true; box.id='qsac-'+Math.random().toString(36).slice(2,7);
+  form.insertAdjacentElement('afterend',box);
+  input.setAttribute('autocomplete','off'); input.setAttribute('role','combobox'); input.setAttribute('aria-autocomplete','list'); input.setAttribute('aria-controls',box.id); input.setAttribute('aria-expanded','false');
+  let items=[], act=-1, picked=null, tok=0, t=null;
+  const isCoords=v=>/^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(v);
+  const toGeo=f=>({lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],label:f.properties.label});
+  async function search(q,limit,auto){const r=await fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit='+limit+(auto?'&autocomplete=1':''));if(!r.ok)throw new Error('BAN '+r.status);const j=await r.json();return j.features||[];}
+  function close(){box.hidden=true;input.setAttribute('aria-expanded','false');act=-1;}
+  function render(list,head){
+    items=list; act=-1; box.innerHTML=''; if(!list.length){close();return;}
+    if(head){const h=document.createElement('li');h.className='hd';h.textContent=head;box.appendChild(h);}
+    list.forEach((f,i)=>{const p=f.properties,li=document.createElement('li');li.setAttribute('role','option');li.id=box.id+'-'+i;
+      const b=document.createElement('b');b.textContent=p.name||p.label;const s=document.createElement('small');s.textContent=[p.postcode,p.city].filter(Boolean).join(' ')+(p.context?' · '+p.context.split(',').slice(-1)[0].trim():'');
+      li.append(b,s);li.addEventListener('mousedown',e=>{e.preventDefault();choose(i);});box.appendChild(li);});
+    box.hidden=false; input.setAttribute('aria-expanded','true');
+  }
+  function mark(){[...box.querySelectorAll('li[role=option]')].forEach((li,i)=>li.setAttribute('aria-selected',i===act?'true':'false'));input.setAttribute('aria-activedescendant',act>=0?box.id+'-'+act:'');}
+  function choose(i){const f=items[i];if(!f)return;picked=toGeo(f);input.value=picked.label;close();onResolved(picked);}
+  input.addEventListener('input',()=>{picked=null;clearTimeout(t);const v=input.value.trim();if(v.length<4||isCoords(v)){close();return;}
+    const my=++tok;t=setTimeout(async()=>{try{const fs=await search(v,5,true);if(my===tok&&document.activeElement===input)render(fs);}catch(_){}},180);});
+  input.addEventListener('keydown',e=>{if(box.hidden||!items.length)return;
+    if(e.key==='ArrowDown'){e.preventDefault();act=(act+1)%items.length;mark();}
+    else if(e.key==='ArrowUp'){e.preventDefault();act=(act-1+items.length)%items.length;mark();}
+    else if(e.key==='Enter'&&act>=0){e.preventDefault();choose(act);}
+    else if(e.key==='Escape'){close();}});
+  input.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==input)close();},150));
+  // validating without a suggestion: go straight on only when the answer is unambiguous
+  async function resolve(){
+    const v=input.value.trim(); if(!v)return null;
+    if(picked&&picked.label===v)return picked;
+    if(isCoords(v)){const m=v.split(',');return {lat:+m[0],lon:+m[1],label:v};}
+    ++tok; clearTimeout(t);
+    const fs=await search(v,6,false); if(!fs.length)throw new Error('Adresse introuvable — précisez la ville ou le code postal.');
+    const top=fs[0].properties.score||0, close_=fs.filter(f=>(f.properties.score||0)>=top-0.12);
+    const towns=new Set(close_.map(f=>f.properties.citycode||f.properties.city));
+    if(top<0.5||towns.size>1){render(fs.filter((f,i,a)=>a.findIndex(g=>g.properties.label===f.properties.label)===i),'Plusieurs adresses correspondent — laquelle ?');input.focus();return null;}
+    picked=toGeo(fs[0]); input.value=picked.label; return picked;
+  }
+  return {resolve,close};
+}
+function goTool(g){try{sessionStorage.setItem('qs-pending',g.label);sessionStorage.setItem('qs-pending-geo',JSON.stringify(g));}catch(_){}location.href='explorer.html';}
+const homeAC=qsAddressAC(document.getElementById('addr'),document.getElementById('addrForm'),goTool);
+document.getElementById('addrForm').addEventListener('submit',async e=>{e.preventDefault();try{const g=await homeAC.resolve();if(g)goTool(g);}catch(err){const i=document.getElementById('addr');i.setCustomValidity(err.message);i.reportValidity();setTimeout(()=>i.setCustomValidity(''),2500);}});
+
+/* hero: a window, and through it one day and one night going by — sky in soft gradients and grain, the sun crossing,
+   its light entering the room and sliding over the floor */
+(function(){
+  const cv=document.getElementById('hero3d'),stage=document.getElementById('stage');if(!cv||!stage)return;
+  const ctx=cv.getContext('2d');if(!ctx)return;
+  const clockT=document.getElementById('clockT'),clockL=document.getElementById('clockL');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const dark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches;};
+  let W=0,H=0,DPR=1;
+  const resize=()=>{const r=stage.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);W=r.width;H=r.height;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);build();};
+  /* grain: a small noise tile, laid over the sky (stippled gradients) */
+  const noise=document.createElement('canvas');noise.width=noise.height=192;{const g=noise.getContext('2d'),im=g.createImageData(192,192);for(let i=0;i<im.data.length;i+=4){const v=Math.random()*255;im.data[i]=im.data[i+1]=im.data[i+2]=v;im.data[i+3]=255;}g.putImageData(im,0,0);}
+  let pat=null,G={},stars=[],dust=[];
+  const rnd=(a,b)=>a+Math.random()*(b-a);
+  function build(){
+    pat=ctx.createPattern(noise,'repeat');
+    const ww=Math.min(W*0.64,H*0.62),wh=ww*1.12,x0=(W-ww)/2-W*0.04,y0=H*0.05,fr=ww*0.06,arch=ww/2;
+    G={x0,y0,ww,wh,fr,arch,gx0:x0+fr,gy0:y0+fr,gw:ww-2*fr,gh:wh-2*fr,sill:y0+wh};
+    stars=[...Array(90)].map(()=>[rnd(0,1),rnd(0,0.7),rnd(0.4,1.4),rnd(0,6.28)]);
+    /* the frame dissolving into grain on its outer edge */
+    dust=[];const per=[];const N=2600;
+    for(let i=0;i<N;i++){const s=Math.random();let px,py,nx,ny;const L1=wh-arch,Larc=Math.PI*arch,tot=2*L1+Larc+ww;let d=s*tot;
+      if(d<L1){px=x0;py=y0+arch+d;nx=-1;ny=0;}else if((d-=L1)<Larc){const a=Math.PI+d/arch;px=x0+arch+Math.cos(a)*arch;py=y0+arch+Math.sin(a)*arch;nx=Math.cos(a);ny=Math.sin(a);}
+      else if((d-=Larc)<L1){px=x0+ww;py=y0+arch+d;nx=1;ny=0;}else{d-=L1;px=x0+d;py=y0+wh;nx=0;ny=1;}
+      const o=-Math.log(1-Math.random()*0.999)*ww*0.035;dust.push([px+nx*o+rnd(-1,1),py+ny*o+rnd(-1,1),nx,Math.random()]);}
+  }
+  /* the sky by sun altitude (a: -1 deep night … 1 noon) */
+  const K=[[-1,'#070b1d','#141a3a'],[-.25,'#101634','#2b2a55'],[-.08,'#2c3570','#e5788a'],[0,'#5b6bb5','#f59a6c'],[.12,'#8e9fdc','#f8bf9c'],[.35,'#b3c1ec','#f1e3ea'],[1,'#c3cff2','#eef1f8']];
+  const hx=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  const mix=(a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+  const rgb=(c,al=1)=>`rgba(${c[0]},${c[1]},${c[2]},${al})`;
+  const sky=a=>{let i=0;while(i<K.length-2&&a>K[i+1][0])i++;const t=Math.max(0,Math.min(1,(a-K[i][0])/(K[i+1][0]-K[i][0]))),s=t*t*(3-2*t);return [mix(hx(K[i][1]),hx(K[i+1][1]),s),mix(hx(K[i][2]),hx(K[i+1][2]),s)];};
+  const sm=(e0,e1,x)=>{const t=Math.max(0,Math.min(1,(x-e0)/(e1-e0)));return t*t*(3-2*t);};
+  function glassPath(){const g=G;ctx.beginPath();ctx.moveTo(g.gx0,g.gy0+g.gh);ctx.lineTo(g.gx0,g.y0+g.arch);ctx.arc(g.x0+g.ww/2,g.y0+g.arch,g.arch-g.fr,Math.PI,0);ctx.lineTo(g.gx0+g.gw,g.gy0+g.gh);ctx.closePath();}
+  function outerPath(){const g=G;ctx.beginPath();ctx.moveTo(g.x0,g.sill);ctx.lineTo(g.x0,g.y0+g.arch);ctx.arc(g.x0+g.ww/2,g.y0+g.arch,g.arch,Math.PI,0);ctx.lineTo(g.x0+g.ww,g.sill);ctx.closePath();}
+  function draw(hour){
+    const g=G,dk=dark();
+    /* sun: up from 6 h to 21 h (a long June day), its altitude and place across the glass */
+    const day=(hour-6)/15,a=day>=0&&day<=1?Math.sin(Math.PI*day):-Math.min(1,(day<0?-day:day-1)*15/3);
+    const [top,bot]=sky(a),sunX=g.gx0+g.gw*(0.08+0.84*Math.max(0,Math.min(1,day))),hor=g.gy0+g.gh*0.8,sunY=hor-Math.max(-0.15,a)*g.gh*0.62;
+    const warm=mix([255,122,58],[255,214,170],sm(0.05,0.6,a)),pink=[232,103,142];
+    ctx.setTransform(DPR,0,0,DPR,0,0);ctx.clearRect(0,0,W,H);
+    /* the light patch on the floor: the window's panes projected, sliding opposite to the sun */
+    const lit=sm(0.0,0.25,a);
+    if(lit>0.01){const off=(0.5-Math.max(0,Math.min(1,day)))*W*0.9,py0=g.sill+H*0.035,py1=H*0.985,sk=off*0.8;ctx.save();ctx.filter='blur(10px)';ctx.globalAlpha=0.65*lit;
+      const grd=ctx.createLinearGradient(0,py0,0,py1);grd.addColorStop(0,rgb(warm,0.9));grd.addColorStop(1,rgb(pink,0.55));ctx.fillStyle=grd;
+      const cols=[[0,0.48],[0.52,1]],rows=[[0,0.45],[0.55,1]];
+      cols.forEach(([c0,c1])=>rows.forEach(([r0,r1])=>{const y0=py0+(py1-py0)*r0,y1=py0+(py1-py0)*r1,sh=t=>sk*t;
+        const xl=t=>g.gx0+off+g.gw*c0+sh((t-py0)/(py1-py0)),xr=t=>g.gx0+off+g.gw*c1+sh((t-py0)/(py1-py0));
+        ctx.beginPath();ctx.moveTo(xl(y0),y0);ctx.lineTo(xr(y0),y0);ctx.lineTo(xr(y1)+g.gw*0.12*r1,y1);ctx.lineTo(xl(y1)-g.gw*0.12*r1,y1);ctx.closePath();ctx.fill();}));ctx.restore();}
+    /* soft shadow of the frame on the wall */
+    ctx.save();outerPath();ctx.shadowColor=dk?'rgba(0,0,0,.55)':'rgba(40,50,110,.28)';ctx.shadowBlur=40;ctx.shadowOffsetY=18;ctx.fillStyle=dk?'#0a0d1c':'#1c2140';ctx.fill();ctx.restore();
+    /* the sky through the glass */
+    ctx.save();glassPath();ctx.clip();
+    let gr=ctx.createLinearGradient(0,g.y0,0,g.gy0+g.gh);gr.addColorStop(0,rgb(top));gr.addColorStop(1,rgb(bot));ctx.fillStyle=gr;ctx.fillRect(g.x0,g.y0,g.ww,g.wh);
+    const st=sm(-0.05,-0.35,a);if(st>0){stars.forEach(([sx,sy,r,ph])=>{ctx.fillStyle=`rgba(235,238,255,${st*(0.45+0.4*Math.sin(ph+hour*3))})`;ctx.fillRect(g.gx0+sx*g.gw,g.gy0+sy*g.gh,r,r);});}
+    if(a>-0.2){const gl=sm(-0.2,0.1,a);const R=g.gw*0.9;let rg=ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,R);rg.addColorStop(0,rgb(warm,0.85*gl));rg.addColorStop(0.25,rgb(warm,0.35*gl));rg.addColorStop(0.55,rgb(pink,0.18*gl));rg.addColorStop(1,rgb(pink,0));ctx.fillStyle=rg;ctx.fillRect(g.x0,g.y0,g.ww,g.wh);
+      const sr=g.gw*0.075;rg=ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,sr*1.6);rg.addColorStop(0,`rgba(255,248,236,${gl})`);rg.addColorStop(0.55,rgb(warm,0.95*gl));rg.addColorStop(1,rgb(warm,0));ctx.fillStyle=rg;ctx.beginPath();ctx.arc(sunX,sunY,sr*1.6,0,7);ctx.fill();}
+    /* the moon, a pale crescent at night */
+    const mn=sm(-0.1,-0.4,a);if(mn>0){const mx=g.gx0+g.gw*0.7,my=g.gy0+g.gh*0.22,mr=g.gw*0.045;ctx.fillStyle=`rgba(236,238,252,${0.9*mn})`;ctx.beginPath();ctx.arc(mx,my,mr,0,7);ctx.fill();ctx.fillStyle=rgb(top,1);ctx.beginPath();ctx.arc(mx+mr*0.45,my-mr*0.2,mr,0,7);ctx.fill();}
+    /* rooftops far away, a night-blue band at the bottom of the glass */
+    ctx.fillStyle=rgb(mix([24,29,62],top,dk?0.15:0.35),0.92);ctx.beginPath();ctx.moveTo(g.x0,g.gy0+g.gh);const base=g.gy0+g.gh*0.86;
+    [[0,0.9],[0.08,0.9],[0.12,0.8],[0.2,0.8],[0.24,0.86],[0.36,0.86],[0.36,0.76],[0.44,0.7],[0.52,0.76],[0.52,0.84],[0.62,0.84],[0.66,0.79],[0.74,0.79],[0.78,0.88],[0.88,0.88],[0.88,0.82],[0.96,0.82],[1,0.86]].forEach(([u,v])=>ctx.lineTo(g.gx0+u*g.gw,g.gy0+v*g.gh));
+    ctx.lineTo(g.gx0+g.gw,g.gy0+g.gh);ctx.closePath();ctx.fill();void base;
+    /* lit windows in the far houses at night */
+    if(st>0.2){ctx.fillStyle=`rgba(255,180,110,${0.7*st})`;[[0.15,0.84],[0.4,0.8],[0.56,0.88],[0.7,0.84],[0.92,0.86]].forEach(([u,v])=>ctx.fillRect(g.gx0+u*g.gw,g.gy0+v*g.gh,g.gw*0.012,g.gw*0.016));}
+    /* grain in the sky */
+    ctx.globalCompositeOperation='overlay';ctx.globalAlpha=dk?0.16:0.13;ctx.fillStyle=pat;ctx.fillRect(g.x0,g.y0,g.ww,g.wh);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+    ctx.restore();
+    /* the frame: mullion and two bars, night blue, their inner edges catching the warm light */
+    ctx.save();outerPath();glassPath();ctx.fillStyle=dk?'#0a0d1c':'#1c2140';ctx.fill('evenodd');
+    const mw=g.fr*0.55,cx=g.x0+g.ww/2;ctx.fillRect(cx-mw/2,g.y0+g.arch*0.35,mw,g.wh-g.arch*0.35);ctx.fillRect(g.gx0,g.gy0+g.gh*0.47,g.gw,mw);ctx.fillRect(g.gx0,g.y0+g.arch,g.gw,mw*0.9);
+    const rim=sm(-0.05,0.3,a);if(rim>0){ctx.globalAlpha=0.55*rim;ctx.strokeStyle=rgb(warm);ctx.lineWidth=1.5;const sideL=sunX<cx;ctx.beginPath();if(sideL){ctx.moveTo(g.gx0+g.gw,g.y0+g.arch);ctx.lineTo(g.gx0+g.gw,g.gy0+g.gh);ctx.moveTo(cx-mw/2,g.y0+g.arch);ctx.lineTo(cx-mw/2,g.gy0+g.gh);}else{ctx.moveTo(g.gx0,g.y0+g.arch);ctx.lineTo(g.gx0,g.gy0+g.gh);ctx.moveTo(cx+mw/2,g.y0+g.arch);ctx.lineTo(cx+mw/2,g.gy0+g.gh);}ctx.stroke();ctx.globalAlpha=1;}
+    /* sill */
+    ctx.fillStyle=dk?'#0a0d1c':'#1c2140';ctx.fillRect(g.x0-g.fr*0.6,g.sill-g.fr*0.2,g.ww+g.fr*1.2,g.fr*0.8);
+    ctx.restore();
+    /* the frame's edge dissolving into grain, warmer on the sun's side */
+    for(const [px,py,nx,r] of dust){const toward=(px-sunX)*0+(nx*(sunX<cx?-1:1));const w=Math.max(0,toward)*rim;
+      ctx.fillStyle=r<0.15*w?rgb(warm,0.55):(dk?'rgba(10,13,28,.55)':'rgba(28,33,64,.45)');ctx.fillRect(px,py,r<0.5?1:1.4,r<0.5?1:1.4);}
+    /* the clock */
+    const hh=Math.floor(hour)%24,mm=Math.floor((hour%1)*60/10)*10;if(clockT)clockT.textContent=String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+    const state=a>0.04?'sun':a>-0.12?'dusk':'night';if(clockL&&clockL._s!==state){clockL._s=state;clockL.textContent=state==='sun'?'Soleil sur la fenêtre':state==='dusk'?(day<0.5?'Aube':'Crépuscule'):'Nuit';clockL.classList.toggle('on',state==='sun');}
+  }
+  /* one day and one night in 18 s; the night passes quicker, dawn and dusk linger (ease in / ease out) */
+  const CYCLE=18000;let t0=performance.now(),visible=true,raf=0;
+  const hourAt=p=>{/* p 0..1 → hour 4 → 28 with the nights compressed */const k=[[0,4],[0.1,6],[0.2,8],[0.68,19],[0.82,21.5],[1,28]];let i=0;while(i<k.length-2&&p>k[i+1][0])i++;const t=(p-k[i][0])/(k[i+1][0]-k[i][0]),e=0.5-0.5*Math.cos(Math.PI*t);return k[i][1]+(k[i+1][1]-k[i][1])*e;};
+  function frame(now){raf=0;const p=reduce?0.66:((now-t0)%CYCLE)/CYCLE;draw(hourAt(p)%24);if(visible&&!reduce)raf=requestAnimationFrame(frame);}
+  resize();addEventListener('resize',()=>{resize();if(!raf)raf=requestAnimationFrame(frame);});
+  if('IntersectionObserver' in window)new IntersectionObserver(es=>{visible=es[0].isIntersecting;if(visible&&!raf)raf=requestAnimationFrame(frame);}).observe(stage);
+  raf=requestAnimationFrame(frame);
+})();
+
+</script>
+</body>
+</html>
