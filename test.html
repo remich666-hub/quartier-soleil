@@ -2919,11 +2919,14 @@ function qsV4One(fam){
   const blockAt=(x,y)=>fam.find(o=>pointInPoly(x,y,o.userData.rings[0]));
   /* the tallest block over a point (footprints overlap: a tower inside the outline of the main block) */
   const tallAt=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
+  const V5=window.__qsV4geo?null:qsV5Build(M,fam,main);QV4.v5log=QV4.v5log||[];if(V5)QV4.v5log.push({n:V5.n,ext:V5.ext,log:V5.log});
+  let drawn=[],OUT=null;
+  if(V5){drawn=V5.drawn;OUT=V5.OUT;}else{
   const Mpolys=M.pieces.map(pc=>pc.P.map(q=>({x:q[0],y:q[1]})));
   const PCx=PCSYNC, ringP=r=>[r.map(p=>[p.x,p.y])];
   let famU=null;try{famU=qsUnion(fam.map(o=>ringP(o.userData.rings[0])));}catch(e){famU=null;}
   /* roof pans: clipped to the footprints, and cut where a higher piece (a tower, an upper storey) stands over them */
-  const drawn=[]; /* {poly:[[x,y]...] outer ring (IGN), holes, zf} */
+
   const Pm=M.pieces.map(pc=>pc.P.map(([x,y])=>[x+dx,y+dy]));
   M.pans.forEach(p=>{const zf=(x,y)=>p.a*(x-dx)+p.b*(y-dy)+p.c-A0;const Q=p.Q.map(([x,y])=>[x+dx,y+dy]);let parts=[[Q]];
     if(famU&&PCx){try{parts=PCx.intersection([Q],famU);
@@ -2932,7 +2935,6 @@ function qsV4One(fam){
     parts.forEach(poly=>{const outer=poly[0].slice(0,-1),holes=poly.slice(1).map(h=>h.slice(0,-1));if(outer.length>=3)drawn.push({outer,holes,zf,n:p.n});});});
   /* the walls stand under the roof edge: the building outline is the outline of its roof, squared (walls parallel or
      perpendicular to the main axis within 12°; a real slant or a rounded corner stays), and the pans are clipped / extended to it */
-  let OUT=null;
   try{const U0=qsUnion(drawn.map(d=>[d.outer,...d.holes]));const mr=main.userData.rings[0];let th=0,best=0;
     for(let k=0;k<mr.length;k++){const a=mr[k],b=mr[(k+1)%mr.length],L=Math.hypot(b.x-a.x,b.y-a.y);if(L>best){best=L;th=Math.atan2(b.y-a.y,b.x-a.x);}}
     const sq=U0.map(poly=>poly.map(R=>qsSquare(qsSquare(R.slice(0,-1),th),th))); /* twice: the second pass clears what the first leaves */
@@ -2954,6 +2956,7 @@ function qsV4One(fam){
   qsJoinPans(drawn,qsAxis(main));
   qsFill(drawn,OUT); /* the ridge lines moved: close again any strip left between the pans and the outline */
   qsWeld(drawn,OUT,qsAxis(main));
+  }
   const inOut=(x,y)=>!OUT||OUT.some(poly=>pointInPoly(x,y,poly[0].map(([a,b])=>({x:a,y:b})))&&!poly.slice(1).some(h=>pointInPoly(x,y,h.map(([a,b])=>({x:a,y:b})))));
   const inRing=(x,y,R)=>{let o=false;for(let i=0,j=R.length-1;i<R.length;j=i++){const [a,b]=R[i],[c,d]=R[j];if((b>y)!==(d>y)&&x<(c-a)*(y-b)/(d-b)+a)o=!o;}return o;};
   const drawnZ=(x,y)=>{let z=-Infinity;drawn.forEach(d=>{if(inRing(x,y,d.outer)&&!d.holes.some(h=>inRing(x,y,h)))z=Math.max(z,d.zf(x,y));});return z;};
@@ -2998,7 +3001,10 @@ function qsV4One(fam){
       else if(inOut(mx+nx*0.15,my+ny*0.15)){const ox=mx+nx*0.15,oy=my+ny*0.15;let zo=-Infinity;drawn.forEach(e=>{if(e!==d&&inRing(ox,oy,e.outer)&&!e.holes.some(h=>inRing(ox,oy,h)))zo=Math.max(zo,e.zf(ox,oy));}); /* the roof beyond: the other pans only */dbg('inOut zo='+zo);if(isFinite(zo)&&zo>=Math.max(za,zb)-0.05)continue; /* a wall wherever this edge stands above the roof beyond, not only where its low end does */if(isFinite(zo)){lo0=Math.min(zo,za-0.03);lo1=Math.min(zo,zb-0.03);}else continue;} /* a leftover gap inside: a step at most */
       else{dbg('outline');continue;} /* an outline edge: its wall is built on the outline itself, below */
       quad([a.x,a.y],[b.x,b.y],lo0,lo1,za,zb,nx,ny,under);}}));
-  /* the outer walls stand on the outline itself, from under the ground up to the roof as drawn just inside it (the roof mesh,
+  if(V5)V5.walls.forEach(w=>{const mx=(w.a[0]+w.b[0])/2,my=(w.a[1]+w.b[1])/2,own=tallAt(mx-w.nx*0.3,my-w.ny*0.3)||blockAt(mx-w.nx*0.3,my-w.ny*0.3)||main,zg=own.userData.zBase-SINK;
+    quad(w.a,w.b,w.za0==null?zg:w.za0,w.zb0==null?zg:w.zb0,w.za1,w.zb1,w.nx,w.ny,own);});
+  if(V5)XL.push(...V5.XL);
+  if(!V5)/* the outer walls stand on the outline itself, from under the ground up to the roof as drawn just inside it (the roof mesh,
      triangle by triangle): every outline wall is whole, whatever the pans along it */
   {const TR=[];for(let i=0;i<P.length;i+=9)TR.push([P[i],P[i+1],P[i+2],P[i+3],P[i+4],P[i+5],P[i+6],P[i+7],P[i+8]]);
    const roofAt=(x,y)=>{let z=-Infinity;for(const t of TR){const d=(t[4]-t[7])*(t[0]-t[6])+(t[6]-t[3])*(t[1]-t[7]);if(Math.abs(d)<1e-9)continue;
@@ -3538,9 +3544,106 @@ function qsModel5(R,opt){opt=opt||{};
       const quads=[];for(let k=0;k<prof.length-1;k++){const p=prof[k],q=prof[k+1];if(p[2]-zm<0.02&&q[2]-zm<0.02)continue;quads.push([[p[0],p[1],zm],[q[0],q[1],zm],[q[0],q[1],q[2]],[p[0],p[1],p[2]]]);}
       let ar=0,mx=0,my=0,mz=0;quads.forEach(q=>{const w=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1])*((q[2][2]-q[1][2])+(q[3][2]-q[0][2]))/2;ar+=w;mx+=(q[0][0]+q[1][0])/2*w;my+=(q[0][1]+q[1][1])/2*w;mz+=(q[0][2]+q[3][2]+q[1][2]+q[2][2])/4*w;});
       if(ar<1)continue;const nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;verts.push({quads,a:ar,x:mx/ar+nx*0.3,y:my/ar+ny*0.3,z:mz/ar,n:[nx,ny,0],tilt:Math.PI/2,az:((Math.atan2(nx,ny)/RAD)+360)%360});}});
-  tk('out');delete TT._;return {pieces,pans,cells,verts,rms,TT,v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
+  tk('out');delete TT._;return {pieces,pans,cells,verts,rms,TT,L5:{leaves,XY,U,V,Z0,Ad,faceSet},v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
 
 
+
+/* ===== Quartier Soleil v5: the building is a union of straight volumes (the model's rectangles, in the axis frame of its walls).
+   The construction rules act on their parameters; roof, walls and outline are drawn from them directly: walls parallel or
+   perpendicular by construction, ridges level, no welding, no straightening, no hole possible. ===== */
+function qsV5Pred(l){const [a,b,c,d]=l.R,x=l.x;
+  switch(l.type){
+    case 'flat':return ()=>x[0];
+    case 'shedU':return u=>x[0]+x[1]*(u-a);
+    case 'shedV':return (u,v)=>x[0]+x[1]*(v-c);
+    case 'gableU':return (u,v)=>x[0]-x[1]*Math.max(0,l.r-v)-x[2]*Math.max(0,v-l.r);
+    case 'gableV':return u=>x[0]-x[1]*Math.max(0,l.r-u)-x[2]*Math.max(0,u-l.r);
+    case 'hip':return (u,v)=>x[0]+x[1]*Math.min(u-a,b-u,v-c,d-v);
+  }return l.pred;}
+/* the rules of the trade, on the parameters */
+function qsV5Rules(L,log){const E=1e-6,ov=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0),deg=k=>Math.atan(k)*180/Math.PI;
+  const adj=[];for(let i=0;i<L.length;i++)for(let j=0;j<L.length;j++){if(i==j)continue;const A=L[i].R,B=L[j].R;
+    if(Math.abs(A[1]-B[0])<E&&ov(A[2],A[3],B[2],B[3])>0.3)adj.push({w:i,e:j,ori:'u',at:A[1]}); /* A west of B */
+    if(Math.abs(A[3]-B[2])<E&&ov(A[0],A[1],B[0],B[1])>0.3)adj.push({w:i,e:j,ori:'v',at:A[3]});} /* A south of B */
+  /* gable: eaves (low edges) and pitches; a pan pivots about its eave */
+  const G=l=>{const lo=l.type=='gableU'?l.R[2]:l.R[0],hi=l.type=='gableU'?l.R[3]:l.R[1];return {lo,hi,e1:l.x[0]-l.x[1]*(l.r-lo),e2:l.x[0]-l.x[2]*(hi-l.r)};};
+  const setG=(l,k1,k2,e1,e2)=>{const {lo,hi}=G(l),r=(e2-e1+k1*lo+k2*hi)/(k1+k2);if(!(r>lo+0.3&&r<hi-0.3))return false;l.r=r;l.x=[e1+k1*(r-lo),k1,k2];return true;};
+  /* 1. gables side by side along their ridge (a row of houses, a step in height): one pitch per side for the row, each pan about its eave;
+        eaves within 8 cm made level */
+  const par=L.map((_,i)=>i),fd=i=>par[i]==i?i:(par[i]=fd(par[i]));
+  adj.forEach(a=>{const A=L[a.w],B=L[a.e];if(A.type!=B.type)return;if(!((A.type=='gableU'&&a.ori=='u')||(A.type=='gableV'&&a.ori=='v')))return;
+    if(Math.abs(deg(A.x[1])-deg(B.x[1]))<12&&Math.abs(deg(A.x[2])-deg(B.x[2]))<12)par[fd(a.w)]=fd(a.e);});
+  const groups=new Map();L.forEach((l,i)=>{if(l.type!='gableU'&&l.type!='gableV')return;const r=fd(i);(groups.get(r)||groups.set(r,[]).get(r)).push(i);});
+  groups.forEach(ix=>{if(ix.length<2)return;let w1=0,s1=0,w2=0,s2=0;
+    ix.forEach(i=>{const l=L[i],len=l.type=='gableU'?l.R[1]-l.R[0]:l.R[3]-l.R[2],{lo,hi}=G(l);w1+=len*(l.r-lo);s1+=len*(l.r-lo)*l.x[1];w2+=len*(hi-l.r);s2+=len*(hi-l.r)*l.x[2];});
+    const k1=s1/w1,k2=s2/w2,ee=ix.map(i=>G(L[i]));
+    /* eaves on the same line and within 8 cm: one height */
+    const snap=(key,lk)=>{const C=[];ix.forEach((i,q)=>{const lin=ee[q][lk];let c=C.find(c=>Math.abs(c.lin-lin)<0.3&&Math.abs(c.z-ee[q][key])<0.08);if(!c){c={lin,z:ee[q][key],n:0,s:0,m:[]};C.push(c);}c.s+=ee[q][key];c.n++;c.m.push(q);c.z=c.s/c.n;});C.forEach(c=>c.m.forEach(q=>ee[q][key]=c.z));};
+    snap('e1','lo');snap('e2','hi');
+    ix.forEach((i,q)=>{const l=L[i],o={r:l.r,x:l.x.slice()};if(setG(l,k1,k2,ee[q].e1,ee[q].e2))log.push(['pitch',i,+(deg(o.x[1])).toFixed(1)+'>'+deg(k1).toFixed(1),+(deg(o.x[2])).toFixed(1)+'>'+deg(k2).toFixed(1)]);});});
+  /* 2. a lean-to continuing the slope of the roof next to it: one plane */
+  const zAt=(l,u,v)=>qsV5Pred(l)(u,v);
+  adj.forEach(a=>{const A=L[a.w],B=L[a.e],sh=a.ori=='u'?'shedU':'shedV',gb=a.ori=='u'?'gableV':'gableU';
+    /* slope across the shared edge, of the face of l touching it (positive: rising towards +ori) */
+    const slope=(l,side)=>{if(l.type==sh)return l.x[1];if(l.type==gb)return side=='lo'?l.x[1]:-l.x[2];return null;};
+    const mid=a.ori=='u'?[a.at,(Math.max(A.R[2],B.R[2])+Math.min(A.R[3],B.R[3]))/2]:[(Math.max(A.R[0],B.R[0])+Math.min(A.R[1],B.R[1]))/2,a.at];
+    const sA=slope(A,'hi'),sB=slope(B,'lo');if(sA==null||sB==null||Math.abs(sA)<0.1||Math.sign(sA)!=Math.sign(sB)||Math.abs(deg(sA)-deg(sB))>12)return;
+    const zA=zAt(A,...mid),zB=zAt(B,...mid);if(Math.abs(zA-zB)>0.3)return;
+    if(B.type==sh){B.x=[zA,sA];log.push(['plane',a.e,'<',a.w]);}else if(A.type==sh){const lo=a.ori=='u'?A.R[0]:A.R[2];A.x=[zB-sB*(a.at-lo),sB];log.push(['plane',a.w,'<',a.e]);}});
+  L.forEach(l=>{l.pred=qsV5Pred(l);});
+  /* 3. a wing meeting a cross roof: its roof carried on into the other volume up to that ridge, the envelope makes the valleys */
+  const ext=[];adj.forEach(a=>{for(const [wi,mi] of [[a.w,a.e],[a.e,a.w]]){const W=L[wi],Mn=L[mi];
+      const along=a.ori=='u'?'gableU':'gableV',cross=a.ori=='u'?'gableV':'gableU';if(W.type!=along||Mn.type!=cross)continue;
+      const [s0,s1]=a.ori=='u'?[W.R[2],W.R[3]]:[W.R[0],W.R[1]],[m0,m1]=a.ori=='u'?[Mn.R[2],Mn.R[3]]:[Mn.R[0],Mn.R[1]];if(s0<m0-0.05||s1>m1+0.05)continue;
+      if(W.x[0]>Mn.x[0]+0.6)continue; /* a taller wing stands on its own walls */
+      const e0=a.at,e1=Mn.r;if(Math.abs(e1-e0)<0.3)continue;const lo=Math.min(e0,e1),hi=Math.max(e0,e1);
+      const R=a.ori=='u'?[lo,hi,W.R[2],W.R[3]]:[W.R[0],W.R[1],lo,hi];const X=Object.assign({},W,{R,ext:wi});X.pred=qsV5Pred(X);ext.push(X);log.push(['wing',wi,'into',mi]);}});
+  return ext;}
+function qsV5Build(M,fam,main){const L5=M.L5;if(!L5||!PCSYNC)return null;const PC=PCSYNC,A0=S.alt0,dx=-M.sh0.dx,dy=-M.sh0.dy,log=[];
+  const r3=v=>Math.round(v*1000)/1000;
+  const L=L5.leaves.map(l=>{const c=Object.assign({},l);c.R=l.R.map(r3);c.x=l.x?l.x.slice():l.x;c.pred=l.type=='mansard'?l.pred:qsV5Pred(c);return c;});
+  const EXT=qsV5Rules(L,log),PR=L.concat(EXT);
+  const W=(u,v)=>{const p=L5.XY(u,v);return [p[0]+dx,p[1]+dy];},Wd=(u,v)=>L5.XY(u,v),zW=z=>z+L5.Z0-A0;
+  const env=(u,v)=>{let z=-Infinity;for(const l of PR){const R=l.R;if(u>R[0]&&u<R[1]&&v>R[2]&&v<R[3]){const q=l.pred(u,v);if(q>z)z=q;}}return z;};
+  /* faces: each volume's roof faces, minus where another volume's roof stands higher */
+  const F=[];PR.forEach((l,pi)=>L5.faceSet(l).forEach(f=>{const Q=f.map(p=>[r3(p[0]),r3(p[1])]);
+    let i1=1,i2=2,best=0;for(let a=1;a<f.length;a++)for(let b=a+1;b<f.length;b++){const ar=Math.abs((f[a][0]-f[0][0])*(f[b][1]-f[0][1])-(f[a][1]-f[0][1])*(f[b][0]-f[0][0]));if(ar>best){best=ar;i1=a;i2=b;}}
+    if(best<1e-6)return;const p0=f[0],p1=f[i1],p2=f[i2],e1=[p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]],e2=[p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]];
+    const nz=e1[0]*e2[1]-e1[1]*e2[0],pa=-(e1[1]*e2[2]-e1[2]*e2[1])/nz,pb=-(e1[2]*e2[0]-e1[0]*e2[2])/nz,pc=p0[2]-pa*p0[0]-pb*p0[1];
+    let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;Q.forEach(([u,v])=>{u0=Math.min(u0,u);u1=Math.max(u1,u);v0=Math.min(v0,v);v1=Math.max(v1,v);});
+    F.push({pi,Q:MK.area(Q)<0?Q.reverse():Q,z:(u,v)=>pa*u+pb*v+pc,pa,pb,bb:[u0,u1,v0,v1]});}));
+  const drawn=[];
+  F.forEach(f=>{const sub=[];F.forEach(g=>{if(g.pi===f.pi||g.bb[0]>=f.bb[1]||g.bb[1]<=f.bb[0]||g.bb[2]>=f.bb[3]||g.bb[3]<=f.bb[2])return;
+      const H=MK.clipHalf(g.Q,P=>f.z(P[0],P[1])+0.005-g.z(P[0],P[1]));if(H.length>=3&&Math.abs(MK.area(H))>1e-4)sub.push([H.map(([u,v])=>[r3(u),r3(v)])]);});
+    let parts=[[f.Q]];if(sub.length){try{parts=PC.difference([f.Q],...sub);}catch(e){try{const rr=v=>Math.round(v*100)/100;parts=PC.difference([f.Q.map(p=>p.map(rr))],...sub.map(s=>[s[0].map(p=>p.map(rr))]));}catch(e2){parts=[[f.Q]];}}}
+    const gx=f.pa*L5.XY(1,0)[0]+f.pb*L5.XY(0,1)[0],gy=f.pa*L5.XY(1,0)[1]+f.pb*L5.XY(0,1)[1],nl=Math.hypot(gx,gy,1),n=[-gx/nl,-gy/nl,1/nl];
+    const t=L5.XY(1,0),nn=L5.XY(0,1),toUV=(x,y)=>{const X=x-dx,Y=y-dy;return [X*t[0]+Y*t[1],X*nn[0]+Y*nn[1]];};
+    const zf=(x,y)=>{const [u,v]=toUV(x,y);return zW(f.z(u,v));};
+    parts.forEach(poly=>{const ring=R=>{const o=R.slice(0,-1).map(([u,v])=>W(u,v));return o;};const outer=ring(poly[0]);if(outer.length<3)return;
+      let ar=0;for(let k=0,q=outer.length-1;k<outer.length;q=k++)ar+=(outer[q][0]-outer[k][0])*(outer[q][1]+outer[k][1]);if(Math.abs(ar)<0.02)return;
+      drawn.push({outer,holes:poly.slice(1).map(ring).filter(h=>h.length>=3),zf,n,v5:f.pi});});});
+  /* outline: the union of the volumes (the wing extensions lie inside another volume) */
+  let OUT=null;try{OUT=qsUnion(L.map(l=>{const [a,b,c,d]=l.R;const P=[[a,c],[b,c],[b,d],[a,d]].map(([u,v])=>W(u,v));return [P.concat([P[0]])];}));}catch(e){OUT=null;}
+  /* walls: on every volume edge, where the envelope jumps (outline: from the ground; inside: from the lower roof) */
+  const lines=new Map();PR.forEach(l=>{const [a,b,c,d]=l.R;[['u',a,c,d],['u',b,c,d],['v',c,a,b],['v',d,a,b]].forEach(([o,e,t0,t1])=>{const k=o+Math.round(e*1000);(lines.get(k)||lines.set(k,{o,e,iv:[]}).get(k)).iv.push([t0,t1]);});});
+  const walls=[],XL=[],EPS=0.01,TH=0.03;
+  lines.forEach(Ln=>{Ln.iv.sort((p,q)=>p[0]-q[0]);const IV=[];Ln.iv.forEach(v=>{const l=IV[IV.length-1];if(l&&v[0]<=l[1]+1e-6)l[1]=Math.max(l[1],v[1]);else IV.push(v.slice());});
+    const P=t=>Ln.o=='u'?[Ln.e,t]:[t,Ln.e],N=Ln.o=='u'?[1,0]:[0,1];
+    const st=t=>{const p=P(t),zL=env(p[0]-N[0]*EPS,p[1]-N[1]*EPS),zR=env(p[0]+N[0]*EPS,p[1]+N[1]*EPS);
+      if(zL>zR+TH)return {s:1,top:zL,bot:zR,t};if(zR>zL+TH)return {s:-1,top:zR,bot:zL,t};return {s:0,t};};
+    IV.forEach(([t0,t1])=>{const n=Math.max(1,Math.ceil((t1-t0)/0.05)),S=[];for(let k=0;k<=n;k++)S.push(st(t0+(t1-t0)*k/n));
+      /* state changes found to 1 mm */
+      const S2=[S[0]];for(let k=1;k<S.length;k++){const A=S[k-1],B=S[k];if(A.s!==B.s||(A.s&&Math.abs((B.bot===-Infinity)-(A.bot===-Infinity))>0)){let lo=A.t,hi=B.t;for(let it=0;it<8;it++){const m=(lo+hi)/2,Sm=st(m);if(Sm.s===A.s&&((Sm.bot===-Infinity)===(A.bot===-Infinity)))lo=m;else hi=m;}
+          if(A.s){const q=st(lo);if(q.s===A.s)S2.push(q);}if(B.s){const q=st(hi);if(q.s===B.s)S2.push(q);}}S2.push(B);}
+      /* runs of one state (same side, same kind of bottom), simplified where top and bottom stay straight */
+      let run=[];const flush=()=>{if(run.length<2){run=[];return;}const keep=[run[0]];for(let k=1;k<run.length-1;k++){const a=keep[keep.length-1],c=run[k+1],b=run[k],f=(b.t-a.t)/(c.t-a.t||1);
+          const lin=v=>Math.abs(b[v]-(a[v]+(c[v]-a[v])*f))<0.002;if(!(lin('top')&&(b.bot===-Infinity||lin('bot'))))keep.push(b);}keep.push(run[run.length-1]);
+        const s=run[0].s,nu=N[0]*s,nv=N[1]*s,nw=Wd(nu,nv),gr=run[0].bot===-Infinity;
+        for(let k=0;k<keep.length-1;k++){const a=keep[k],b=keep[k+1];if(b.t-a.t<1e-4)continue;walls.push({a:W(...P(a.t)),b:W(...P(b.t)),za1:zW(a.top),zb1:zW(b.top),za0:gr?null:zW(a.bot),zb0:gr?null:zW(b.bot),nx:nw[0],ny:nw[1]});}
+        if(!gr&&run[run.length-1].t-run[0].t>=2.2){const a=W(...P(run[0].t)),b=W(...P(run[run.length-1].t));XL.push({a:{x:a[0],y:a[1]},b:{x:b[0],y:b[1]},nx:nw[0],ny:nw[1]});}
+        run=[];};
+      S2.forEach(q=>{if(!q.s){flush();return;}if(run.length&&(run[0].s!==q.s||(run[0].bot===-Infinity)!==(q.bot===-Infinity)))flush();run.push(q);});flush();});});
+  return {drawn,OUT,walls,XL,log,ext:EXT.length,n:L.length};}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
