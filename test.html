@@ -4101,10 +4101,13 @@ function qsModel5(R,opt){opt=opt||{};
         const d=M[0][0]*(M[1][1]*M[2][2]-M[1][2]*M[2][1])-M[0][1]*(M[1][0]*M[2][2]-M[1][2]*M[2][0])+M[0][2]*(M[1][0]*M[2][1]-M[1][1]*M[2][0]);if(Math.abs(d)<1e-9)return null;
         const sol=[0,1,2].map(c=>{const Mc=M.map((r,i)=>r.map((v,k)=>k===c?B[i]:v));return (Mc[0][0]*(Mc[1][1]*Mc[2][2]-Mc[1][2]*Mc[2][1])-Mc[0][1]*(Mc[1][0]*Mc[2][2]-Mc[1][2]*Mc[2][0])+Mc[0][2]*(Mc[1][0]*Mc[2][1]-Mc[1][1]*Mc[2][0]))/d;});
         let e=0;rows.forEach(([f,z])=>{e+=(z-sol[0]*f[0]-sol[1]*f[1]-sol[2]*f[2])**2;});return {sol,rms:Math.sqrt(e/rows.length)};};
-      let best=null;const pl=ls3(PU.map(([u,v,z])=>[[1,u,v],z]));if(pl)best={k:'plane',rms:pl.rms,sol:pl.sol};
-      for(const ax of [0,1]){const ws=PU.map(p=>p[ax]);const w0=Math.min(...ws),w1=Math.max(...ws);for(let r=w0+1;r<=w1-1;r+=0.25){
-        const g=ls3(PU.map(p=>[[1,Math.min(0,p[ax]-r),Math.max(0,p[ax]-r)],p[2]]));if(g&&g.sol[1]>0.05&&g.sol[2]<-0.05&&(!best||g.rms<best.rms-0.02))best={k:'gable',ax,r,rms:g.rms,sol:g.sol};}}
-      DBG.push(['fit',best&&best.k,best&&+best.rms.toFixed(3),best&&best.r,P.length,nO]);if(!best||best.rms>0.15)return; /* not one roof: two roofs, left as they are */
+      const fitAll=Q=>{let bs=null;const pl=ls3(Q.map(([u,v,z])=>[[1,u,v],z]));if(pl)bs={k:'plane',rms:pl.rms,sol:pl.sol};
+        for(const ax of [0,1]){const ws=Q.map(p=>p[ax]);const w0=Math.min(...ws),w1=Math.max(...ws);for(let r=w0+1;r<=w1-1;r+=0.25){
+          const g=ls3(Q.map(p=>[[1,Math.min(0,p[ax]-r),Math.max(0,p[ax]-r)],p[2]]));if(g&&g.sol[1]>0.05&&g.sol[2]<-0.05&&(!bs||g.rms<bs.rms-0.02))bs={k:'gable',ax,r,rms:g.rms,sol:g.sol};}}return bs;};
+      const res=(bs,p)=>{const f=bs.k=='plane'?[1,p[0],p[1]]:[1,Math.min(0,p[bs.ax]-bs.r),Math.max(0,p[bs.ax]-bs.r)];return p[2]-bs.sol[0]*f[0]-bs.sol[1]*f[1]-bs.sol[2]*f[2];};
+      /* robust: the edges mix wall and ground, a chimney, a gutter: fit, drop the far points, fit again */
+      let best=fitAll(PU),QI=PU;for(let it=0;it<2&&best;it++){const lim=it?0.2:0.35;QI=PU.filter(p=>Math.abs(res(best,p))<lim);if(QI.length<Math.max(16,PU.length*0.65)){best=null;break;}best=fitAll(QI);}
+      DBG.push(['fit',best&&best.k,best&&+best.rms.toFixed(3),best&&best.r,QI.length,P.length,nO]);if(!best||best.rms>0.12)return; /* not one roof: two roofs, left as they are */
       if(best.k=='plane'){const pw=best.sol;l.type='shedU';l.x=[0,0];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;}
       else if(best.r<(best.ax?c:a)+0.3||best.r>(best.ax?d:b)-0.3){ /* the ridge lies outside this half: its one pitch */
         const [x0,k1,k2m]=best.sol,r=best.r,lo=best.r>(best.ax?d:b)-0.3,kk=lo?k1:k2m,c0=x0-kk*r,pw=best.ax?[c0,0,kk]:[c0,kk,0];l.type='shedU';l.x=[0,0];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;}
