@@ -4088,6 +4088,21 @@ function qsModel5(R,opt){opt=opt||{};
       IX.length=0;save.forEach(x=>IX.push(x));sU.forEach((v,q)=>CUr[q]=v);sV.forEach((v,q)=>CVr[q]=v);cur=sc;}
     if(!bm)break;IX.length=0;bm.IX.forEach(x=>IX.push(x));bm.U.forEach((v,q)=>CUr[q]=v);bm.V.forEach((v,q)=>CVr[q]=v);cur=bm.c;refine();}
   tk('merge');const leaves=cur.ls.filter(l=>l.type!='none'&&(l.R[1]-l.R[0])>=1&&(l.R[3]-l.R[2])>=1);if(!leaves.length)return null;if(ST)try{ST('merged',snap(leaves));}catch(e){}
+  /* a shared garage roof (semi-detached): a low volume whose roof runs on, without a step, over the neighbour's footprint is one pitch.
+     Both sides grow the same laser surface across the boundary and fit the same plane, so the two halves meet exactly. */
+  if(others.length)try{const gs=0.5,kq=(x,y)=>Math.round(x/gs)+','+Math.round(y/gs),own=(x,y)=>rings.some(rg=>inPoly([x,y],rg)),oth=(x,y)=>others.some(rg=>inPoly([x,y],rg));
+    leaves.forEach(l=>{const [a,b,c,d]=l.R;let top=-1e9;for(const [u,v] of [[a,c],[b,c],[a,d],[b,d],[(a+b)/2,(c+d)/2]])top=Math.max(top,l.pred(u,v));if(top>4.6||(b-a)*(d-c)>45)return;
+      const [cxl,cyl]=XY((a+b)/2,(c+d)/2),seen=new Map(),Q=[];
+      for(let u=a+0.25;u<b;u+=gs)for(let v=c+0.25;v<d;v+=gs){const [x0,y0]=XY(u,v),x=Math.round(x0/gs)*gs,y=Math.round(y0/gs)*gs,z=Zl(x,y);if(z==null||z-Z0<1.8||z-Z0>5)continue;const k=kq(x,y);if(!seen.has(k)){seen.set(k,[x,y,z]);Q.push([x,y,z]);}}
+      for(let q=0;q<Q.length&&seen.size<900;q++){const [x,y,z]=Q[q];for(const [ex,ey] of [[gs,0],[-gs,0],[0,gs],[0,-gs]]){const X=x+ex,Y=y+ey,k=kq(X,Y);if(seen.has(k)||Math.hypot(X-cxl,Y-cyl)>8)continue;const Z=Zl(X,Y);if(Z==null||Math.abs(Z-z)>0.3||Z-Z0<1.8||Z-Z0>5)continue;if(!own(X,Y)&&!oth(X,Y))continue;seen.set(k,[X,Y,Z]);Q.push([X,Y,Z]);}}
+      const P=[...seen.values()],nO=P.filter(([x,y])=>!own(x,y)&&oth(x,y)).length;if(nO*gs*gs<3||P.length<16)return;
+      const np=P.length;let mx=0,my=0,mz=0;P.forEach(([x,y,z])=>{mx+=x/np;my+=y/np;mz+=z/np;});let xx=0,xy=0,yy=0,xz=0,yz=0;P.forEach(([x,y,z])=>{const dx=x-mx,dy=y-my,dz=z-mz;xx+=dx*dx;xy+=dx*dy;yy+=dy*dy;xz+=dx*dz;yz+=dy*dz;});
+      const det=xx*yy-xy*xy;if(Math.abs(det)<1e-6)return;const p1=(xz*yy-yz*xy)/det,p2=(yz*xx-xz*xy)/det,zw=(x,y)=>mz+p1*(x-mx)+p2*(y-my);
+      let e=0;P.forEach(([x,y,z])=>{e+=(z-zw(x,y))**2;});if(Math.sqrt(e/np)>0.18)return; /* not one plane: two roofs, left as they are */
+      const gu=p1*t[0]+p2*t[1],gv=p1*n[0]+p2*n[1],zf=(u,v)=>zw(...XY(u,v))-Z0;
+      if(Math.max(Math.abs(gu),Math.abs(gv))<0.04){l.type='flat';l.x=[zf((a+b)/2,(c+d)/2)];}
+      else if(Math.abs(gu)>=Math.abs(gv)){l.type='shedU';l.x=[zf(a,(c+d)/2),gu];}else{l.type='shedV';l.x=[zf((a+b)/2,c),gv];}
+      const pw=[zf(0,0),gu,gv];l.pw=pw;l.pred=(u,v)=>pw[0]+pw[1]*u+pw[2]*v;});}catch(e){}
   /* quality: median |laser - model| over the building */
   const ds=[];pts.forEach(p=>{const lf=leaves.find(l=>inside(l.R,p[0],p[1]));const m=lf?lf.pred(p[0],p[1]):0;const [x,y]=XY(p[0],p[1]);if(p[2]===p[2]&&(p[2]>2||m>2)&&nearRing(x,y,1))ds.push(Math.abs(p[2]-m));});ds.sort((a,b)=>a-b);
   const rms=ds.length?ds[ds.length>>1]:9;
@@ -4135,7 +4150,7 @@ function qsModel5(R,opt){opt=opt||{};
 /* ===== Quartier Soleil v5: the building is a union of straight volumes (the model's rectangles, in the axis frame of its walls).
    The construction rules act on their parameters; roof, walls and outline are drawn from them directly: walls parallel or
    perpendicular by construction, ridges level, no welding, no straightening, no hole possible. ===== */
-function qsV5Pred(l){const [a,b,c,d]=l.R,x=l.x;
+function qsV5Pred(l){if(l.pw){const w=l.pw;return (u,v)=>w[0]+w[1]*u+w[2]*v;}const [a,b,c,d]=l.R,x=l.x;
   switch(l.type){
     case 'flat':return ()=>x[0];
     case 'shedU':return u=>x[0]+x[1]*(u-a);
@@ -4293,7 +4308,7 @@ function qsWorkerMain(){ /* runs inside the worker */
     if(m.kind==='data'){if(m.mnh!==undefined){S.lidarR={mnh:mkAt(m.mnh)};F=mkAt(m.F);C=mkAt(m.C);}if(m.ortho!==undefined)GD=null,S.rawOrtho=m.ortho?{raw:{width:m.ortho.width,height:m.ortho.height,getContext:()=>({getImageData:()=>({data:m.ortho.data})})},w:m.ortho.w,e:m.ortho.e,n:m.ortho.n,s:m.ortho.s}:null;return;}
     const t0=performance.now(),inF=(x,y)=>F&&Math.abs(x)<F.R-2&&Math.abs(y)<F.R-2;
     const R=Object.assign({},m.R,{Z:(x,y)=>{let z=inF(x,y)?F.at(x,y):null;if(z==null&&C)z=C.at(x,y);return z;}});
-    const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0}))});
+    const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0,pw:l.pw}))});
     const ro=S.rawOrtho,green=ro?((x,y)=>{const W=ro.raw.width,H=ro.raw.height,mpp=(ro.e-ro.w)/W,d=GD||(GD=ro.raw.getContext().getImageData().data);const px=Math.round((x-ro.w)/mpp),py=Math.round((ro.n-y)/mpp);if(px<0||py<0||px>=W||py>=H)return -99;const k=(py*W+px)*4;return 2*d[k+1]-d[k]-d[k+2];}):null;
     let staged=!m.stages;const run=o=>{try{const st=staged?null:(k,d)=>self.postMessage({id:m.id,stage:k,data:d});staged=true;const M=qsModel5(R,Object.assign({big:m.big,green,onStage:st},o));return M&&M.cells.length?pack(M,o):null;}catch(err){return null;}};
     let M=run({});if(!M||(!m.big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
