@@ -2942,10 +2942,11 @@ function qsV4One(fam){
       [A,B,C].forEach(q=>{P.push(q[0],q[1],d.zf(q[0],q[1]));N.push(d.n[0],d.n[1],d.n[2]);});});});
   /* every roof edge stands on a wall: down to the roof drawn just beyond it, else to the facade top of the block under it.
      A ridge or a hip (the neighbouring pan as high) needs none. */
-  const GP=[],GN=[],XL=[]; /* XL: wall lines off the outlines (a step between two roofs), for the windows */
-  const quad=(a,b,za0,zb0,za1,zb1,nx,ny,ua,ub,vz,k)=>{if(za1-za0<0.03&&zb1-zb0<0.03)return;if((b[1]-a[1])*nx-(b[0]-a[0])*ny<0){[a,b]=[b,a];[za0,zb0]=[zb0,za0];[za1,zb1]=[zb1,za1];[ua,ub]=[ub,ua];}
+  const XL=[]; /* XL: wall lines off the outlines (a step between two roofs), for the windows */
+  const GW=new Map(); /* wall pieces per block they stand on: a click on them selects that block (its storeys, its facades) */
+  const quad=(a,b,za0,zb0,za1,zb1,nx,ny,own)=>{const GP=GW.get(own)||(GW.set(own,[]),GW.get(own));if(za1-za0<0.03&&zb1-zb0<0.03)return;if((b[1]-a[1])*nx-(b[0]-a[0])*ny<0){[a,b]=[b,a];[za0,zb0]=[zb0,za0];[za1,zb1]=[zb1,za1];[ua,ub]=[ub,ua];}
     const t=[[a[0],a[1],za0],[b[0],b[1],zb0],[b[0],b[1],zb1],[a[0],a[1],za1]];
-    [[0,1,2],[0,2,3]].forEach(q=>q.forEach(i=>{GP.push(...t[i]);GN.push(nx,ny,0);}));};
+    [[0,1,2],[0,2,3]].forEach(q=>q.forEach(i=>{GP.push(t[i],[nx,ny]);}));};
   /* the outline segment a point lies on (for windows in line with the facade below) */
   const onRing=(x,y)=>{for(const o of fam){const r=o.userData.rings[0];for(let k=0;k<r.length;k++){const a=r[k],b=r[(k+1)%r.length],ex=b.x-a.x,ey=b.y-a.y,L=Math.hypot(ex,ey);if(L<0.05)continue;const t=((x-a.x)*ex+(y-a.y)*ey)/(L*L);if(t<-0.01||t>1.01)continue;if(Math.abs((x-a.x)*ey-(y-a.y)*ex)/L<0.08)return {o,a,L,ex:ex/L,ey:ey/L};}}return null;};
   drawn.forEach(d=>{[d.outer,...d.holes].forEach(R=>{for(let e=0;e<R.length;e++){const a=R[e],b=R[(e+1)%R.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<0.05)continue;
@@ -2959,7 +2960,7 @@ function qsV4One(fam){
       /* a block whose outline this wall lies on already has its facade up to its own top: start above it (no doubled face) */
       let zr=zb;fam.forEach(o=>{const r=o.userData.rings[0];for(let q=0;q<r.length;q++){const u0=r[q],u1=r[(q+1)%r.length],ex=u1.x-u0.x,ey=u1.y-u0.y,LL=Math.hypot(ex,ey);if(LL<0.05)continue;const tt=((cx-u0.x)*ex+(cy-u0.y)*ey)/(LL*LL);if(tt<-0.01||tt>1.01)continue;if(Math.abs((cx-u0.x)*ey-(cy-u0.y)*ex)/LL<0.08){zr=Math.max(zr,topAbs(o));break;}}});
       const zlo=Math.min(zr,zA-0.03),zlo2=Math.min(zr,zB-0.03);
-      quad(A,B,zlo,zlo2,zA,zB,nx,ny);}}});});
+      quad(A,B,zlo,zlo2,zA,zB,nx,ny,under);}}});});
   if(!P.length)return false;
   /* swap: old laser pans and IGN roof triangles out, blocks cut at their new wall top, new pans and walls in */
   const goneObs=new Set();
@@ -2976,7 +2977,10 @@ function qsV4One(fam){
   const z0=main.position.z, mk=(P,N,mat,gable)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
     const m=new THREE.Mesh(g,mat);m.castShadow=m.receiveShadow=true;m.position.z=-z0;if(gable)m.userData.gable=true;main.add(m);return m;};
   const roofM=mk(P,N,ROOF[u.roofKey||'autre']||ROOF.autre,false), adds=[roofM];
-  if(GP.length)adds.push(mk(GP,GN,new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0],side:THREE.DoubleSide}),true));
+  {const gmat=new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0],side:THREE.DoubleSide});
+   GW.forEach((L,o)=>{const Pp=[],Nn=[];for(let i=0;i<L.length;i+=2){Pp.push(...L[i]);Nn.push(L[i+1][0],L[i+1][1],0);}
+     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(Pp,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(Nn,3));
+     const m=new THREE.Mesh(g,gmat);m.castShadow=m.receiveShadow=true;m.position.z=-o.position.z;m.userData.gable=true;o.add(m);adds.push(m);});}
   /* edges: creases of the new roof (ridges, hips, outline) and of the upper walls, added to the main block's lines */
   const ex=[]; [roofM].forEach(m=>{const eg=new THREE.EdgesGeometry(m.geometry,15);ex.push(eg.attributes.position.array.slice());eg.dispose();});
   {let tot=main.userData.edgeArr.length;ex.forEach(a=>tot+=a.length);const all=new Float32Array(tot);all.set(main.userData.edgeArr);let o=main.userData.edgeArr.length;ex.forEach(a=>{all.set(a,o);o+=a.length;});main.userData.edgeArr=all;}
@@ -3057,16 +3061,18 @@ function qsWindows(main){const V=main.userData._v4;if(!V)return;const {fam,XL}=V
      let s0=0;for(let k=1;k<=n;k++){if(k===n||Math.abs(T[k+1]-T[k])>0.8){const t0=l.L*s0/n,t1=l.L*(k===n?n:k+0.5)/n;if(t1-t0>=2.2)out.push({a:{x:l.a.x+ex*t0,y:l.a.y+ey*t0},b:{x:l.a.x+ex*t1,y:l.a.y+ey*t1},L:t1-t0,nx:l.nx,ny:l.ny});s0=k+0.5;}}});
    lines.length=0;lines.push(...out);}
   lines.forEach(l=>{const {a,b,L,nx,ny}=l,ex=(b.x-a.x)/L,ey=(b.y-a.y)/L,bays=Math.max(1,Math.round(L/3.5)),w=L/bays;
-    for(let i=0;i<bays;i++){const t0=i*w+w*44/140,t1=i*w+w*96/140,pt=t=>[a.x+ex*t,a.y+ey*t],pm=pt((t0+t1)/2);
-      const o=inFam(pm[0]-nx*0.3,pm[1]-ny*0.3)||main,{base,sh}=qsRows(o); /* the storeys of the block behind this bay */
-      const S3=Math.max(2.7,Math.min(3.3,sh)),HW=S3*0.5; /* a storey 2.7–3.3 m, its window half as tall (the wall texture's proportions) */
-      const wt=Math.min(...[t0+0.1,(t0+t1)/2,t1-0.1].map(t=>{const [x,y]=pt(t);return topAt(x-nx*0.06,y-ny*0.06);})); /* the wall top over this window (eave, gable slope) */
-      for(let r=0;r<12;r++){const fl=base+S3*r,zt0=fl+S3*0.75;if(zt0-0.45>maxTop)break;stat.cells++;
-        /* the lintel sits just under the eave: a low wall brings the window down (up to 45 cm), keeping a sill 60 cm above the floor */
-        const zt=Math.min(zt0,wt-0.25),zb=Math.max(zt-HW,fl+0.7),zc=(zb+zt)/2;const [cx,cy]=pt((t0+t1)/2); /* a lower window keeps its sill: it gets shorter, down to 1 m */
+    for(let i=0;i<bays;i++){const ww=Math.min(1.3,w-0.5);if(ww<0.6)continue;const tc=i*w+w/2,t0=tc-ww/2,t1=tc+ww/2,pt=t=>[a.x+ex*t,a.y+ey*t],pm=pt(tc),[cx,cy]=pm;
+      /* the levels of the window study, for the block behind this bay: same floor, storey height, count and lift above the street (placeMarker) */
+      const o=inFam(cx-nx*0.3,cy-ny*0.3)||main,ub=o.userData;let fb,sh,nF;try{fb=floorBase(ub);sh=storeyH(ub);nF=nFloors(ub);}catch(e){continue;}
+      const gz=groundAt({x:cx,y:cy},{x:nx,y:ny});
+      const wt=Math.min(...[t0+0.1,tc,t1-0.1].map(t=>{const [x,y]=pt(t);return topAt(x-nx*0.06,y-ny*0.06);})); /* the wall top over this window (eave, gable slope) */
+      for(let r=0;r<nF;r++){stat.cells++;
+        if(r<nF-1&&fb+r*sh+1.5<gz+WIN_SILL){stat.ground++;rec0(cx,cy,r,0,'g');continue;} /* buried level: the study moves up a level */
+        const zc0=Math.max(fb+r*sh+1.5,gz+WIN_CLEAR),zt0=zc0+0.75; /* the study's window centre; the window 1.5 m tall around it */
+        /* the lintel sits just under the eave: a low wall brings the window top down (up to 45 cm), the sill stays (shorter window, ≥ 1 m) */
+        const zt=Math.min(zt0,wt-0.25),zb=zc0-0.75,zc=(zb+zt)/2;
         if(zt<zt0-0.45||zt-zb<1.0){stat.wall++;rec0(cx,cy,r,zb,'low');continue;}
         const rec=w=>rec0(cx,cy,r,zb,w);
-        if(zc<groundAt({x:cx,y:cy},{x:nx,y:ny})+WIN_CLEAR){stat.ground++;rec('g');continue;}
         let ok=true;for(const t of [t0+0.08,(t0+t1)/2,t1-0.08]){const [x,y]=pt(t);for(const z of [zb-0.1,zc,zt+0.12])if(!wallAt(x,y,z,nx,ny)){ok=false;break;}if(!ok)break;}
         if(!ok){stat.wall++;rec('w');continue;}
         for(const t of [t0,t1]){const [x,y]=pt(t);if(!airAt(x+nx*0.35,y+ny*0.35,zb-0.05)){ok=false;break;}}
