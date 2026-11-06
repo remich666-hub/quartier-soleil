@@ -3615,7 +3615,7 @@ function qsV5Build(M,fam,main){const L5=M.L5;if(!L5||!PCSYNC)return null;const P
   const drawn=[];
   F.forEach(f=>{const sub=[];F.forEach(g=>{if(g.pi===f.pi||g.bb[0]>=f.bb[1]||g.bb[1]<=f.bb[0]||g.bb[2]>=f.bb[3]||g.bb[3]<=f.bb[2])return;
       const H=MK.clipHalf(g.Q,P=>f.z(P[0],P[1])+0.005-g.z(P[0],P[1]));if(H.length>=3&&Math.abs(MK.area(H))>1e-4)sub.push([H.map(([u,v])=>[r3(u),r3(v)])]);});
-    let parts=[[f.Q]];if(sub.length){try{parts=PC.difference([f.Q],...sub);}catch(e){try{const rr=v=>Math.round(v*100)/100;parts=PC.difference([f.Q.map(p=>p.map(rr))],...sub.map(s=>[s[0].map(p=>p.map(rr))]));}catch(e2){parts=[[f.Q]];}}}
+    const Qc=f.Q.concat([f.Q[0]]);let parts=[[Qc]];if(sub.length){try{parts=PC.difference([f.Q],...sub);}catch(e){try{const rr=v=>Math.round(v*100)/100;parts=PC.difference([f.Q.map(p=>p.map(rr))],...sub.map(s=>[s[0].map(p=>p.map(rr))]));}catch(e2){parts=[[Qc]];}}}
     const gx=f.pa*L5.XY(1,0)[0]+f.pb*L5.XY(0,1)[0],gy=f.pa*L5.XY(1,0)[1]+f.pb*L5.XY(0,1)[1],nl=Math.hypot(gx,gy,1),n=[-gx/nl,-gy/nl,1/nl];
     const t=L5.XY(1,0),nn=L5.XY(0,1),toUV=(x,y)=>{const X=x-dx,Y=y-dy;return [X*t[0]+Y*t[1],X*nn[0]+Y*nn[1]];};
     const zf=(x,y)=>{const [u,v]=toUV(x,y);return zW(f.z(u,v));};
