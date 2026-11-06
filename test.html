@@ -3162,7 +3162,8 @@ function roofModelV4(R,opt){opt=opt||{};
 
 
 
-window.__S=S;window.__QV4=QV4;window.__fam=family;
+window.__S=S;window.__fam=family;window.__cam=cam;window.__shot=()=>{applyCam();renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.9);};
+window.__QV4=QV4;
 
 })();
 </script>
