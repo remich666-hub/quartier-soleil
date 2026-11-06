@@ -3616,9 +3616,9 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   { float d=length(vQsW-uQsC)/uQsR;
     vec3 warm=vec3(1.0,0.66,0.50),pink=vec3(0.97,0.62,0.72),lav=vec3(0.76,0.74,0.98);
     vec3 tint=d<0.6?mix(warm,pink,d/0.6):mix(pink,lav,clamp((d-0.6)/1.4,0.0,1.0));
-    float a=uQsK*0.42*exp(-d*1.5);
-    float dots=step(qsH(floor(gl_FragCoord.xy)),uQsK*0.55*exp(-d*1.9));
-    gl_FragColor.rgb=mix(gl_FragColor.rgb,tint,clamp(a+dots*0.38,0.0,0.85)); }
+    float a=uQsK*0.2*exp(-d*1.9);
+    float dots=step(qsH(floor(gl_FragCoord.xy)),uQsK*0.32*exp(-d*2.4));
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,tint,clamp(a+dots*0.28,0.0,0.6)); }
 `;
   const patch=m=>{if(!m||m._qsGlow||!m.isMeshLambertMaterial)return;m._qsGlow=1;const prev=m.onBeforeCompile,pk=m.customProgramCacheKey;
     m.onBeforeCompile=(sh,r)=>{if(prev)prev.call(m,sh,r);Object.assign(sh.uniforms,QSU);
@@ -3632,7 +3632,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   try{const _add=scene.add.bind(scene);scene.add=function(...a){const r=_add(...a);a.forEach(o=>{try{o.traverse(c=>{if(c.isMesh){const ms=Array.isArray(c.material)?c.material:[c.material];ms.forEach(m=>{if(m&&!isHouse(m))patch(m);});}});}catch(e){}});return r;};}catch(e){}
   /* centre on the studied building; strength follows the hour (softer at night) */
   setInterval(()=>{try{const m=S.building||S.target;if(m&&m.parent){const box=new THREE.Box3();family(m).forEach(o=>box.expandByObject(o));const c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
-      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(70,Math.max(sz.x,sz.y)*3.5);}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;}
+      QSU.uQsC.value.set(c.x,c.y);QSU.uQsR.value=Math.max(55,Math.max(sz.x,sz.y)*2.8);}else{QSU.uQsC.value.set(0,0);QSU.uQsR.value=90;}
     const up=sun.position.z-sun.target.position.z>0;QSU.uQsK.value=(typeof photoMode!=='undefined'&&photoMode)?0:(up?1:0.6);}catch(e){}},400);
   window.__QSU=QSU;
 })();
