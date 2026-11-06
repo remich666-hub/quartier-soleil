@@ -423,7 +423,7 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
         const xl=t=>g.gx0+off+g.gw*c0+sh((t-py0)/(py1-py0)),xr=t=>g.gx0+off+g.gw*c1+sh((t-py0)/(py1-py0));
         ctx.beginPath();ctx.moveTo(xl(y0),y0);ctx.lineTo(xr(y0),y0);ctx.lineTo(xr(y1)+g.gw*0.1*r1,y1);ctx.lineTo(xl(y1)-g.gw*0.1*r1,y1);ctx.closePath();ctx.fill();}));ctx.restore();}
     /* soft shadow of the frame on the wall */
-    ctx.save();outerPath();ctx.shadowColor=dk?'rgba(0,0,0,.55)':'rgba(40,50,110,.28)';ctx.shadowBlur=40;ctx.shadowOffsetY=18;ctx.fillStyle=dk?'#0a0d1c':'#1c2140';ctx.fill();ctx.restore();
+    ctx.save();outerPath();ctx.shadowColor=dk?'rgba(0,0,0,.55)':'rgba(40,50,110,.28)';ctx.shadowBlur=40;ctx.shadowOffsetY=18;ctx.fillStyle=dk?'#1a1f40':'#1c2140';ctx.fill();ctx.restore();
     /* the sky through the glass */
     ctx.save();glassPath();ctx.clip();
     let gr=ctx.createLinearGradient(0,g.y0,0,g.gy0+g.gh);gr.addColorStop(0,rgb(top));gr.addColorStop(1,rgb(bot));ctx.fillStyle=gr;ctx.fillRect(g.x0,g.y0,g.ww,g.wh);
@@ -442,11 +442,11 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
     ctx.globalCompositeOperation='overlay';ctx.globalAlpha=dk?0.16:0.13;ctx.fillStyle=pat;ctx.fillRect(g.x0,g.y0,g.ww,g.wh);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
     ctx.restore();
     /* the frame: mullion and two bars, night blue, their inner edges catching the warm light */
-    ctx.save();outerPath();glassPath(true);ctx.fillStyle=dk?'#0a0d1c':'#1c2140';ctx.fill('evenodd');
+    ctx.save();outerPath();glassPath(true);ctx.fillStyle=dk?'#1a1f40':'#1c2140';ctx.fill('evenodd');
     const mw=g.fr*0.55,cx=g.x0+g.ww/2;ctx.fillRect(cx-mw/2,g.y0+g.arch*0.35,mw,g.wh-g.arch*0.35);ctx.fillRect(g.gx0,g.gy0+g.gh*0.47,g.gw,mw);ctx.fillRect(g.gx0,g.y0+g.arch,g.gw,mw*0.9);
     const rim=sm(-0.05,0.3,a);if(rim>0){ctx.globalAlpha=0.55*rim;ctx.strokeStyle=rgb(warm);ctx.lineWidth=1.5;const sideL=sunX<cx;ctx.beginPath();if(sideL){ctx.moveTo(g.gx0+g.gw,g.y0+g.arch);ctx.lineTo(g.gx0+g.gw,g.gy0+g.gh);ctx.moveTo(cx-mw/2,g.y0+g.arch);ctx.lineTo(cx-mw/2,g.gy0+g.gh);}else{ctx.moveTo(g.gx0,g.y0+g.arch);ctx.lineTo(g.gx0,g.gy0+g.gh);ctx.moveTo(cx+mw/2,g.y0+g.arch);ctx.lineTo(cx+mw/2,g.gy0+g.gh);}ctx.stroke();ctx.globalAlpha=1;}
     /* sill */
-    ctx.fillStyle=dk?'#0a0d1c':'#1c2140';ctx.fillRect(g.x0-g.fr*0.6,g.sill-g.fr*0.2,g.ww+g.fr*1.2,g.fr*0.8);
+    ctx.fillStyle=dk?'#1a1f40':'#1c2140';ctx.fillRect(g.x0-g.fr*0.6,g.sill-g.fr*0.2,g.ww+g.fr*1.2,g.fr*0.8);
     ctx.restore();
     /* the frame's edge dissolving into grain, warmer on the sun's side */
     for(const [px,py,nx,r] of dust){const toward=(px-sunX)*0+(nx*(sunX<cx?-1:1));const w=Math.max(0,toward)*rim;
