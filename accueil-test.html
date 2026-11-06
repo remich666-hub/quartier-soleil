@@ -372,77 +372,105 @@ function goTool(g){try{sessionStorage.setItem('qs-pending',g.label);sessionStora
 const homeAC=qsAddressAC(document.getElementById('addr'),document.getElementById('addrForm'),goTool);
 document.getElementById('addrForm').addEventListener('submit',async e=>{e.preventDefault();try{const g=await homeAC.resolve();if(g)goTool(g);}catch(err){const i=document.getElementById('addr');i.setCustomValidity(err.message);i.reportValidity();setTimeout(()=>i.setCustomValidity(''),2500);}});
 
-/* hero: a plain rectangular window, and through it only the light — the sun crossing the day, then the night —
-   in soft gradients and grain, the sun dissolving into particles like the light of the reference */
+/* hero: a window and only the light through it, drawn entirely in fine grain like the reference —
+   every edge is a stochastic dissolve (a pixel belongs to a shape when its soft mask beats a fixed random threshold),
+   the light spills out as a grainy halo on its own side only, and the window casts a patch of light below it */
 (function(){
   const cv=document.getElementById('hero3d'),stage=document.getElementById('stage');if(!cv||!stage)return;
   const ctx=cv.getContext('2d');if(!ctx)return;
   const clockT=document.getElementById('clockT'),clockL=document.getElementById('clockL');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const dark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches;};
-  let W=0,H=0,DPR=1,G={},pat=null,sunDots=[],moonDots=[],edge=[];
-  const noise=document.createElement('canvas');noise.width=noise.height=192;{const g=noise.getContext('2d'),im=g.createImageData(192,192);for(let i=0;i<im.data.length;i+=4){const v=Math.random()*255;im.data[i]=im.data[i+1]=im.data[i+2]=v;im.data[i+3]=255;}g.putImageData(im,0,0);}
-  const gauss=()=>{let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);};
+  let W=0,H=0,DPR=1,PW=0,PH=0,img=null,buf=null,T1=null,T2=null,T3=null,G={};
   function build(){
-    pat=ctx.createPattern(noise,'repeat');try{pat.setTransform(new DOMMatrix().scale(1/DPR));}catch(e){} /* one noise pixel per screen pixel: a fine grain */
-    const ww=Math.min(W*0.7,H*0.66),wh=ww*1.22,x0=(W-ww)/2,y0=(H-wh)/2-H*0.03,fr=0;
-    G={x0,y0,ww,wh,fr,gx0:x0+fr,gy0:y0+fr,gw:ww-2*fr,gh:wh-2*fr};
-    /* the sun's grain: a cloud of particles, dense at the core, thinning outward (unit radius, scaled at draw time) */
-    sunDots=[...Array(5200)].map(()=>{const r=Math.abs(gauss())*0.55+Math.random()*0.15,a=Math.random()*6.283;return [Math.cos(a)*r,Math.sin(a)*r,Math.random(),Math.random()];});
-    moonDots=[...Array(2600)].map(()=>{const r=Math.abs(gauss())*0.5,a=Math.random()*6.283;return [Math.cos(a)*r,Math.sin(a)*r,Math.random()];});
-    /* the frame's outer edge dissolving into grain */
-    edge=[];const per=2*(ww+wh);for(let i=0;i<9000;i++){let d=Math.random()*per,px,py,nx=0,ny=0;
-      if(d<ww){px=x0+d;py=y0;ny=-1;}else if((d-=ww)<wh){px=x0+ww;py=y0+d;nx=1;}else if((d-=wh)<ww){px=x0+ww-d;py=y0+wh;ny=1;}else{d-=ww;px=x0;py=y0+wh-d;nx=-1;}
-      const o=-Math.log(1-Math.random()*0.999)*ww*0.06-0.5;edge.push([px+nx*o,py+ny*o,nx,Math.random()]);}
+    PW=cv.width;PH=cv.height;img=ctx.createImageData(PW,PH);buf=new Uint32Array(img.data.buffer);
+    const n=PW*PH;T1=new Float32Array(n);T2=new Float32Array(n);T3=new Float32Array(n);
+    for(let i=0;i<n;i++){T1[i]=Math.random();T2[i]=Math.random();T3[i]=Math.random();}
+    const ww=Math.min(W*0.56,H*0.52),wh=ww*1.22,x0=(W-ww)/2,y0=H*0.07;
+    G={x0:x0*DPR,y0:y0*DPR,x1:(x0+ww)*DPR,y1:(y0+wh)*DPR,ww:ww*DPR,wh:wh*DPR};
   }
   const resize=()=>{const r=stage.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);W=r.width;H=r.height;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);build();};
   /* the sky by sun altitude (a: -1 deep night … 1 noon): pale lavender by day, rose and orange low, night blue */
-  const K=[[-1,'#080c20','#121735'],[-.25,'#0f1430','#241f48'],[-.08,'#2a3168','#d9758c'],[0,'#6a73b8','#f39a72'],[.12,'#a3afe0','#f7c4a8'],[.35,'#c3cdee','#efdfe8'],[1,'#ccd5f1','#eef0f8']];
+  const K=[[-1,'#080c20','#141a3c'],[-.25,'#0f1430','#262050'],[-.08,'#2a3168','#d9758c'],[0,'#6a73b8','#f39a72'],[.12,'#a3afe0','#f7c4a8'],[.35,'#c3cdee','#efdfe8'],[1,'#ccd5f1','#f1e6ee']];
   const hx=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
-  const mix=(a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*t));
-  const rgb=(c,al=1)=>`rgba(${c[0]},${c[1]},${c[2]},${al})`;
+  const mix=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
   const sm=(e0,e1,x)=>{const t=Math.max(0,Math.min(1,(x-e0)/(e1-e0)));return t*t*(3-2*t);};
   const sky=a=>{let i=0;while(i<K.length-2&&a>K[i+1][0])i++;const s=sm(K[i][0],K[i+1][0],a);return [mix(hx(K[i][1]),hx(K[i+1][1]),s),mix(hx(K[i][2]),hx(K[i+1][2]),s)];};
+  const px=(r,g,b,a)=>((a<0?0:a>255?255:a|0)<<24)|((b<0?0:b>255?255:b|0)<<16)|((g<0?0:g>255?255:g|0)<<8)|(r<0?0:r>255?255:r|0);
+  /* soft mask from a signed distance d (negative inside) and a softness s: 1 deep inside, 0 far outside */
+  const soft=(d,s)=>d>0?0.5*Math.exp(-d/s):1-0.5*Math.exp(d/s);
   function draw(hour){
-    const g=G,dk=dark(),frame=dk?'#1a1f40':'#161a33';
+    const g=G,D=DPR,dk=dark();
     const day=(hour-6)/15,a=day>=0&&day<=1?Math.sin(Math.PI*day):-Math.min(1,(day<0?-day:day-1)*5);
     const [top,bot]=sky(a),dd=Math.max(0,Math.min(1,day));
-    const sunX=g.gx0+g.gw*(0.12+0.76*dd),sunY=g.gy0+g.gh*(0.92-0.62*Math.max(-0.1,a));
-    const warm=mix([255,112,52],[255,196,150],sm(0.1,0.7,a)),pink=[236,104,146],lit=sm(-0.15,0.15,a);
-    ctx.setTransform(DPR,0,0,DPR,0,0);ctx.clearRect(0,0,W,H);
-    /* the light spills out of the window as a halo on the wall, around the sun (or the moon) only */
-    const nt=sm(-0.1,-0.45,a),mx=g.gx0+g.gw*0.6,my=g.gy0+g.gh*0.36;
-    if(lit>0){const R=g.ww*1.15;const rg=ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,R);rg.addColorStop(0,rgb(warm,0.55*lit));rg.addColorStop(0.35,rgb(warm,0.22*lit));rg.addColorStop(0.65,rgb(pink,0.1*lit));rg.addColorStop(1,rgb(pink,0));ctx.fillStyle=rg;ctx.fillRect(0,0,W,H);}
-    if(nt>0){const R=g.ww*0.9;const rg=ctx.createRadialGradient(mx,my,0,mx,my,R);rg.addColorStop(0,`rgba(170,180,250,${0.35*nt})`);rg.addColorStop(0.5,`rgba(150,160,235,${0.12*nt})`);rg.addColorStop(1,'rgba(150,160,235,0)');ctx.fillStyle=rg;ctx.fillRect(0,0,W,H);}
-    /* the sky */
-    ctx.save();ctx.beginPath();ctx.rect(g.gx0,g.gy0,g.gw,g.gh);ctx.clip();
-    let gr=ctx.createLinearGradient(0,g.gy0,0,g.gy0+g.gh);gr.addColorStop(0,rgb(top));gr.addColorStop(1,rgb(bot));ctx.fillStyle=gr;ctx.fillRect(g.gx0,g.gy0,g.gw,g.gh);
-    /* the sun: a wide warm haze, then its grain, dense at the core and scattering outward */
-    if(lit>0){const R=g.gw*1.25;let rg=ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,R);rg.addColorStop(0,rgb(warm,0.75*lit));rg.addColorStop(0.3,rgb(warm,0.32*lit));rg.addColorStop(0.6,rgb(pink,0.16*lit));rg.addColorStop(1,rgb(pink,0));ctx.fillStyle=rg;ctx.fillRect(g.gx0,g.gy0,g.gw,g.gh);
-      const S=g.gw*0.62,core=mix(warm,[255,240,226],0.45),OR=g.gw*0.2;
-      for(const [dx,dy,r,c] of sunDots){const d=Math.hypot(dx,dy),al=lit*Math.max(0,1-d*1.05)*(0.3+0.6*r);if(al<0.02||d<0.28)continue;ctx.fillStyle=rgb(c<0.35?pink:warm,al);const s=(r<0.4?2:1.2)/DPR;ctx.fillRect(sunX+dx*S,sunY+dy*S,s,s);}
-      rg=ctx.createRadialGradient(sunX-OR*0.25,sunY-OR*0.3,OR*0.1,sunX,sunY,OR*1.15);rg.addColorStop(0,`rgba(255,246,236,${lit})`);rg.addColorStop(0.55,rgb(core,lit));rg.addColorStop(0.85,rgb(warm,0.85*lit));rg.addColorStop(1,rgb(warm,0));ctx.fillStyle=rg;ctx.beginPath();ctx.arc(sunX,sunY,OR*1.15,0,7);ctx.fill();}
-    /* the night: a cool, grainy moonlight, nothing else */
-    if(nt>0){const S=g.gw*0.5,MR=g.gw*0.17;let rg=ctx.createRadialGradient(mx,my,0,mx,my,g.gw*0.7);rg.addColorStop(0,`rgba(150,160,230,${0.28*nt})`);rg.addColorStop(1,'rgba(150,160,230,0)');ctx.fillStyle=rg;ctx.fillRect(g.gx0,g.gy0,g.gw,g.gh);
-      for(const [dx,dy,r] of moonDots){const d=Math.hypot(dx,dy),al=nt*Math.max(0,1-d*1.3)*(0.25+0.55*r);if(al<0.02||d<0.3)continue;ctx.fillStyle=`rgba(214,220,255,${al})`;ctx.fillRect(mx+dx*S,my+dy*S,1.6/DPR,1.6/DPR);}
-      rg=ctx.createRadialGradient(mx-MR*0.3,my-MR*0.3,MR*0.1,mx,my,MR);rg.addColorStop(0,`rgba(246,247,255,${nt})`);rg.addColorStop(0.75,`rgba(214,220,250,${nt})`);rg.addColorStop(1,`rgba(190,198,245,${0.0})`);ctx.fillStyle=rg;ctx.beginPath();ctx.arc(mx,my,MR,0,7);ctx.fill();}
-    /* grain over the whole sky */
-    ctx.globalCompositeOperation='overlay';ctx.globalAlpha=dk?0.2:0.16;ctx.fillStyle=pat;ctx.fillRect(g.gx0,g.gy0,g.gw,g.gh);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
-    ctx.restore();
-    /* the frame's edge dissolving into grain, warmer on the sun's side */
-    const LX=lit>=nt?sunX:mx,LY=lit>=nt?sunY:my,LI=Math.max(lit,nt),LS=g.ww*0.28,cold=[200,208,255];
-    for(const [px,py,nx,r] of edge){const w=LI*Math.exp(-Math.pow(Math.hypot(px-LX,py-LY)/LS,1.6));if(r>w)continue;const t=Math.max(0,Math.min(1,(py-g.y0)/g.wh));
-      ctx.fillStyle=lit>=nt?(r<0.35*w?rgb(pink,0.75):rgb(mix(warm,mix(top,bot,t),0.25),0.85)):rgb(mix(cold,mix(top,bot,t),0.3),0.8);ctx.fillRect(px,py,(r<0.3?2:1.2)/DPR,(r<0.3?2:1.2)/DPR);}
+    const lit=sm(-0.15,0.15,a),nt=sm(-0.1,-0.45,a),sunUp=lit>=nt;
+    const sx=g.x0+g.ww*(0.14+0.72*dd),sy=g.y0+g.wh*(0.9-0.6*Math.max(-0.1,a));
+    const mx=g.x0+g.ww*0.6,my=g.y0+g.wh*0.34;
+    const warm=mix([255,112,52],[255,190,140],sm(0.1,0.7,a)),pink=[238,104,150],cold=[196,204,255];
+    const LX=sunUp?sx:mx,LY=sunUp?sy:my,LI=sunUp?lit:nt*0.6,LC=sunUp?warm:cold,LC2=sunUp?pink:[170,160,240];
+    const OR=g.ww*(sunUp?0.2:0.16),R=g.ww*0.95,LS=g.ww*0.36;
+    /* the patch the window casts below it, sheared away from the light */
+    const cx=(g.x0+g.x1)/2,py0=g.y1+H*D*0.035,py1=Math.min(PH-2,py0+H*D*0.2),sh=-(LX-cx)/(g.ww/2)*g.ww*0.6,PI=LI*(sunUp?0.75:0.5);
+    const core=[255,248,238],moonC=[236,240,255];
+    const wallA=dk?1:0.85;
+    /* the smooth fields are evaluated once per 2×2 block; the grain (the threshold test) stays per pixel */
+    const pal=sunUp?[255,196,170]:[200,206,255];
+    for(let y=0;y<PH;y+=2){
+      const yc=y+0.5,sv=Math.max(0,Math.min(1,(yc-g.y0)/g.wh)),skyR=top[0]+(bot[0]-top[0])*sv,skyG=top[1]+(bot[1]-top[1])*sv,skyB=top[2]+(bot[2]-top[2])*sv;
+      const inRowsWin=yc>g.y0-g.ww*0.3&&yc<g.y1+g.ww*0.3;
+      const pv=(yc-py0)/(py1-py0),pvc=Math.max(0,pv),inPatchRow=PI>0.01&&pv>-0.3&&pv<1.3;
+      const pxl=g.x0+sh*pvc-g.ww*0.12*pvc,pxr=g.x1+sh*pvc+g.ww*0.12*pvc,psoft=2*D+pvc*g.ww*0.06,pfade=1-0.55*Math.min(1,pvc);
+      const dy=yc-LY,dy2=dy*dy,rows=y+1<PH?2:1;
+      for(let x=0;x<PW;x+=2){
+        const xc=x+0.5,dx=xc-LX,dl=Math.sqrt(dx*dx+dy2);
+        let mW=0;
+        if(inRowsWin){
+          const ex=Math.max(g.x0-xc,xc-g.x1),ey=Math.max(g.y0-yc,yc-g.y1);
+          const d=ex>0||ey>0?Math.hypot(Math.max(ex,0),Math.max(ey,0)):Math.max(ex,ey);
+          if(d<-g.ww*0.3)mW=1;else if(d<g.ww*0.6){const u=dl/LS,w=LI*Math.exp(-u*u),s=0.35*D+w*g.ww*0.07;mW=soft(d,s);}
+        }
+        /* inside: sky + haze + disc */
+        let wr=0,wg=0,wb=0,hk=0,mD=0,dr=0,dg=0,db=0;
+        if(mW>0.001){
+          wr=skyR;wg=skyG;wb=skyB;const q=dl/OR;
+          hk=LI*Math.exp(-q*q*0.12)*(sunUp?0.85:0.45)*0.8;
+          if(sunUp&&q>1){const pk=lit*Math.exp(-(q-1)*0.9)*0.35;wr+=(pink[0]-wr)*pk;wg+=(pink[1]-wg)*pk;wb+=(pink[2]-wb)*pk;}
+          if(LI>0.02&&q<2.5){mD=soft((q-1)*OR,OR*0.22);const c=sunUp?mix(core,warm,sm(0.15,1.1,q)):mix(moonC,cold,sm(0.3,1.1,q));dr=c[0];dg=c[1];db=c[2];}
+        }
+        /* outside: halo + patch */
+        let gl=0,gr=0,gg2=0,gb=0,pm=0;
+        if(mW<0.999){
+          if(LI>0.01){const f=dl/R;gl=LI*Math.exp(-f*f*3.2);if(gl>0.004){const c=Math.min(1,f*1.6);gr=LC[0]+(LC2[0]-LC[0])*c;gg2=LC[1]+(LC2[1]-LC[1])*c;gb=LC[2]+(LC2[2]-LC[2])*c;}else gl=0;}
+          if(inPatchRow){const d=Math.max(pxl-xc,xc-pxr,py0-yc,yc-py1);if(d<psoft*8)pm=soft(d,psoft)*pfade;}
+        }
+        const cols=x+1<PW?2:1;
+        for(let oy=0;oy<rows;oy++)for(let ox=0;ox<cols;ox++){
+          const i=(y+oy)*PW+x+ox,t1=T1[i],t2=T2[i];
+          if(mW>t1){
+            let r=wr,g_=wg,b=wb;const k=hk*(0.7+0.6*t2);r+=(LC[0]-r)*k;g_+=(LC[1]-g_)*k;b+=(LC[2]-b)*k;
+            if(mD>T3[i]){const k=sunUp?LI:nt;r+=(dr-r)*k;g_+=(dg-g_)*k;b+=(db-b)*k;}
+            buf[i]=px(r,g_,b,255);continue;
+          }
+          let al=0,r=gr,g_=gg2,b=gb;
+          if(gl>0)al=t2<gl*1.3?(0.45+0.55*gl)*wallA:gl*0.28;
+          if(pm>0.001){if(pm*PI>T3[i]*0.9+0.05){const pa=(0.6+0.35*t2)*PI*wallA;if(pa>al){al=pa;r=pal[0];g_=pal[1];b=pal[2];}}
+            else{const pa=pm*PI*0.22;if(pa>al){al=pa;r=LC[0];g_=LC[1];b=LC[2];}}}
+          buf[i]=al>0.004?px(r,g_,b,al*255):0;
+        }
+      }
+    }
+    ctx.putImageData(img,0,0);
     /* the clock */
     const hh=Math.floor(hour)%24,mm=Math.floor((hour%1)*60/10)*10;if(clockT)clockT.textContent=String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
     const state=a>0.04?'sun':a>-0.12?'dusk':'night';if(clockL&&clockL._s!==state+(day<0.5)){clockL._s=state+(day<0.5);clockL.textContent=state==='sun'?'Soleil sur la fenêtre':state==='dusk'?(day<0.5?'Aube':'Crépuscule'):'Nuit';clockL.classList.toggle('on',state==='sun');}
   }
-  /* one day and one night in 18 s: the night passes quicker, dawn and dusk linger (ease in / ease out) */
-  const CYCLE=18000;let t0=performance.now(),visible=true,raf=0;
+  /* one day and one night in 18 s: the night passes quicker, dawn and dusk linger (ease in / ease out); ~30 fps is plenty */
+  const CYCLE=18000;let t0=performance.now(),visible=true,raf=0,last=-1e9;
   const hourAt=p=>{const k=[[0,4],[0.1,6],[0.2,8],[0.68,19],[0.82,21.5],[1,28]];let i=0;while(i<k.length-2&&p>k[i+1][0])i++;const t=(p-k[i][0])/(k[i+1][0]-k[i][0]),e=0.5-0.5*Math.cos(Math.PI*t);return k[i][1]+(k[i+1][1]-k[i][1])*e;};
-  function frame(now){raf=0;const p=reduce?0.66:((now-t0)%CYCLE)/CYCLE;draw(hourAt(p)%24);if(visible&&!reduce)raf=requestAnimationFrame(frame);}
-  resize();addEventListener('resize',()=>{resize();if(!raf)raf=requestAnimationFrame(frame);});
+  function frame(now){raf=0;if(now-last>=32||reduce){last=now;const p=reduce?0.66:((now-t0)%CYCLE)/CYCLE;draw(hourAt(p)%24);}if(visible&&!reduce)raf=requestAnimationFrame(frame);}
+  resize();addEventListener('resize',()=>{resize();last=-1e9;if(!raf)raf=requestAnimationFrame(frame);});
   if('IntersectionObserver' in window)new IntersectionObserver(es=>{visible=es[0].isIntersecting;if(visible&&!raf)raf=requestAnimationFrame(frame);}).observe(stage);
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{last=-1e9;});
   raf=requestAnimationFrame(frame);
 })();
 
