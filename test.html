@@ -3666,8 +3666,11 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
           rc.set(w.pos,v);const h=rc.intersectObjects(S.obstacles,false);if(h.length)hit.add(h[0].object);}
         await new Promise(r=>setTimeout(r,0));if(key!==winKey)return;}
       const top=o=>{let x=o;while(x&&!S.meshes.includes(x))x=x.parent;return x;};const keepObjs=new Set();
-      hit.forEach(o=>{const b=top(o);if(b){family(b).forEach(f=>{keepObjs.add(f);f.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal)keepObjs.add(c);});});}});
+      const mine=new Set(S.addrTarget?family(S.addrTarget):[]); /* the studied house never dissolves: it keeps its own materials (night glow included) */
+      hit.forEach(o=>{const b=top(o);if(b&&!mine.has(b)){family(b).forEach(f=>{keepObjs.add(f);f.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal)keepObjs.add(c);});});}});
       setKeep([...keepObjs]);}catch(e){console.warn('blockers',e);}};
+  /* the clones follow their original (day/night colour, glow) */
+  setInterval(()=>{keepClones.forEach((c,m)=>{if(m.color&&c.color)c.color.copy(m.color);if(m.emissive&&c.emissive)c.emissive.copy(m.emissive);if('emissiveIntensity' in m)c.emissiveIntensity=m.emissiveIntensity;if(c.opacity!==m.opacity)c.opacity=m.opacity;});},250);
   setInterval(()=>{if(S.win&&S.win.pos)findBlockers();else if(kept.size){setKeep([]);winKey='';}},1500);
   /* the studied building keeps its own colours (it is the light) */
   const isHouse=m=>{try{if(m===PART_HI.roof||m===PART_HI.wall||m===PART_HI.wallT)return true;for(const k in matCache)if(k.startsWith('T:')&&matCache[k].includes(m))return true;}catch(e){}return false;};
