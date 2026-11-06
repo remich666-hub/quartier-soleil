@@ -2897,7 +2897,10 @@ async function qsV4(){
     await qsSleep(16); if(S.T!==T)return;
     if(it.fam.some(o=>!o.parent))continue; /* rebuilt meanwhile */
     if(it.fam.some(o=>QV4.used.has(o)))continue; /* a block already rebuilt with another group (an annex linked to two): once only */
-    const t0=performance.now(); try{if(qsV4One(it.fam)){QV4.n++;it.fam.forEach(o=>QV4.used.add(o));}}catch(e){console.error('v4 quartier',e);} QV4.ms+=performance.now()-t0;(QV4.times=QV4.times||[]).push([Math.round(performance.now()-t0),it.fam.length,Math.round(it.fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0))]);
+    const legacy=window.__qsOld||window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4';let pre;
+    if(!legacy){const tq=performance.now();try{pre=await qsModelReq(it.fam);}catch(e){console.error('v5 model',e);pre=null;}QV4.tWait=(QV4.tWait||0)+performance.now()-tq;
+      if(S.T!==T)return;if(it.fam.some(o=>!o.parent||QV4.used.has(o)))continue;while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;}}
+    const t0=performance.now(); try{if(qsV4One(it.fam,pre)){QV4.n++;it.fam.forEach(o=>QV4.used.add(o));}}catch(e){console.error('v4 quartier',e);} QV4.ms+=performance.now()-t0;(QV4.times=QV4.times||[]).push([Math.round(performance.now()-t0),it.fam.length,Math.round(it.fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0))]);
   }
 }
 function qsV4Model(fam){
@@ -2913,13 +2916,13 @@ function qsV4Model(fam){
   if(!(mine<cur*0.8&&cur-mine>0.08))return null;
   return {M,main};
 }
-function qsV4One(fam){
-  const tm0=performance.now();const r=qsV4Model(fam);QV4.tModel=(QV4.tModel||0)+performance.now()-tm0; if(!r)return false; const {M,main}=r, A0=S.alt0, dx=-M.sh0.dx, dy=-M.sh0.dy, u=main.userData;
+function qsV4One(fam,pre){
+  const tm0=performance.now();const r=pre!==undefined?pre:qsV4Model(fam);QV4.tModel=(QV4.tModel||0)+performance.now()-tm0; if(!r)return false; const {M,main}=r, A0=S.alt0, dx=-M.sh0.dx, dy=-M.sh0.dy, u=main.userData;
   const X=x=>x+dx, Y=y=>y+dy;
   const blockAt=(x,y)=>fam.find(o=>pointInPoly(x,y,o.userData.rings[0]));
   /* the tallest block over a point (footprints overlap: a tower inside the outline of the main block) */
   const tallAt=(x,y)=>{let b=null;fam.forEach(o=>{if(pointInPoly(x,y,o.userData.rings[0])&&(!b||o.userData.zBase+o.userData.h>b.userData.zBase+b.userData.h))b=o;});return b;};
-  const V5=window.__qsV4geo?null:qsV5Build(M,fam,main);QV4.v5log=QV4.v5log||[];if(V5)QV4.v5log.push({n:V5.n,ext:V5.ext,log:V5.log});
+  const V5=(window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4')?null:qsV5Build(M,fam,main);QV4.v5log=QV4.v5log||[];if(V5)QV4.v5log.push({n:V5.n,ext:V5.ext,log:V5.log});
   let drawn=[],OUT=null;
   if(V5){drawn=V5.drawn;OUT=V5.OUT;}else{
   const Mpolys=M.pieces.map(pc=>pc.P.map(q=>({x:q[0],y:q[1]})));
@@ -3559,6 +3562,7 @@ function qsV5Pred(l){const [a,b,c,d]=l.R,x=l.x;
     case 'gableU':return (u,v)=>x[0]-x[1]*Math.max(0,l.r-v)-x[2]*Math.max(0,v-l.r);
     case 'gableV':return u=>x[0]-x[1]*Math.max(0,l.r-u)-x[2]*Math.max(0,u-l.r);
     case 'hip':return (u,v)=>x[0]+x[1]*Math.min(u-a,b-u,v-c,d-v);
+    case 'mansard':return (u,v)=>{const dd=Math.min(u-a,b-u,v-c,d-v);return x[0]+x[1]*Math.min(dd,l.w0)+x[2]*Math.max(0,dd-l.w0);};
   }return l.pred;}
 /* the rules of the trade, on the parameters */
 function qsV5Rules(L,log){const E=1e-6,ov=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.max(a0,b0),deg=k=>Math.atan(k)*180/Math.PI;
@@ -3601,7 +3605,7 @@ function qsV5Rules(L,log){const E=1e-6,ov=(a0,a1,b0,b1)=>Math.min(a1,b1)-Math.ma
   return ext;}
 function qsV5Build(M,fam,main){const L5=M.L5;if(!L5||!PCSYNC)return null;const PC=PCSYNC,A0=S.alt0,dx=-M.sh0.dx,dy=-M.sh0.dy,log=[];
   const r3=v=>Math.round(v*1000)/1000;
-  const L=L5.leaves.map(l=>{const c=Object.assign({},l);c.R=l.R.map(r3);c.x=l.x?l.x.slice():l.x;c.pred=l.type=='mansard'?l.pred:qsV5Pred(c);return c;});
+  const L=L5.leaves.map(l=>{const c=Object.assign({},l);c.R=l.R.map(r3);c.x=l.x?l.x.slice():l.x;c.pred=qsV5Pred(c);return c;});
   const EXT=qsV5Rules(L,log),PR=L.concat(EXT);
   const W=(u,v)=>{const p=L5.XY(u,v);return [p[0]+dx,p[1]+dy];},Wd=(u,v)=>L5.XY(u,v),zW=z=>z+L5.Z0-A0;
   const env=(u,v)=>{let z=-Infinity;for(const l of PR){const R=l.R;if(u>R[0]&&u<R[1]&&v>R[2]&&v<R[3]){const q=l.pred(u,v);if(q>z)z=q;}}return z;};
@@ -3644,6 +3648,59 @@ function qsV5Build(M,fam,main){const L5=M.L5;if(!L5||!PCSYNC)return null;const P
         run=[];};
       S2.forEach(q=>{if(!q.s){flush();return;}if(run.length&&(run[0].s!==q.s||(run[0].bot===-Infinity)!==(q.bot===-Infinity)))flush();run.push(q);});flush();});});
   return {drawn,OUT,walls,XL,log,ext:EXT.length,n:L.length};}
+
+/* the roof faces of one volume (same as the model's) */
+function qsFaceSet(l){const [a,b,c,d]=l.R,p=l.pred,F=[];const q=pp=>F.push(pp.map(([u,v])=>[u,v,p(u,v)]));
+    if(l.type=='flat'||l.type=='shedU'||l.type=='shedV')q([[a,c],[b,c],[b,d],[a,d]]);
+    else if(l.type=='gableU'){q([[a,c],[b,c],[b,l.r],[a,l.r]]);q([[a,l.r],[b,l.r],[b,d],[a,d]]);}
+    else if(l.type=='gableV'){q([[a,c],[l.r,c],[l.r,d],[a,d]]);q([[l.r,c],[b,c],[b,d],[l.r,d]]);}
+    else if(l.type=='hip'||l.type=='mansard'){const ring=(R4,he,k)=>{const poly=[[R4[0],R4[2]],[R4[1],R4[2]],[R4[1],R4[3]],[R4[0],R4[3]]];const ccw=MK.area(poly)>0;
+        const D=poly.map((A,i)=>{const B=poly[(i+1)%4],dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy);let nx=-dy/L,ny=dx/L;if(!ccw){nx=-nx;ny=-ny;}return P=>(P[0]-A[0])*nx+(P[1]-A[1])*ny;});
+        return poly.map((_,i)=>{let Q=poly.slice();for(let j=0;j<4;j++){if(j==i)continue;Q=MK.clipHalf(Q,P=>D[i](P)-D[j](P));if(Q.length<3)break;}return Q.length>=3?Q.map(P=>[P[0],P[1],he+k*D[i](P)]):null;}).filter(Boolean);};
+      if(l.type=='hip')ring(l.R,l.x[0],l.x[1]).forEach(f=>F.push(f));
+      else{const w0=l.w0,Ri=[a+w0,b-w0,c+w0,d-w0],hb=l.x[0]+l.x[1]*w0;ring(Ri,hb,l.x[2]).forEach(f=>F.push(f));
+        const O=[[a,c],[b,c],[b,d],[a,d]],I=[[Ri[0],Ri[2]],[Ri[1],Ri[2]],[Ri[1],Ri[3]],[Ri[0],Ri[3]]];for(let i=0;i<4;i++){const j=(i+1)%4;F.push([[...O[i],l.x[0]],[...O[j],l.x[0]],[...I[j],hb],[...I[i],hb]]);}}}
+    return F;}
+
+/* ===== the model in a worker: the laser fit no longer freezes the view ===== */
+const QW={w:null,failed:false,seq:0,cb:new Map(),sent:null,ortho:null};
+function qsWorker(){if(QW.failed)return null;if(QW.w)return QW.w;
+  try{const src='const RAD=Math.PI/180;const MK={};MK.area='+MK.area.toString()+';MK.clipHalf='+MK.clipHalf.toString()+';const RF={};const S={};\n'+qsModel5.toString()+'\n('+qsWorkerMain.toString()+')();';
+    const w=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
+    w.onmessage=e=>{const f=QW.cb.get(e.data.id);if(f){QW.cb.delete(e.data.id);f(e.data);}};
+    w.onerror=e=>{console.warn('qs worker',e.message);QW.failed=true;QW.cb.forEach(f=>f({M:null,err:1}));QW.cb.clear();};
+    QW.w=w;return w;}catch(e){QW.failed=true;return null;}}
+function qsWorkerMain(){ /* runs inside the worker */
+  const mkAt=o=>{if(!o)return null;const {f,W,R,res}=o,ok=v=>v>-500&&v<9000;return {R,res,W,at:(x,y)=>{const i=Math.floor((x+R)/res),j=Math.floor((R-y)/res);if(i<0||j<0||i>=W||j>=W)return null;const v=f[j*W+i];return ok(v)?v:null;}};};
+  let F=null,C=null;
+  self.onmessage=e=>{const m=e.data;
+    if(m.kind==='data'){if(m.mnh!==undefined){S.lidarR={mnh:mkAt(m.mnh)};F=mkAt(m.F);C=mkAt(m.C);}if(m.ortho!==undefined)S.rawOrtho=m.ortho?{raw:{width:m.ortho.width,height:m.ortho.height,getContext:()=>({getImageData:()=>({data:m.ortho.data})})},w:m.ortho.w,e:m.ortho.e,n:m.ortho.n,s:m.ortho.s}:null;return;}
+    const t0=performance.now(),inF=(x,y)=>F&&Math.abs(x)<F.R-2&&Math.abs(y)<F.R-2;
+    const R=Object.assign({},m.R,{Z:(x,y)=>{let z=inF(x,y)?F.at(x,y):null;if(z==null&&C)z=C.at(x,y);return z;}});
+    const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0}))});
+    const run=o=>{try{const M=qsModel5(R,Object.assign({big:m.big},o));return M&&M.cells.length?pack(M,o):null;}catch(err){return null;}};
+    let M=run({});if(!M||(!m.big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
+    if(!M||M.rms>0.3){const M3=run({big:false,lam:4,kinks:true});if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
+    self.postMessage({id:m.id,M,ms:performance.now()-t0});};}
+function qsWorkerData(){const w=qsWorker();if(!w)return;const L=S.lidarR||{},pk=o=>o?{f:o.f,W:o.W,R:o.R,res:o.res}:null;
+  if(QW.sent!==S.T){QW.sent=S.T;QW.ortho=null;w.postMessage({kind:'data',mnh:pk(L.mnh),F:pk(S.mnsF||L.mnsFine),C:pk(L.mns)});}
+  const ro=S.rawOrtho;if(ro&&ro.raw&&QW.ortho!==ro){QW.ortho=ro;let o=null;try{const W=ro.raw.width,H=ro.raw.height;o={width:W,height:H,data:ro.raw.getContext('2d').getImageData(0,0,W,H).data,w:ro.w,e:ro.e,n:ro.n,s:ro.s};}catch(e){}w.postMessage({kind:'data',ortho:o});}}
+/* the model of a group of blocks, computed in the worker; resolves to the same shape as qsV4Model (or null: the current roofs stay) */
+function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.userData.rings[0]))-Math.abs(areaOf(p.userData.rings[0])))[0];
+  const R=roofCells(main);if(!R||R.cells.length<16)return Promise.resolve(null);
+  const ud=main.userData,area=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0),big=(ud.floors||0)>=3||(ud.h||0)>9.5||area>800;
+  const w=qsWorker();if(!w)return Promise.resolve(undefined); /* no worker: done on the page */
+  qsWorkerData();const id=++QW.seq;
+  return new Promise(res=>{QW.cb.set(id,d=>{if(d.err)return res(undefined);const P=d.M;QV4.tWorker=(QV4.tWorker||0)+(d.ms||0);
+      if(P&&P.TT){QV4.TT=QV4.TT||{};for(const k in P.TT)QV4.TT[k]=(QV4.TT[k]||0)+P.TT[k];}
+      if(!P||P.rms>0.6)return res(null);
+      const t=[Math.cos(P.Ad),Math.sin(P.Ad)],n=[-t[1],t[0]],XY=(u,v)=>[u*t[0]+v*n[0],u*t[1]+v*n[1]],U=(x,y)=>x*t[0]+y*t[1],V=(x,y)=>x*n[0]+y*n[1];
+      const leaves=P.leaves.map(l=>{l.pred=qsV5Pred(l);return l;});
+      const pieces=leaves.map(l=>{const P4=[[l.R[0],l.R[2]],[l.R[1],l.R[2]],[l.R[1],l.R[3]],[l.R[0],l.R[3]]].map(([u,v])=>XY(u,v));return {P:P4,roofZ:(x,y)=>l.pred(U(x,y),V(x,y))+P.Z0};});
+      const M={rms:P.rms,v4:P.v4,pieces,sh0:P.noShift?{dx:0,dy:0}:R.sh,L5:{leaves,XY,U,V,Z0:P.Z0,Ad:P.Ad,faceSet:qsFaceSet}};
+      const cur=qsCurErr(fam,R),mine=qsV4Err(M,R);QV4.log.push({x:Math.round(main.userData.rings[0][0].x),y:Math.round(main.userData.rings[0][0].y),cur:+cur.toFixed(2),v4:+mine.toFixed(2),types:M.v4.types.join(',')});
+      res(mine<cur*0.8&&cur-mine>0.08?{M,main}:null);});
+    w.postMessage({kind:'model',id,big,R:{rings:R.rings,sh:R.sh,s:R.s}});});}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
@@ -3851,7 +3908,7 @@ function roofModelV4(R,opt){opt=opt||{};
 
 
 window.__S=S;window.__fam=family;window.__cam=cam;window.__scene=scene;window.__shot=()=>{applyCam();renderer.render(scene,camera);return renderer.domElement.toDataURL('image/jpeg',0.9);};
-window.__QV4=QV4;window.__qsW=qsWindows;window.__qsRows=qsRows;window.__qsM=qsV4Model;window.__qcur=qsCurErr;window.__rc=roofCells;window.__v4=roofModelV4;window.__qm5=qsModel5;
+window.__QV4=QV4;window.__qsW=qsWindows;window.__qsRows=qsRows;window.__qsM=qsV4Model;window.__qcur=qsCurErr;window.__rc=roofCells;window.__v4=roofModelV4;window.__qm5=qsModel5;window.__grid=(views,idx=0,ctr)=>{const m=__QV4.done[idx],c=ctr||m.geometry.boundingSphere.center;const cv=document.createElement('canvas');cv.width=1600;cv.height=900;const g=cv.getContext('2d');g.filter='contrast(1.7) saturate(1.4)';const imgs=[];for(const [th,ph,d] of views){__cam.theta=th;__cam.phi=ph;__cam.dist=d;__cam.target.set(c.x,c.y,0);imgs.push(__shot());}return Promise.all(imgs.map(src=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=src;}))).then(I=>{I.forEach((im,q)=>{const s=Math.min(800/im.width,450/im.height),w=im.width*s,h=im.height*s;g.drawImage(im,(q%2)*800+(800-w)/2,Math.floor(q/2)*450+(450-h)/2,w,h);});let o=document.getElementById('__ov');if(!o){o=document.createElement('img');o.id='__ov';o.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#fff;z-index:99999';o.onclick=()=>o.remove();document.body.appendChild(o);}o.src=cv.toDataURL('image/jpeg',0.88);window.__last=o.src;return 'ok';});};window.__qmr=qsModelReq;window.__v5b=qsV5Build;
 
 })();
 </script>
