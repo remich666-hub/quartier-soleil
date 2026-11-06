@@ -3534,6 +3534,7 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
   /* façades: plain paper, only a whisper of the floors (no drawn windows) */
   try{const c=wallTex.image,g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.fillStyle='rgba(60,70,130,0.035)';g.fillRect(0,c.height-2,c.width,2);wallTex.needsUpdate=true;
     let n=0;const up=()=>{try{scene.traverse(o=>{const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>{if(m&&m.map&&m.map.image===c&&!m.map._qs){m.map.needsUpdate=true;m.map._qs=1;}});});}catch(e){}if(++n<40)setTimeout(up,1500);};up();}catch(e){}
+  try{QS_WIN_MAT.visible=false;}catch(e){} /* no window decals on the laser-modelled walls either */
   /* neighbours: white lavender, matte */
   try{Object.assign(USAGE,{'Résidentiel':[0xf6f7fd,0xe9ebf6],'Commercial et services':[0xf5f6fc,0xe6e9f5],'Industriel':[0xf2f4fa,0xe3e6f2],'Religieux':[0xf6f5fb,0xe8e6f3],'Agricole':[0xf5f5fa,0xe6e6f1],'Sportif':[0xf4f5fb,0xe4e7f3]});
     for(const k in matCache){const m=matCache[k];if(!k.startsWith('T:')&&Array.isArray(m)){const u=USAGE[k];if(u){m[0].color.set(u[1]);m[1].color.set(u[0]);}else{m[0].color.set(0xe6e8f4);m[1].color.set(0xf3f4fb);}}}}catch(e){}
