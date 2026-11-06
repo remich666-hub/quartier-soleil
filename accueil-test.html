@@ -212,6 +212,26 @@ nav .btn.primary.sm{box-shadow:none}
 .stage{aspect-ratio:1/1.02}
 .clock{background:color-mix(in srgb,var(--card) 80%,transparent);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border-color:var(--line);left:auto;right:5%;bottom:5%}
 .clock .on{color:var(--sun-ink)}
+/* the page follows the hero's day: tokens are typed colours, so a theme change cross-fades instead of snapping */
+@property --bg{syntax:'<color>';inherits:true;initial-value:#eef1f8}
+@property --card{syntax:'<color>';inherits:true;initial-value:rgba(248,249,253,.72)}
+@property --raised{syntax:'<color>';inherits:true;initial-value:rgba(21,26,51,.05)}
+@property --ink{syntax:'<color>';inherits:true;initial-value:#151a33}
+@property --ink2{syntax:'<color>';inherits:true;initial-value:#474e6d}
+@property --muted{syntax:'<color>';inherits:true;initial-value:#7a809b}
+@property --line{syntax:'<color>';inherits:true;initial-value:rgba(21,26,51,.09)}
+@property --line2{syntax:'<color>';inherits:true;initial-value:rgba(21,26,51,.16)}
+@property --sun{syntax:'<color>';inherits:true;initial-value:#f0773a}
+@property --sun2{syntax:'<color>';inherits:true;initial-value:#e8678e}
+@property --sun-ink{syntax:'<color>';inherits:true;initial-value:#c2521c}
+@property --sun-soft{syntax:'<color>';inherits:true;initial-value:#fbe3d8}
+@property --btn{syntax:'<color>';inherits:true;initial-value:#151a33}
+@property --btn-ink{syntax:'<color>';inherits:true;initial-value:#f6f7fc}
+@property --aura1{syntax:'<color>';inherits:true;initial-value:#f6c3b0}
+@property --aura2{syntax:'<color>';inherits:true;initial-value:#c9d3f0}
+@property --aura3{syntax:'<color>';inherits:true;initial-value:#efc6d8}
+@property --grain{syntax:'<number>';inherits:true;initial-value:.06}
+:root{transition:--bg 1.6s cubic-bezier(.45,0,.55,1),--card 1.6s cubic-bezier(.45,0,.55,1),--raised 1.6s cubic-bezier(.45,0,.55,1),--ink 1.6s cubic-bezier(.45,0,.55,1),--ink2 1.6s cubic-bezier(.45,0,.55,1),--muted 1.6s cubic-bezier(.45,0,.55,1),--line 1.6s cubic-bezier(.45,0,.55,1),--line2 1.6s cubic-bezier(.45,0,.55,1),--sun 1.6s cubic-bezier(.45,0,.55,1),--sun2 1.6s cubic-bezier(.45,0,.55,1),--sun-ink 1.6s cubic-bezier(.45,0,.55,1),--sun-soft 1.6s cubic-bezier(.45,0,.55,1),--btn 1.6s cubic-bezier(.45,0,.55,1),--btn-ink 1.6s cubic-bezier(.45,0,.55,1),--aura1 1.6s cubic-bezier(.45,0,.55,1),--aura2 1.6s cubic-bezier(.45,0,.55,1),--aura3 1.6s cubic-bezier(.45,0,.55,1),--grain 1.6s cubic-bezier(.45,0,.55,1)}
 </style>
 </head>
 <body>
@@ -391,7 +411,7 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
   }
   const resize=()=>{const r=stage.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);W=r.width;H=r.height;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);build();};
   /* the sky by sun altitude (a: -1 deep night … 1 noon): pale lavender by day, rose and orange low, night blue */
-  const K=[[-1,'#080c20','#141a3c'],[-.25,'#0f1430','#262050'],[-.08,'#2a3168','#d9758c'],[0,'#6a73b8','#f39a72'],[.12,'#a3afe0','#f7c4a8'],[.35,'#c3cdee','#efdfe8'],[1,'#ccd5f1','#f1e6ee']];
+  const K=[[-1,'#080c20','#141a3c'],[-.25,'#0f1430','#262050'],[-.08,'#2a3168','#d9758c'],[0,'#7d8be6','#ffa27e'],[.12,'#a6b6f6','#ffc9b6'],[.35,'#b7c5f8','#f9dbe8'],[1,'#c2cefa','#f6e4f0']];
   const hx=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   const mix=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
   const sm=(e0,e1,x)=>{const t=Math.max(0,Math.min(1,(x-e0)/(e1-e0)));return t*t*(3-2*t);};
@@ -408,7 +428,7 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
     const mx=g.x0+g.ww*0.6,my=g.y0+g.wh*0.34;
     const warm=mix([255,112,52],[255,190,140],sm(0.1,0.7,a)),pink=[238,104,150],cold=[196,204,255];
     const LX=sunUp?sx:mx,LY=sunUp?sy:my,LI=sunUp?lit:nt*0.6,LC=sunUp?warm:cold,LC2=sunUp?pink:[170,160,240];
-    const OR=g.ww*(sunUp?0.2:0.16),R=g.ww*0.95,LS=g.ww*0.36;
+    const SK=window.QS_SUN||1,OR=g.ww*(sunUp?0.2*SK:0.16*(1+(SK-1)*0.5)),R=g.ww*0.95,OH=g.ww*(sunUp?0.2:0.16)*(1+(SK-1)*0.35),LS=g.ww*0.36;
     /* the patch the window casts below it, sheared away from the light */
     const cx=(g.x0+g.x1)/2,py0=g.y1+H*D*0.035,py1=Math.min(PH-2,py0+H*D*0.2),sh=-(LX-cx)/(g.ww/2)*g.ww*0.6,PI=LI*(sunUp?0.75:0.5);
     const core=[255,248,238],moonC=[236,240,255];
@@ -430,11 +450,11 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
           if(d<-g.ww*0.3)mW=1;else if(d<g.ww*0.6){const u=dl/LS,w=LI*Math.exp(-u*u),s=0.35*D+w*g.ww*0.07;mW=soft(d,s);}
         }
         /* inside: sky + haze + disc */
-        let wr=0,wg=0,wb=0,hk=0,mD=0,dr=0,dg=0,db=0;
+        let wr=0,wg=0,wb=0,hk=0,hr=0,hg=0,hb=0,mD=0,dr=0,dg=0,db=0;
         if(mW>0.001){
-          wr=skyR;wg=skyG;wb=skyB;const q=dl/OR;
-          hk=LI*Math.exp(-q*q*0.12)*(sunUp?0.85:0.45)*0.8;
-          if(sunUp&&q>1){const pk=lit*Math.exp(-(q-1)*0.9)*0.35;wr+=(pink[0]-wr)*pk;wg+=(pink[1]-wg)*pk;wb+=(pink[2]-wb)*pk;}
+          wr=skyR;wg=skyG;wb=skyB;const q=dl/OR,qh=dl/OH;
+          hk=LI*Math.exp(-qh*qh*0.12)*(sunUp?0.85:0.45)*0.8;const hm=sunUp?sm(1,3.2,qh):0;hr=LC[0]+(255-LC[0])*hm;hg=LC[1]+(168-LC[1])*hm;hb=LC[2]+(196-LC[2])*hm;
+          if(sunUp&&qh>1){const pk=lit*Math.exp(-(qh-1)*0.9)*0.2;wr+=(pink[0]-wr)*pk;wg+=(pink[1]-wg)*pk;wb+=(pink[2]-wb)*pk;}
           if(LI>0.02&&q<2.5){mD=soft((q-1)*OR,OR*0.22);const c=sunUp?mix(core,warm,sm(0.15,1.1,q)):mix(moonC,cold,sm(0.3,1.1,q));dr=c[0];dg=c[1];db=c[2];}
         }
         /* outside: halo + patch */
@@ -447,7 +467,7 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
         for(let oy=0;oy<rows;oy++)for(let ox=0;ox<cols;ox++){
           const i=(y+oy)*PW+x+ox,t1=T1[i],t2=T2[i];
           if(mW>t1){
-            let r=wr,g_=wg,b=wb;const k=hk*(0.7+0.6*t2);r+=(LC[0]-r)*k;g_+=(LC[1]-g_)*k;b+=(LC[2]-b)*k;
+            let r=wr,g_=wg,b=wb;const k=hk*(0.7+0.6*t2);r+=(hr-r)*k;g_+=(hg-g_)*k;b+=(hb-b)*k;
             if(mD>T3[i]){const k=sunUp?LI:nt;r+=(dr-r)*k;g_+=(dg-g_)*k;b+=(db-b)*k;}
             buf[i]=px(r,g_,b,255);continue;
           }
@@ -465,9 +485,12 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
     const state=a>0.04?'sun':a>-0.12?'dusk':'night';if(clockL&&clockL._s!==state+(day<0.5)){clockL._s=state+(day<0.5);clockL.textContent=state==='sun'?'Soleil sur la fenêtre':state==='dusk'?(day<0.5?'Aube':'Crépuscule'):'Nuit';clockL.classList.toggle('on',state==='sun');}
   }
   /* one day and one night in 18 s: the night passes quicker, dawn and dusk linger (ease in / ease out); ~30 fps is plenty */
-  const CYCLE=18000;let t0=performance.now(),visible=true,raf=0,last=-1e9;
+  /* the whole page follows the window: light while the sun is up, dark once night falls (until the visitor picks a theme) */
+  let auto=true;const tb=document.getElementById('themeBtn');if(tb)tb.addEventListener('click',()=>{auto=false;},true);
+  const follow=a=>{if(!auto)return;const want=a<-0.06?'dark':'light',r=document.documentElement;if(r.dataset.theme!==want)r.dataset.theme=want;};
+  const CYCLE=18000;let t0=performance.now()-0.2*18000,visible=true,raf=0,last=-1e9;
   const hourAt=p=>{const k=[[0,4],[0.1,6],[0.2,8],[0.68,19],[0.82,21.5],[1,28]];let i=0;while(i<k.length-2&&p>k[i+1][0])i++;const t=(p-k[i][0])/(k[i+1][0]-k[i][0]),e=0.5-0.5*Math.cos(Math.PI*t);return k[i][1]+(k[i+1][1]-k[i][1])*e;};
-  function frame(now){raf=0;if(now-last>=32||reduce){last=now;const p=reduce?0.66:((now-t0)%CYCLE)/CYCLE;draw(hourAt(p)%24);}if(visible&&!reduce)raf=requestAnimationFrame(frame);}
+  function frame(now){raf=0;if(now-last>=32||reduce){last=now;const p=reduce?0.66:((now-t0)%CYCLE)/CYCLE;const h=hourAt(p)%24;draw(h);const dd=(h-6)/15;follow(dd>=0&&dd<=1?Math.sin(Math.PI*dd):-Math.min(1,(dd<0?-dd:dd-1)*5));}if(visible&&!reduce)raf=requestAnimationFrame(frame);}
   resize();addEventListener('resize',()=>{resize();last=-1e9;if(!raf)raf=requestAnimationFrame(frame);});
   if('IntersectionObserver' in window)new IntersectionObserver(es=>{visible=es[0].isIntersecting;if(visible&&!raf)raf=requestAnimationFrame(frame);}).observe(stage);
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{last=-1e9;});
