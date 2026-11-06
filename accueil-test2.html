@@ -429,7 +429,8 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
     const mx=g.x0+g.ww*0.6,my=g.y0+g.wh*0.34;
     const warm=mix([255,112,52],[255,190,140],sm(0.1,0.7,a)),pink=[238,104,150],cold=[196,204,255];
     const LX=sunUp?sx:mx,LY=sunUp?sy:my,LI=sunUp?lit:nt*0.6,LC=sunUp?warm:cold,LC2=sunUp?pink:[170,160,240];
-    const SK=window.QS_SUN||1,OR=g.ww*(sunUp?0.2*SK:0.16*(1+(SK-1)*0.5)),R=g.ww*0.95,OH=g.ww*(sunUp?0.2:0.16)*(1+(SK-1)*0.35),LS=g.ww*0.36;
+    const SM=window.QS_SUN||1,SK=sunUp?1+(SM-1)*Math.exp(-Math.pow((dd-0.62)/0.3,2)):SM,OR=g.ww*(sunUp?0.2*SK:0.16*(1+(SK-1)*0.5)),R=g.ww*0.95,OH=g.ww*(sunUp?0.2:0.16)*(1+(SK-1)*0.35),LS=g.ww*0.36;
+    const WX=2*(g.x0+g.x1)/2-LX,WY=Math.max(g.y0,Math.min(g.y1,2*(g.y0+g.y1)/2-LY));
     /* the patch the window casts below it, sheared away from the light */
     const cx=(g.x0+g.x1)/2,py0=g.y1+H*D*0.035,py1=Math.min(PH-2,py0+H*D*0.2),sh=-(LX-cx)/(g.ww/2)*g.ww*0.6,PI=LI*(sunUp?0.75:0.5);
     const core=[255,248,238],moonC=[236,240,255];
@@ -441,14 +442,14 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
       const inRowsWin=yc>g.y0-g.ww*0.3&&yc<g.y1+g.ww*0.3;
       const pv=(yc-py0)/(py1-py0),pvc=Math.max(0,pv),inPatchRow=PI>0.01&&pv>-0.3&&pv<1.3;
       const pxl=g.x0+sh*pvc-g.ww*0.12*pvc,pxr=g.x1+sh*pvc+g.ww*0.12*pvc,psoft=2*D+pvc*g.ww*0.06,pfade=1-0.55*Math.min(1,pvc);
-      const dy=yc-LY,dy2=dy*dy,rows=y+1<PH?2:1;
+      const dy=yc-LY,dy2=dy*dy,dyw2=(yc-WY)*(yc-WY),fy=Math.min(yc,PH-yc),rows=y+1<PH?2:1;
       for(let x=0;x<PW;x+=2){
-        const xc=x+0.5,dx=xc-LX,dl=Math.sqrt(dx*dx+dy2);
+        const xc=x+0.5,dx=xc-LX,dl=Math.sqrt(dx*dx+dy2),dxw=xc-WX,dlw=Math.sqrt(dxw*dxw+dyw2);
         let mW=0;
         if(inRowsWin){
           const ex=Math.max(g.x0-xc,xc-g.x1),ey=Math.max(g.y0-yc,yc-g.y1);
           const d=ex>0||ey>0?Math.hypot(Math.max(ex,0),Math.max(ey,0)):Math.max(ex,ey);
-          if(d<-g.ww*0.3)mW=1;else if(d<g.ww*0.6){const u=dl/LS,w=LI*Math.exp(-u*u),s=0.35*D+w*g.ww*0.07;mW=soft(d,s);}
+          if(d<-g.ww*0.3)mW=1;else if(d<g.ww*0.6){const u=dlw/LS,w=LI*Math.exp(-u*u),s=0.35*D+w*g.ww*0.07;mW=soft(d,s);}
         }
         /* inside: sky + haze + disc */
         let wr=0,wg=0,wb=0,hk=0,hr=0,hg=0,hb=0,mD=0,dr=0,dg=0,db=0;
@@ -461,10 +462,10 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
         /* outside: halo + patch */
         let gl=0,gr=0,gg2=0,gb=0,pm=0;
         if(mW<0.999){
-          if(LI>0.01){const f=dl/R;gl=LI*Math.exp(-f*f*3.2);if(gl>0.004){const c=Math.min(1,f*1.6);gr=LC[0]+(LC2[0]-LC[0])*c;gg2=LC[1]+(LC2[1]-LC[1])*c;gb=LC[2]+(LC2[2]-LC[2])*c;}else gl=0;}
+          if(LI>0.01){const f=dlw/R;gl=LI*Math.exp(-f*f*3.2);if(gl>0.004){const c=Math.min(1,f*1.6);gr=LC[0]+(LC2[0]-LC[0])*c;gg2=LC[1]+(LC2[1]-LC[1])*c;gb=LC[2]+(LC2[2]-LC[2])*c;}else gl=0;}
           if(inPatchRow){const d=Math.max(pxl-xc,xc-pxr,py0-yc,yc-py1);if(d<psoft*8)pm=soft(d,psoft)*pfade;}
         }
-        const cols=x+1<PW?2:1;
+        const fe=sm(0,Math.min(PW,PH)*0.14,Math.min(xc,PW-xc,fy));gl*=fe;pm*=fe;const cols=x+1<PW?2:1;
         for(let oy=0;oy<rows;oy++)for(let ox=0;ox<cols;ox++){
           const i=(y+oy)*PW+x+ox,t1=T1[i],t2=T2[i];
           if(mW>t1){
