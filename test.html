@@ -4169,14 +4169,16 @@ function qsModel5(R,opt){opt=opt||{};
   const ptsIn=Rc=>{const [i0,i1,j0,j1]=rngOf(Rc),out=[];for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)out.push(pts[i*NV+j]);return out;};
   const solveN=(Mx,bb,np)=>{for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
   const CL=0.6;
-  const fitM=(I,feat,np)=>{const f=new Float64Array(np);
+  const PRF={fit:0,cost:0,nLeaf:0,nFit:0,nCost:0};const fitM=(I,feat,np)=>{const _t=performance.now();PRF.nFit++;try{return fitM0(I,feat,np);}finally{PRF.fit+=performance.now()-_t;}};
+  const fitM0=(I,feat,np)=>{const f=new Float64Array(np);
     const pass=x=>{const Mx=[...Array(np)].map(()=>Array(np).fill(0)),bb=Array(np).fill(0);let n=0;
       for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const v=v0+(j+.5)*g,z=PZ[i*NV+j];feat(u,v,f);
         if(z!==z)continue;if(x){let pz=0;for(let a=0;a<np;a++)pz+=f[a]*x[a];if(!(Math.abs(z-pz)<0.5))continue;}n++;
         for(let a=0;a<np;a++){bb[a]+=f[a]*z;const fa=f[a],Ma=Mx[a];for(let c=0;c<np;c++)Ma[c]+=fa*f[c];}}}return {Mx,bb,n};};
     const p0=pass(null);let x=solveN(p0.Mx,p0.bb,np);const p1=pass(x);if(p1.n>np+3)x=solveN(p1.Mx,p1.bb,np);return x;};
-  const costI=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const d=Math.abs(zz-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
-  const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){r=leafFit0(Rc);LFC.set(key,r);}return r;};
+  const costI=(I,pred)=>{const _t=performance.now();PRF.nCost++;try{return costI0(I,pred);}finally{PRF.cost+=performance.now()-_t;}};
+  const costI0=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const d=Math.abs(zz-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
+  const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){PRF.nLeaf++;r=leafFit0(Rc);LFC.set(key,r);}return r;};
   const leafFit0=Rc=>{const I=rngOf(Rc),none={type:'none',pred:()=>0,cost:0,cr:0,R:Rc,np:0};if(I[1]<I[0]||I[3]<I[2])return none;
     let nP=0,n2=0,zmax=-1e9;const hi=[];for(let i=I[0];i<=I[1];i++)for(let j=I[2];j<=I[3];j++){const z=PZ[i*NV+j];if(z!==z)continue;nP++;if(z>2)n2++;if(z>1)hi.push(z);if(z>zmax)zmax=z;}
     if(!nP)return none;const occ=n2/nP;const cands=[{type:'none',pred:()=>0,np:0}];
@@ -4305,7 +4307,7 @@ function qsModel5(R,opt){opt=opt||{};
       const quads=[];for(let k=0;k<prof.length-1;k++){const p=prof[k],q=prof[k+1];if(p[2]-zm<0.02&&q[2]-zm<0.02)continue;quads.push([[p[0],p[1],zm],[q[0],q[1],zm],[q[0],q[1],q[2]],[p[0],p[1],p[2]]]);}
       let ar=0,mx=0,my=0,mz=0;quads.forEach(q=>{const w=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1])*((q[2][2]-q[1][2])+(q[3][2]-q[0][2]))/2;ar+=w;mx+=(q[0][0]+q[1][0])/2*w;my+=(q[0][1]+q[1][1])/2*w;mz+=(q[0][2]+q[3][2]+q[1][2]+q[2][2])/4*w;});
       if(ar<1)continue;const nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;verts.push({quads,a:ar,x:mx/ar+nx*0.3,y:my/ar+ny*0.3,z:mz/ar,n:[nx,ny,0],tilt:Math.PI/2,az:((Math.atan2(nx,ny)/RAD)+360)%360});}});
-  tk('out');delete TT._;return {pieces,pans,cells,verts,rms,TT,L5:{leaves,XY,U,V,Z0,Ad,faceSet},v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
+  tk("out");delete TT._;return {pieces,pans,cells,verts,rms,TT,PRF,L5:{leaves,XY,U,V,Z0,Ad,faceSet},v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
 
 
 
