@@ -2058,6 +2058,25 @@ function distToRing(x,y,ring){let best=1e9;for(let i=0,j=ring.length-1;i<ring.le
    A terraced house alone cannot be registered along its row (its neighbours look the same), so one by one the shifts came out at
    random; the row as a whole has its ends and its gardens. The move is kept only if the cadastre agrees (the houses fall better
    inside their own parcels afterwards). The footprints themselves are moved (the IGN outlines of a whole row can be ~2 m off). */
+/* Upper floors wider than the ground footprint (the cadastre draws the ground, the laser sees the roof): on a large building,
+   a long wall past which the laser roof carries on at the same height, flat and all along the wall, is moved out to where the
+   roof ends. The wall stays parallel to itself (rectangles stay rectangles); never onto another building. */
+function widenToLaser(ring,u,F,MH,others){
+  const sh=u.shift||{dx:0,dy:0},zTop=u.zBase+u.h,n=ring.length;if(n<4)return null;const out=ring.map(p=>p.clone());let moved=0;const log=[];
+  const flat=(x,y)=>{let lo=1e9,hi=-1e9;for(const [a,b] of [[0.5,0],[-0.5,0],[0,0.5],[0,-0.5]]){const v=F.at(x+a,y+b);if(v==null)return false;lo=Math.min(lo,v);hi=Math.max(hi,v);}return hi-lo<0.5;};
+  for(let i=0;i<n;i++){const a=ring[i],c=ring[(i+1)%n],L=Math.hypot(c.x-a.x,c.y-a.y);if(L<8)continue;
+    let nx=(c.y-a.y)/L,ny=-(c.x-a.x)/L;const mx=(a.x+c.x)/2,my=(a.y+c.y)/2;if(pointInPoly(mx+nx*0.4,my+ny*0.4,ring)){nx=-nx;ny=-ny;}
+    const ext=[];for(let t=1;t<L-1;t+=1){const px=a.x+(c.x-a.x)*t/L,py=a.y+(c.y-a.y)*t/L;let e=0;
+      for(let o=0.25;o<=4.5;o+=0.25){const x=px+nx*o+sh.dx,y=py+ny*o+sh.dy,v=F.at(x,y),h=MH.at(x,y);if(v==null||h==null)break;if(Math.abs(v-S.alt0-zTop)<2&&h>2.5&&flat(x,y))e=o;else break;}ext.push(e);}
+    if(ext.length<6)continue;ext.sort((p,q)=>p-q);const md=ext[ext.length>>1],p25=ext[Math.floor(ext.length*0.25)];
+    if(md<1||p25<0.7*md)continue; // all along the wall, not a balcony here and there
+    const e=Math.min(4,p25);
+    // the strip gained must not cover another building
+    let hit=false;for(let t=0.1;t<=0.9&&!hit;t+=0.2)for(const o of [e*0.5,e*0.9]){const x=a.x+(c.x-a.x)*t+nx*o,y=a.y+(c.y-a.y)*t+ny*o;if(others.some(m=>pointInPoly(x,y,m.userData.rings[0]))){hit=true;break;}}
+    if(hit)continue;
+    out[i].x+=nx*e;out[i].y+=ny*e;out[(i+1)%n].x+=nx*e;out[(i+1)%n].y+=ny*e;moved++;log.push(+e.toFixed(2));}
+  return moved?{ring:out,log}:null;
+}
 function registerRows(feats,MH,parcels){
   const out={rows:0,moved:0,list:[]};if(!MH||!feats||!feats.length)return out;
   const kx=111320*Math.cos(S.lat*RAD),ky=110574;
@@ -2842,6 +2861,7 @@ async function lidarBuildings(){
           u.h=nh; u.floors=1; u.ridge=null; }
         LB.rough+=performance.now()-k0; continue; } } LB.rough+=performance.now()-k0;
       const clean=u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;});
+      if(!QS_AV&&MH&&u.h>=8&&clean.length===1&&Math.abs(areaOf(clean[0]))>150){const nb=S.meshes.filter(o=>o!==m&&o.userData.rings&&o.geometry.boundingSphere&&o.geometry.boundingSphere.center.distanceTo(m.geometry.boundingSphere.center)<o.geometry.boundingSphere.radius+m.geometry.boundingSphere.radius+5);const w=widenToLaser(clean[0],u,F,MH,nb);if(w){clean[0]=w.ring;u.widened=w.log;}}
       const bases=[clean];
       k0=performance.now(); const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
       LB.split+=performance.now()-k0; k0=performance.now(); const vols=[];for(const pt of parts){let q0=performance.now();const tw=findTowers(pt.rings,u,F,green);LB.ft=(LB.ft||0)+performance.now()-q0;const bp=tw&&tw.base.length>=8?tw.base:pt.pts;q0=performance.now();const md=partModel(bp,pt.rings);LB.pm=(LB.pm||0)+performance.now()-q0;if(!md)continue;md.pts=F===Ff?bp:null;vols.push({rings:pt.rings,md});
