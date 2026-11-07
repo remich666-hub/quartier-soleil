@@ -4793,6 +4793,11 @@ function qsModel5ref(R,opt){opt=opt||{};
   function qc(o){o=o||{};const R=o.R||80,ST=o.st||0.75;const F=S.mnsF||(S.lidarR&&S.lidarR.mnsFine)||(S.lidarR&&S.lidarR.mns),MH=S.lidarR&&S.lidarR.mnh;if(!F||!MH)return [];
     let G=null;try{G=orthoGreen();}catch(e){} const rough=(x,y,z)=>{let m=0;for(const [a,b] of [[0.5,0],[-0.5,0],[0,0.5],[0,-0.5]]){const v=F.at(x+a,y+b);if(v!=null)m=Math.max(m,Math.abs(v-z));}return m>0.6;}; /* a crown is rough at 50 cm, a roof is smooth */
     const green=(x,y)=>G?G(x,y)>12:false; /* foliage over a roof is not a roof */
+    /* a roof pan is a plane over 2 m x 2 m, a crown is a dome: least-squares plane over a 5x5 grid, rms of the residuals */
+    const planar=(x,y)=>{let n=0,sx=0,sy=0,sz=0,sxx=0,syy=0,sxy=0,sxz=0,syz=0;const zs=[];
+      for(let i=-2;i<=2;i++)for(let j=-2;j<=2;j++){const a=i*0.5,b=j*0.5,z=F.at(x+a,y+b);if(z==null)continue;zs.push([a,b,z]);n++;sx+=a;sy+=b;sz+=z;sxx+=a*a;syy+=b*b;sxy+=a*b;sxz+=a*z;syz+=b*z;}
+      if(n<15)return false;const mz=sz/n;const A=sxx-sx*sx/n,B=syy-sy*sy/n,C=sxy-sx*sy/n,D=sxz-sx*sz/n,E=syz-sy*sz/n,det=A*B-C*C;if(Math.abs(det)<1e-9)return false;
+      const ga=(D*B-E*C)/det,gb=(E*A-D*C)/det;let r=0;zs.forEach(([a,b,z])=>{const e=z-mz-ga*(a-sx/n)-gb*(b-sy/n);r+=e*e;});return Math.sqrt(r/n)<0.18;};
     const rc=new THREE.Raycaster(),down=new THREE.Vector3(0,0,-1),org=new THREE.Vector3();
     const seen=new Set(),fams=[];
     S.meshes.forEach(m=>{const u=m.userData;if(!u||!u.rings||u.monu||u.church)return;if(seen.has(m))return;const fam=family(m).filter(x=>x.userData&&x.userData.rings);fam.forEach(x=>seen.add(x));
@@ -4817,7 +4822,7 @@ function qsModel5ref(R,opt){opt=opt||{};
         let nx=(c.y-a.y)/L,ny=-(c.x-a.x)/L;const mx=(a.x+c.x)/2,my=(a.y+c.y)/2;if(pointInPoly(mx+nx*0.4,my+ny*0.4,r)){nx=-nx;ny=-ny;}
         for(let t=0.4;t<L-0.3;t+=ST)for(const off of [0.9,1.7]){const x=a.x+(c.x-a.x)*t/L+nx*off,y=a.y+(c.y-a.y)*t/L+ny*off;if(inAny(x,y,fam)||inAny(x,y,near))continue;
           const zl=F.at(x,y),h=MH.at(x,y);if(zl==null||h==null||green(x,y)||rough(x,y,zl))continue;nBand++;const z=zl-S.alt0;
-          if(h>2.5&&z>zTop-3&&z<zTop+3){nOut++;P.push([x,y,z+0.3,3]);}}}});
+          if(h>2.5&&z>zTop-3&&z<zTop+3&&planar(x,y)){nOut++;P.push([x,y,z+0.3,3]);}}}});
       D.sort((a,b)=>Math.abs(a)-Math.abs(b));const q=f=>Math.abs(D[Math.min(D.length-1,Math.floor(D.length*f))]);
       const med=q(0.5),p80=q(0.8),empty=nEmpty/nIn,outF=nBand?nOut/nBand:0,bias=D.reduce((s,v)=>s+v,0)/D.length;
       const score=med+0.5*p80+4*empty+4*outF;let cx=(x0+x1)/2,cy=(y0+y1)/2;
