@@ -1543,7 +1543,7 @@ function startLidar(){ // launched right after geocoding, in parallel with build
   S.mnsF=null;
   const c=p=>p.catch(()=>null);
   S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1))};
-  const R=S.lidarR={}, tok=S.lidarP; ['mnh','mnsFine','mns'].forEach(k=>S.lidarP[k].then(r=>{if(S.lidarP!==tok||!r)return;R[k]=r;if(R.mnh&&(R.mnsFine||R.mns))onGroundData();}));
+  const R=S.lidarR={_T:S.T}, tok=S.lidarP; ['mnh','mnsFine','mns'].forEach(k=>S.lidarP[k].then(r=>{if(S.lidarP!==tok||!r)return;R[k]=r;if(R.mnh&&(R.mnsFine||R.mns))onGroundData();}));
 }
 async function lidarHeights(pts){
   const M=S.lidarP&&await S.lidarP.mnh; if(M)return pts.map(p=>M.max(p.x,p.y,1));
@@ -2732,36 +2732,44 @@ async function lidarBuildings(){
   // cancelled only by a new address (S.T is per load), not by the tree refinement that the photo starts meanwhile:
   // that used to abort the rebuild half-way whenever the photo arrived during it (no laser buildings, or different ones per load)
   const L=S.T, gone_=()=>S.T!==L; if(!S.lidarP||S.lidarRun===L)return; S.lidarRun=L;
-  const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); if(gone_()||(!Ff&&!Fc))return; S.mnsF=Ff||null;
+  const LB=S.LB={T:L,a:performance.now(),smp:0,rough:0,split:0,tw:0,mk:0,yld:0,ny:0,nb:0}; const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); LB.ras=performance.now(); if(gone_()||(!Ff&&!Fc))return; S.mnsF=Ff||null;
   // the 20 cm photo tells foliage from roof (a crown over a roof is not a storey): without it the result would depend on which
   // arrived first, the laser or the photo, and the same address could give different buildings from one load to the next
   for(let i=0;i<80&&!S.rawOrtho;i++){await new Promise(r=>setTimeout(r,150));if(gone_())return;}
-  const green=orthoGreen(); const t0=performance.now(); let n=0;
+  LB.orth=performance.now(); const green=orthoGreen(); const t0=performance.now(); LB.green=t0; let n=0;
   const extOf=m=>{let e=0;m.userData.rings[0].forEach(p=>{e=Math.max(e,Math.abs(p.x),Math.abs(p.y));});return e;};
-  if(await runPass()===false)return;
-  console.log('LiDAR buildings',n,Math.round(performance.now()-t0)+' ms');
-  async function runPass(){
+  /* the studied house and what stands within 25 m of it first (its annexes, the neighbours its roof model reads): its roof
+     can be asked of the worker while the rest of the neighbourhood is rebuilt; same inputs as before, only the order changes */
+  const H0=S.addrTarget||S.target; let nearF=null;
+  if(H0&&H0.userData&&H0.userData.rings){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;family(H0).forEach(o=>o.userData.rings&&o.userData.rings[0].forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
+    const M=25;nearF=m=>m.userData.rings&&m.userData.rings[0].some(p=>p.x>x0-M&&p.x<x1+M&&p.y>y0-M&&p.y<y1+M);}
+  if(nearF&&/[?&]maison\b/.test(location.search)){ /* tried 7 Nov: no gain on a phone (the worker and this loop slow each other), kept behind ?maison */if(await runPass(nearF,false)===false)return; LB.house=performance.now(); S.T.lidarHouse=LB.house;}
+  if(await runPass(null,true)===false)return;
+  LB.end=performance.now(); console.log('LiDAR buildings',n,Math.round(performance.now()-t0)+' ms');
+  async function runPass(only,final){
     const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
     const gone=new Set(),added=[],hiLater=[]; let tc=performance.now();
-    const list=S.meshes.filter(m=>!m.userData.lidar).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
+    const list=S.meshes.filter(m=>!m.userData.lidar&&(!only||only(m))).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
+    if(!LB.list)LB.list=performance.now(); let k0=0;
     for(const m of list){
-      if(performance.now()-tc>12){await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});tc=performance.now();if(gone_())return false;}
+      if(performance.now()-tc>12){const y0=performance.now();await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});tc=performance.now();LB.yld+=tc-y0;LB.ny++;if(gone_())return false;}
       const u=m.userData;const ext=extOf(m);if(ext>LB_R)continue;
       const F=(Ff&&ext<Ff.R-2)?Ff:Fc;if(!F)continue;
       if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
-      const smp=lidarSamples(u,F,green); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
+      k0=performance.now(); const smp=lidarSamples(u,F,green); LB.smp+=performance.now()-k0; LB.nb++; k0=performance.now(); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
       { const ar=Math.abs(areaOf(u.rings[0])); if(ar<80&&roughRoof(u,F)>0.45){ // small building under a tree: the laser only sees the crown
         if(ar<40&&u.h>3.5){ // a shed or a garage, not a tower: bring it down to a believable height (the IGN height there is often the tree's too)
           const nh=3.5, sc=(nh+SINK)/(u.h+SINK), z0=u.zBase-SINK; m.scale.z=sc;
           if(u.edgeArr)for(let i=2;i<u.edgeArr.length;i+=3)u.edgeArr[i]=z0+(u.edgeArr[i]-z0)*sc;
           if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh=null;} if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);
           u.h=nh; u.floors=1; u.ridge=null; }
-        continue; } }
+        LB.rough+=performance.now()-k0; continue; } } LB.rough+=performance.now()-k0;
       const clean=u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;});
       const bases=[clean];
-      const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
-      const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const bp=tw&&tw.base.length>=8?tw.base:pt.pts;const md=partModel(bp,pt.rings);if(!md)continue;md.pts=F===Ff?bp:null;vols.push({rings:pt.rings,md});
+      k0=performance.now(); const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
+      LB.split+=performance.now()-k0; k0=performance.now(); const vols=[];for(const pt of parts){const tw=findTowers(pt.rings,u,F,green);const bp=tw&&tw.base.length>=8?tw.base:pt.pts;const md=partModel(bp,pt.rings);if(!md)continue;md.pts=F===Ff?bp:null;vols.push({rings:pt.rings,md});
         if(tw)tw.towers.forEach(t=>{const m2=partModel(t.pts,[t.ring]);if(m2&&m2.h+m2.rise>md.h+md.rise+0.8){m2.pts=F===Ff?t.pts:null;vols.push({rings:[t.ring],md:m2,tower:true});}});}
+      LB.tw+=performance.now()-k0;
       // Hard ceiling: the IGN's highest roof point of this building (photogrammetry on the building itself). The laser also sees
       // tree crowns over roofs; whatever rises above that ceiling is foliage, never a storey: towers are dropped, volumes clipped.
       if(u.zTop!=null&&u.zTop>u.zBase+2){const lim=u.zTop-u.zBase+1.5; // the IGN top can read ~1 m low (Léguevin tower: 7.2 vs 7.6 + 0.6 m)
@@ -2773,8 +2781,8 @@ async function lidarBuildings(){
       const F0=u.floors; let main=null,ma=-1; vols.forEach(v=>{if(v.tower)return;const ar=Math.abs(areaOf(v.rings[0]));if(ar>ma){ma=ar;main=v;}}); if(!main)main=vols[0];
       const sH=main&&F0>0?main.md.h/F0:0, ok=sH>=2.6&&sH<=3.8; // the IGN count is trusted only if it gives a believable storey height
       vols.forEach(v=>{const hb=v.md.h;v.md.floors=ok?(v===main?F0:Math.max(1,Math.round(hb/sH))):Math.max(1,Math.floor((hb-0.5)/2.9+0.35));});
-      const gid=++GID; const blocks=vols.map(v=>{const b=makeBlock(m,v.rings,v.md,roofSets);if(v.tower)b.userData.tower=true;b.userData.gid=gid;return b;});
-      if(!blocks.length)continue;
+      k0=performance.now(); const gid=++GID; const blocks=vols.map(v=>{const b=makeBlock(m,v.rings,v.md,roofSets);if(v.tower)b.userData.tower=true;b.userData.gid=gid;return b;});
+      LB.mk+=performance.now()-k0; if(!blocks.length)continue;
       buildingsGroup.remove(m);m.geometry.dispose();gone.add(m);
       if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh.geometry.dispose();gone.add(u.roofMesh);}
       const nearB=(p)=>blocks.filter(b=>!b.userData.tower).concat(blocks).reduce((b,x)=>{const d=x.geometry.boundingSphere.center.distanceTo(new THREE.Vector3(p.x,p.y,x.geometry.boundingSphere.center.z));return !b||d<b.d?{x,d}:b;},null).x;
@@ -2784,14 +2792,14 @@ async function lidarBuildings(){
       if(m===S.building||m===S.selMesh){const nb=nearB(S.win&&S.win.pos?S.win.pos:{x:0,y:0});if(m===S.building)S.building=nb;if(m===S.selMesh)S.selMesh=nb;hiLater.push(nb);}
       n++;
     }
-    if(gone_())return false;
+    LB.loop=performance.now(); if(gone_())return false;
     S.meshes=S.meshes.filter(m=>!gone.has(m)).concat(added.filter(b=>b.userData&&b.userData.rings)); hiLater.forEach(m=>setHi(m,true));
     // pitched roofs: IGN ones of replaced buildings dropped, laser-confirmed ones added
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
     (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
-    roofMeshes=roofMeshes.filter(m=>!gone.has(m));S.roofEdgeParts=buildRoofSets(S.roofSkip);
-    rebuildEdges();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); applySlopeWalls(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} if(S.gfWalls)buildGroundFloors(S.gfWalls); S.T.lidarBuilt=performance.now();
-    S.counts=Object.assign(S.counts||{},{lidarBuildings:n});
+    roofMeshes=roofMeshes.filter(m=>!gone.has(m));LB.p1=performance.now();S.roofEdgeParts=buildRoofSets(S.roofSkip);LB.p2=performance.now();
+    rebuildEdges();LB.p3=performance.now();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); applySlopeWalls(); LB.p4=performance.now(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} if(S.gfWalls)buildGroundFloors(S.gfWalls); if(final)S.T.lidarBuilt=performance.now();
+    S.counts=Object.assign(S.counts||{},{lidarBuildings:n}); LB.p5=performance.now();
     return true;
   }
 }
@@ -2894,6 +2902,12 @@ const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0,log:[],done:[]};
 const qsSleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function qsV4(){
   const T=S.T; QV4.T=T; QV4.busy=true; QV4.times=[]; QV4.rings=[]; QV4.done=[]; QV4.used=new Set(); QV4.wdbg=[]; QV4.wskip=[]; QV4.relax=[]; QV4.sq=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
+  /* the house's roof is asked as soon as the house and its surroundings are rebuilt, while the rest of the neighbourhood is */
+  let early=null,earlyK='';const famK=f=>f.map(o=>o.uuid).sort().join();
+  for(let i=0;i<400&&!(S.lidarR&&S.lidarR.mnh&&S.T&&(S.T.lidarHouse||S.T.lidarBuilt));i++){await qsSleep(100);if(S.T!==T)return;}
+  try{const lg=window.__qsOld||window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4';
+    if(!lg&&S.T===T&&S.T.lidarHouse&&!S.T.lidarBuilt&&S.addrTarget){const f=family(S.addrTarget).filter(o=>o.userData.rings);
+      if(f.length&&f.every(o=>o.userData.lidar&&o.parent)){earlyK=famK(f);early=qsModelReq(f).catch(e=>{console.error('v5 model',e);return null;});QV4.early=performance.now();}}}catch(e){console.warn('early roof',e);}
   for(let i=0;i<400&&!(S.lidarBuilt&&S.lidarR&&S.lidarR.mnh&&S.T&&S.T.lidarBuilt);i++){await qsSleep(100);if(S.T!==T)return;}
   if(S.T!==T||!S.lidarBuilt){if(S.T===T)QV4.busy=false;return;}
   await qsSleep(400); /* let the scene settle (vegetation, edges) */
@@ -2906,6 +2920,7 @@ async function qsV4(){
     const fam=family(m).filter(o=>o.userData.rings);let d=1e9;fam.forEach(o=>o.userData.rings[0].forEach(p=>{d=Math.min(d,Math.hypot(p.x,p.y));}));const ar=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0);
     if(fam.some(o=>own.has(o)))d=-1;if((d<=RMAX&&ar<=AMAX)||(d<0&&ar<=4000))list.push({fam,d});});
   list.sort((a,b)=>a.d-b.d);QV4.pri=[];QV4.tried=new Set();
+  if(early){const it=list.find(x=>famK(x.fam)===earlyK);if(it&&it.fam.every(o=>o.parent))it.req=early;QV4.earlyHit=!!it;}
   /* then the blocks the user selects further away, on demand (setHi below), until the address changes */
   while(S.T===T){const it=QV4.pri.shift()||list.shift();QV4.busy=!!it;if(!it){await qsSleep(250);continue;}
     while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;} /* the user is moving the camera: wait */
@@ -2913,7 +2928,11 @@ async function qsV4(){
     if(it.fam.some(o=>!o.parent))continue; /* rebuilt meanwhile */
     if(it.fam.some(o=>QV4.used.has(o)))continue; /* a block already rebuilt with another group (an annex linked to two): once only */
     const legacy=window.__qsOld||window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4';let pre;
-    if(!legacy){const tq=performance.now();try{pre=await qsModelReq(it.fam);}catch(e){console.error('v5 model',e);pre=null;}QV4.tWait=(QV4.tWait||0)+performance.now()-tq;
+    /* the next blocks of the list are asked of the other workers meanwhile (their answers wait on the item) */
+    if(!legacy&&!it.req)it.req=qsModelReq(it.fam).catch(e=>{console.error('v5 model',e);return null;}); /* this block first, then the next ones */
+    const ownIt=S.addrTarget&&it.fam.includes(S.addrTarget); /* the house alone first: its tries get the cores */
+    if(!legacy&&!ownIt&&typeof QW!=='undefined'&&QW.ws&&QW.ws.length>1){let k=0;for(const nx of list){if(k>=QW.ws.length-1)break;if(!nx.req&&!nx.fam.some(o=>QV4.used.has(o))){nx.req=qsModelReq(nx.fam).catch(()=>null);}k++;}}
+    if(!legacy){const tq=performance.now();try{pre=await (it.req||qsModelReq(it.fam));}catch(e){console.error('v5 model',e);pre=null;}QV4.tWait=(QV4.tWait||0)+performance.now()-tq;
       if(S.T!==T)return;if(it.fam.some(o=>!o.parent||QV4.used.has(o)))continue;while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;}}
     it.fam.forEach(o=>QV4.tried.add(o));
     const t0=performance.now(); try{if(qsV4One(it.fam,pre)){QV4.n++;it.fam.forEach(o=>QV4.used.add(o));}}catch(e){console.error('v4 quartier',e);} QV4.ms+=performance.now()-t0;(QV4.times=QV4.times||[]).push([Math.round(performance.now()-t0),it.fam.length,Math.round(it.fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0))]);
@@ -3740,7 +3759,10 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
         if(houseDone()&&(shown>=DR.stages.length)&&(DR.stages.some(x=>x.k==='merged')||performance.now()-s0>1500))break;
         if(performance.now()-s0>12000)break;await sleep(80);}
       if(t!==token)return;
-      {const w0=performance.now();while(t===token&&typeof QV4!=='undefined'&&QV4.busy&&performance.now()-w0<3500)await sleep(100);}if(t!==token)return;
+      { /* only what touches the house (an annex, a garage kept apart in the data) is waited for, not the whole neighbourhood: at most 3.5 s */
+        const H=S.addrTarget?family(S.addrTarget):[],hr=H.flatMap(o=>o.userData.rings?o.userData.rings[0]:[]),hs=new Set(H);
+        const near=S.meshes.filter(m=>!hs.has(m)&&m.userData&&m.userData.rings&&!m.userData.monu&&m.userData.rings[0].some(p=>hr.some(q=>Math.hypot(p.x-q.x,p.y-q.y)<1.5)));
+        const w0=performance.now();while(t===token&&typeof QV4!=='undefined'&&QV4.busy&&(/[?&]avant\b/.test(location.search)||near.some(m=>m.parent&&!(QV4.tried&&QV4.tried.has(m))))&&performance.now()-w0<3500)await sleep(100);}if(t!==token)return;
       /* the solid house fills the drawing */
       hidden=false;houseMeshes().forEach(o=>o.visible=true);capShow('solid');await fadeTo(grp.children,0,700);await sleep(300);cap.classList.remove('on');
     }finally{clearInterval(keepHidden);clearInterval(keepSwept);hidden=false;houseMeshes().forEach(o=>o.visible=true);scene.remove(grp);grp.traverse(o=>{if(o.geometry)o.geometry.dispose();});if(typeof QW!=='undefined'){QW.onStage=null;QW.wantStages=null;}}};
@@ -3755,7 +3777,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     await drawHouse(t);if(t!==token)return;
     veil.classList.remove('on');await sleep(1300);if(t!==token)return;
     /* 3. the scan, paced on the roof queue */
-    const R1=Math.max(u.uQsD1.value+30,u.uQsL1.value),T=6000,MAX=9000,s0=performance.now();let p=0,last=s0;const swp=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},100);
+    const R1=Math.max(u.uQsD1.value+30,u.uQsL1.value),T=/[?&]avant\b/.test(location.search)?6000:4500,MAX=/[?&]avant\b/.test(location.search)?9000:0,s0=performance.now(); /* the scan no longer waits for the neighbours' roofs: they settle in while and after it runs */let p=0,last=s0;const swp=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},100);
     while(t===token&&p<1){await sleep(16);const now=performance.now(),dt=Math.min(64,now-last);last=now;const q=Q(),slow=q&&q.busy&&now-s0<MAX;p=Math.min(1,p+dt/T*(slow?0.45:1));
       const e=p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;u.uScanR.value=e*R1;}
     clearInterval(swp);if(t!==token)return;u.uScanR.value=1e6;soloShadows(false);try{sunPath.visible=true;}catch(e){}};
@@ -3896,6 +3918,43 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     const key=S.label||'';if(key!==shownFor){shownFor=key;touched=false;hint.classList.remove('on');hint._t=performance.now();}
     if(!touched&&orbit&&!loading&&S.building&&performance.now()-(hint._t||0)>6000)hint.classList.add('on');}catch(e){}},300);
 }catch(e){console.warn('window flow',e);}})();
+
+/* ===== Performance: shadows only when something changed, nothing drawn beyond the fade, a lighter pixel ratio on phones;
+   and a small timing panel on the test page with #perf in the address ===== */
+(()=>{try{
+  /* 1. shadows: the sun's light and the scene rarely change between two frames; the shadow map is redrawn only when they do */
+  const AVANT=/[?&]avant\b/.test(location.search); /* ?avant: this morning's render savings off, to compare in the same conditions */
+  if(!AVANT){renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;let skey='',busyT=0;
+  const R1=renderer.render.bind(renderer);
+  renderer.render=function(sc,c){if(sc===scene&&!renderer.getRenderTarget()){
+      const sp=sun.position,tp=sun.target.position,n=scene.children.length+(S.meshes?S.meshes.length:0);
+      const k=[sp.x,sp.y,sp.z,tp.x,tp.y,tp.z].map(v=>Math.round(v*4)).join(',')+'|'+n;
+      const q=(typeof QV4!=='undefined'&&QV4)||{},now=performance.now(),live=q.busy||S.loading||(window.__QSU&&__QSU.uScanR.value<1e5);
+      if(k!==skey||(live&&now-busyT>500)){skey=k;busyT=now;renderer.shadowMap.needsUpdate=true;}}
+    return R1(sc,c);};
+  }
+  /* 2. beyond the fade nothing shows (faces and edges are discarded there): those buildings are not drawn at all */
+  const cull=()=>{try{const u=window.__QSU;if(!u||!S.meshes)return;const cx=u.uQsC.value.x,cy=u.uQsC.value.y,lim=u.uQsD1.value+20; /* past the faces' fade only the edges remain, and they are one separate object */
+    const scanning=u.uScanR.value<1e5;
+    S.meshes.forEach(m=>{if(!m||!m.geometry)return;const g=m.geometry;if(!g.boundingSphere)g.computeBoundingSphere();const b=g.boundingSphere,far=!scanning&&Math.hypot(b.center.x-cx,b.center.y-cy)-b.radius>lim;
+      if(far&&m.visible){m.visible=false;m.userData._qsFar=1;}else if(!far&&m.userData._qsFar){m.visible=true;delete m.userData._qsFar;}});}catch(e){}};
+  if(!AVANT)setInterval(cull,700);
+  /* 3. phones: a pixel ratio of 1.5 at most (the grain of the screen hides the difference, the GPU does half the work) */
+  if(!AVANT)try{const ph=matchMedia('(pointer:coarse)').matches;const want=Math.min(devicePixelRatio||1,ph?1.5:2);if(Math.abs(renderer.getPixelRatio()-want)>0.01){renderer.setPixelRatio(want);dispatchEvent(new Event('resize'));}}catch(e){}
+  /* 4. the timing panel (test page, #perf) */
+  if(location.hash==='#perf'){const box=document.createElement('pre');box.style.cssText='position:fixed;left:8px;top:calc(env(safe-area-inset-top,0px) + 64px);z-index:99;background:rgba(20,22,50,.82);color:#fff;font:11px/1.35 ui-monospace,monospace;padding:8px 10px;border-radius:10px;pointer-events:none;max-width:92vw;white-space:pre-wrap';document.body.appendChild(box);
+    const ev={};let frames=0,fps=0,ft=performance.now();const cnt=()=>{frames++;requestAnimationFrame(cnt);};requestAnimationFrame(cnt);
+    setInterval(()=>{try{const now=performance.now();if(now-ft>=1000){fps=Math.round(frames*1000/(now-ft));frames=0;ft=now;}
+      const u0=window.__QSU,q=(typeof QV4!=='undefined'&&QV4)||{},v=document.getElementById('qsVeil'),t0=(S.T&&S.T.start)||0,r=x=>((x-t0)/1000).toFixed(1)+' s';
+      if(v&&!v.classList.contains('on')&&!ev.veil&&S.T&&S.T.scene)ev.veil=now;if(q.done&&q.done.length&&!ev.roof)ev.roof=now;
+      if(S.T!==ev._T){for(const k in ev)delete ev[k];ev._T=S.T;}const LR=S.lidarR&&S.lidarR._T===S.T&&S.T?S.lidarR:{};if(S.rawOrtho&&!ev.ortho)ev.ortho=now;if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
+      const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.scan0&&!ev.scan)ev.scan=now;
+      let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
+      const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
+      box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
+        'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
+        fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
+}catch(e){console.warn('perf',e);}})();
 
 /* ===== the loading veil plays the home page's window (copy of home-hero.js, own ids) ===== */
 window.QS_SUN=window.QS_SUN||3;
@@ -4130,32 +4189,79 @@ function qsModel5(R,opt){opt=opt||{};
   const pts=[];for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)pts.push([u0+(i+.5)*g,v0+(j+.5)*g,HR[i][j]]);
   /* fitting on the grid itself (typed arrays, no per-point allocation): same models, same order, same solver as v4 */
   const PZ=new Float64Array(NU*NV);for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)PZ[i*NV+j]=HR[i][j];
+  /* summed-area tables of the moments over the laser cells: the first least-squares pass of a rectangle in a few reads */
+  const W1=NV+1,SA=k=>new Float64Array((NU+1)*W1),sN=SA(),sZ=SA(),sU=SA(),sV=SA(),sUU=SA(),sVV=SA(),sUZ=SA(),sVZ=SA();
+  for(let i=0;i<NU;i++){const u=u0+(i+.5)*g;for(let j=0;j<NV;j++){const z=PZ[i*NV+j],o=(i+1)*W1+j+1,a=i*W1+j+1,b=(i+1)*W1+j,c=i*W1+j,ok=z===z,v=v0+(j+.5)*g;
+    const put=(T,x)=>{T[o]=(ok?x:0)+T[a]+T[b]-T[c];};put(sN,1);put(sZ,z);put(sU,u);put(sV,v);put(sUU,u*u);put(sVV,v*v);put(sUZ,u*z);put(sVZ,v*z);}}
+  const rs=(T,i0,i1,j0,j1)=>(i1<i0||j1<j0)?0:T[(i1+1)*W1+j1+1]-T[i0*W1+j1+1]-T[(i1+1)*W1+j0]+T[i0*W1+j0];
   const rngOf=Rc=>[Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1)];
   const ptsIn=Rc=>{const [i0,i1,j0,j1]=rngOf(Rc),out=[];for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)out.push(pts[i*NV+j]);return out;};
   const solveN=(Mx,bb,np)=>{for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
   const CL=0.6;
-  const fitM=(I,feat,np)=>{const f=new Float64Array(np);
-    const pass=x=>{const Mx=[...Array(np)].map(()=>Array(np).fill(0)),bb=Array(np).fill(0);let n=0;
-      for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const v=v0+(j+.5)*g,z=PZ[i*NV+j];feat(u,v,f);
-        if(z!==z)continue;if(x){let pz=0;for(let a=0;a<np;a++)pz+=f[a]*x[a];if(!(Math.abs(z-pz)<0.5))continue;}n++;
-        for(let a=0;a<np;a++){bb[a]+=f[a]*z;const fa=f[a],Ma=Mx[a];for(let c=0;c<np;c++)Ma[c]+=fa*f[c];}}}return {Mx,bb,n};};
-    const p0=pass(null);let x=solveN(p0.Mx,p0.bb,np);const p1=pass(x);if(p1.n>np+3)x=solveN(p1.Mx,p1.bb,np);return x;};
-  const costI=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const d=Math.abs(zz-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
-  const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){r=leafFit0(Rc);LFC.set(key,r);}return r;};
+  const PRF={fit:0,cost:0,nLeaf:0,nFit:0,nCost:0};const fitM=(I,feat,np)=>{const _t=performance.now();PRF.nFit++;try{return fitM0(I,feat,np);}finally{PRF.fit+=performance.now()-_t;}};
+  /* least squares of the laser over a rectangle (twice: the second time without the points more than 50 cm off).
+     Flat typed arrays, no allocation per pass, and no second solve when the second pass kept every point (same sums, same result). */
+  /* the features written out per kind (no closure per cell: the closures were megamorphic and slow); same expressions and
+     same order of the sums as the generic version below, so the very same numbers */
+  const fitK=(I,K,np)=>{PRF.nFit++;return fitK0(I,K,np);};
+  const fitK0=(I,K,np)=>{const t=K.t,a0=K.a,r=K.r,w0=K.w0,Rc=K.Rc;let M00,M01,M02,M11,M12,M22,B0,B1,B2;
+    const pass=x=>{M00=M01=M02=M11=M12=M22=B0=B1=B2=0;let n=0;const x0=x?x[0]:0,x1=x?x[1]:0,x2=x&&np>2?x[2]:0;
+      for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;let f1,f2=0;
+        if(t===0)f1=u-a0;else if(t===1)f1=v-a0;else if(t===2){f1=-Math.max(0,r-v);f2=-Math.max(0,v-r);}else if(t===3){f1=-Math.max(0,r-u);f2=-Math.max(0,u-r);}
+        else{const d=Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);if(t===4)f1=d;else{f1=Math.min(d,w0);f2=Math.max(0,d-w0);}}
+        if(x){let pz=0;pz+=1*x0;pz+=f1*x1;if(np>2)pz+=f2*x2;if(!(Math.abs(z-pz)<0.5))continue;}n++;
+        B0+=1*z;M00+=1*1;M01+=1*f1;B1+=f1*z;M11+=f1*f1;if(np>2){M02+=1*f2;M12+=f1*f2;B2+=f2*z;M22+=f2*f2;}}}return n;};
+    const sol=()=>np>2?solveN([[M00,M01,M02],[M01,M11,M12],[M02,M12,M22]],[B0,B1,B2],3):solveN([[M00,M01],[M01,M11]],[B0,B1],2);
+    let n0;if(t<=3){const [i0,i1,j0,j1]=I,q=(T)=>rs(T,i0,i1,j0,j1);n0=q(sN);M00=n0;B0=q(sZ);
+      if(t<=1){const SX=t===0?sU:sV,SXX=t===0?sUU:sVV,SXZ=t===0?sUZ:sVZ,N=n0,X=q(SX);M01=X-a0*N;M11=q(SXX)-2*a0*X+a0*a0*N;B1=q(SXZ)-a0*q(sZ);M02=M12=M22=B2=0;}
+      else{ /* split at r across the rows (gableU: along v) or the columns (gableV: along u) */
+        const alongV=t===2,lo=alongV?j0:i0,hi=alongV?j1:i1,c0=alongV?v0:u0;let kA=lo-1,kB=hi+1;for(let k=lo;k<=hi;k++){const c=c0+(k+.5)*g;if(c<r)kA=k;else if(c>r){kB=k;break;}}
+        const qa=T=>alongV?rs(T,i0,i1,j0,kA):rs(T,i0,kA,j0,j1),qb=T=>alongV?rs(T,i0,i1,kB,j1):rs(T,kB,i1,j0,j1),SX=alongV?sV:sU,SXX=alongV?sVV:sUU,SXZ=alongV?sVZ:sUZ;
+        const NA=qa(sN),XA=qa(SX),NB=qb(sN),XB=qb(SX),ZA=qa(sZ),ZB=qb(sZ);
+        M01=XA-r*NA;M11=qa(SXX)-2*r*XA+r*r*NA;B1=qa(SXZ)-r*ZA; /* f1=c-r below r */
+        M02=r*NB-XB;M22=qb(SXX)-2*r*XB+r*r*NB;B2=r*ZB-qb(SXZ);M12=0; /* f2=r-c above r */}}
+    else n0=pass(null);
+    /* second pass: count the points within 50 cm; the sums again (over those only) only when some were left out */
+    const cnt=x=>{const x0=x[0],x1=x[1],x2=np>2?x[2]:0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;let f1,f2=0;
+        if(t===0)f1=u-a0;else if(t===1)f1=v-a0;else if(t===2){f1=-Math.max(0,r-v);f2=-Math.max(0,v-r);}else if(t===3){f1=-Math.max(0,r-u);f2=-Math.max(0,u-r);}
+        else{const d=Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);if(t===4)f1=d;else{f1=Math.min(d,w0);f2=Math.max(0,d-w0);}}
+        let pz=0;pz+=1*x0;pz+=f1*x1;if(np>2)pz+=f2*x2;if(!(Math.abs(z-pz)<0.5))return true;}}return false;};
+    let x=sol();if(cnt(x)){const n1=pass(x);if(n1>np+3&&n1!==n0)x=sol();}return x;};
+  const fitM0=(I,feat,np)=>{const f=new Float64Array(np),M=new Float64Array(np*np),B=new Float64Array(np);
+    const pass=x=>{M.fill(0);B.fill(0);let n=0;
+      for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;feat(u,v,f);
+        if(x){let pz=0;for(let a=0;a<np;a++)pz+=f[a]*x[a];if(!(Math.abs(z-pz)<0.5))continue;}n++;
+        for(let a=0;a<np;a++){const fa=f[a],o=a*np;B[a]+=fa*z;for(let c=0;c<np;c++)M[o+c]+=fa*f[c];}}}return n;};
+    const sol=()=>{const Mx=[];for(let a=0;a<np;a++){const r=new Array(np);for(let c=0;c<np;c++)r[c]=M[a*np+c];Mx.push(r);}return solveN(Mx,Array.from(B),np);};
+    const n0=pass(null);let x=sol();const n1=pass(x);if(n1>np+3&&n1!==n0)x=sol();return x;};
+  const costI=(I,pred)=>{const _t=performance.now();PRF.nCost++;try{return costI0(I,pred);}finally{PRF.cost+=performance.now()-_t;}};
+  /* the same per kind, written out: same expressions as each candidate's pred */
+  const costK=(I,c,Rc)=>{PRF.nCost++;return costK0(I,c,Rc);};
+  const costK0=(I,c,Rc)=>{const T=c.type,x=c.x||[0,0,0],x0=x[0],x1=x[1],x2=x[2],r=c.r,w0=c.w0;let s=0;
+    const t=T==='none'?-1:T==='flat'?5:T==='shedU'?0:T==='shedV'?1:T==='gableU'?2:T==='gableV'?3:T==='hip'?4:T==='mansard'?6:7;if(t===7)return costI0(I,c.pred);
+    for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const v=v0+(j+.5)*g;let p;
+      if(t===-1)p=0;else if(t===5)p=x0;else if(t===0)p=x0+x1*(u-Rc[0]);else if(t===1)p=x0+x1*(v-Rc[2]);
+      else if(t===2)p=x0-x1*Math.max(0,r-v)-x2*Math.max(0,v-r);else if(t===3)p=x0-x1*Math.max(0,r-u)-x2*Math.max(0,u-r);
+      else{const d=Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);p=t===4?x0+x1*d:x0+x1*Math.min(d,w0)+x2*Math.max(0,d-w0);}
+      const dd=Math.abs(zz-p);s+=dd<CL?dd:CL;}}return s;};
+  const costI0=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const d=Math.abs(zz-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
+  /* k-th smallest (the same value a full sort would put at k) */
+  const qsel=(a,k)=>{let l=0,h=a.length-1;while(l<h){const p=a[(l+h)>>1];let i=l,j=h;while(i<=j){while(a[i]<p)i++;while(a[j]>p)j--;if(i<=j){const t=a[i];a[i]=a[j];a[j]=t;i++;j--;}}if(k<=j)h=j;else if(k>=i)l=i;else return a[k];}return a[k];};
+  const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){PRF.nLeaf++;r=leafFit0(Rc);LFC.set(key,r);}return r;};
   const leafFit0=Rc=>{const I=rngOf(Rc),none={type:'none',pred:()=>0,cost:0,cr:0,R:Rc,np:0};if(I[1]<I[0]||I[3]<I[2])return none;
     let nP=0,n2=0,zmax=-1e9;const hi=[];for(let i=I[0];i<=I[1];i++)for(let j=I[2];j<=I[3];j++){const z=PZ[i*NV+j];if(z!==z)continue;nP++;if(z>2)n2++;if(z>1)hi.push(z);if(z>zmax)zmax=z;}
     if(!nP)return none;const occ=n2/nP;const cands=[{type:'none',pred:()=>0,np:0}];
-    if(occ>0.3){hi.sort((x,y)=>x-y);const md=hi.length?hi[hi.length>>1]:0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
-      const su=fitM(I,(u,v,f)=>{f[0]=1;f[1]=u-Rc[0];},2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
-      const sv=fitM(I,(u,v,f)=>{f[0]=1;f[1]=v-Rc[2];},2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
+    if(occ>0.3){const md=hi.length?qsel(hi,hi.length>>1):0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
+      const su=fitK(I,{t:0,a:Rc[0]},2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
+      const sv=fitK(I,{t:1,a:Rc[2]},2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
       const w=Rc[3]-Rc[2],l=Rc[1]-Rc[0];
-      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[2]+fr*w,x=fitM(I,(u,v,f)=>{f[0]=1;f[1]=-Math.max(0,r-v);f[2]=-Math.max(0,v-r);},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableU',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-v)-x[2]*Math.max(0,v-r),np:3});}
-      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[0]+fr*l,x=fitM(I,(u,v,f)=>{f[0]=1;f[1]=-Math.max(0,r-u);f[2]=-Math.max(0,u-r);},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableV',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-u)-x[2]*Math.max(0,u-r),np:3});}
-      const dm=(u,v)=>Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);const hx=fitM(I,(u,v,f)=>{f[0]=1;f[1]=dm(u,v);},2);if(hx[1]>0.15&&hx[1]<1.8)cands.push({type:'hip',x:hx,pred:(u,v)=>hx[0]+hx[1]*dm(u,v),np:2});
-      if(big)for(const w0 of [0.8,1.2,1.6]){if(Math.min(w,l)<2*w0+1)continue;const x=fitM(I,(u,v,f)=>{const d=dm(u,v);f[0]=1;f[1]=Math.min(d,w0);f[2]=Math.max(0,d-w0);},3);if(x[1]>1.2&&x[1]<4&&x[2]>=0&&x[2]<0.8)cands.push({type:'mansard',w0,x,pred:(u,v)=>{const d=dm(u,v);return x[0]+x[1]*Math.min(d,w0)+x[2]*Math.max(0,d-w0);},np:3});}}
+      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[2]+fr*w,x=fitK(I,{t:2,r},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableU',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-v)-x[2]*Math.max(0,v-r),np:3});}
+      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[0]+fr*l,x=fitK(I,{t:3,r},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableV',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-u)-x[2]*Math.max(0,u-r),np:3});}
+      const dm=(u,v)=>Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);const hx=fitK(I,{t:4,Rc},2);if(hx[1]>0.15&&hx[1]<1.8)cands.push({type:'hip',x:hx,pred:(u,v)=>hx[0]+hx[1]*dm(u,v),np:2});
+      if(big)for(const w0 of [0.8,1.2,1.6]){if(Math.min(w,l)<2*w0+1)continue;const x=fitK(I,{t:5,w0,Rc},3);if(x[1]>1.2&&x[1]<4&&x[2]>=0&&x[2]<0.8)cands.push({type:'mansard',w0,x,pred:(u,v)=>{const d=dm(u,v);return x[0]+x[1]*Math.min(d,w0)+x[2]*Math.max(0,d-w0);},np:3});}}
     const hmax=zmax+0.5;let best=null;
     cands.forEach(c=>{if((c.type=='shedU'||c.type=='shedV')&&c.k>1)return;if(c.type!='none'){let bad=false;[[Rc[0],Rc[2]],[Rc[1],Rc[2]],[Rc[0],Rc[3]],[Rc[1],Rc[3]],[(Rc[0]+Rc[1])/2,(Rc[2]+Rc[3])/2]].forEach(([u,v])=>{const z=c.pred(u,v);if(z>hmax||z<-0.5)bad=true;});if(bad)return;}
-      const cr=costI(I,c.pred),co=cr+0.15*c.np*Math.sqrt(nP);if(!best||co<best.cost)best={...c,cost:co,cr};});best.R=Rc;return best;};
+      const cr=costK(I,c,Rc),co=cr+0.15*c.np*Math.sqrt(nP);if(!best||co<best.cost)best={...c,cost:co,cr};});best.R=Rc;return best;};
   const LAM=(opt.lam||8)*(g*g/0.25)**0.5, memo=new Map(), tS=performance.now();
   const solve=(a,b,c,d)=>{const key=a+','+b+','+c+','+d;if(memo.has(key))return memo.get(key);const lf=leafFit([CU[a],CU[b],CV[c],CV[d]]);let best={cost:lf.cost+(lf.type=='none'?0:LAM),leaves:[lf]};
     if(performance.now()-tS<6000){
@@ -4270,7 +4376,7 @@ function qsModel5(R,opt){opt=opt||{};
       const quads=[];for(let k=0;k<prof.length-1;k++){const p=prof[k],q=prof[k+1];if(p[2]-zm<0.02&&q[2]-zm<0.02)continue;quads.push([[p[0],p[1],zm],[q[0],q[1],zm],[q[0],q[1],q[2]],[p[0],p[1],p[2]]]);}
       let ar=0,mx=0,my=0,mz=0;quads.forEach(q=>{const w=Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1])*((q[2][2]-q[1][2])+(q[3][2]-q[0][2]))/2;ar+=w;mx+=(q[0][0]+q[1][0])/2*w;my+=(q[0][1]+q[1][1])/2*w;mz+=(q[0][2]+q[3][2]+q[1][2]+q[2][2])/4*w;});
       if(ar<1)continue;const nx=(b[1]-a[1])/L,ny=-(b[0]-a[0])/L;verts.push({quads,a:ar,x:mx/ar+nx*0.3,y:my/ar+ny*0.3,z:mz/ar,n:[nx,ny,0],tilt:Math.PI/2,az:((Math.atan2(nx,ny)/RAD)+360)%360});}});
-  tk('out');delete TT._;return {pieces,pans,cells,verts,rms,TT,L5:{leaves,XY,U,V,Z0,Ad,faceSet},v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
+  tk("out");delete TT._;return {pieces,pans,cells,verts,rms,TT,PRF,L5:{leaves,XY,U,V,Z0,Ad,faceSet},v4:{big,ms:Math.round(performance.now()-t0),types:leaves.map(l=>l.type),axis:Ad/RAD,off}};}
 
 
 
@@ -4421,13 +4527,18 @@ function qsFaceSet(l){const [a,b,c,d]=l.R,p=l.pred,F=[];const q=pp=>F.push(pp.ma
     return F;}
 
 /* ===== the model in a worker: the laser fit no longer freezes the view ===== */
-const QW={w:null,failed:false,seq:0,cb:new Map(),sent:null,ortho:null};
+const QW={w:null,ws:[],load:[],failed:false,seq:0,cb:new Map(),sent:null,ortho:null};
 function qsWorker(){if(QW.failed)return null;if(QW.w)return QW.w;
   try{const src='const RAD=Math.PI/180;const MK={};MK.area='+MK.area.toString()+';MK.clipHalf='+MK.clipHalf.toString()+';const RF={};const S={};\n'+qsModel5.toString()+'\n('+qsWorkerMain.toString()+')();';
-    const w=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
-    w.onmessage=e=>{if(e.data.stage){try{const fam=QW.fam&&QW.fam.get(e.data.id);if(fam&&QW.onStage)QW.onStage(fam,e.data.stage,e.data.data);}catch(_){}return;}const f=QW.cb.get(e.data.id);if(f){QW.cb.delete(e.data.id);if(QW.fam)QW.fam.delete(e.data.id);f(e.data);}};
+    const url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+    const N=(/[?&]avant\b/.test(location.search)||matchMedia('(pointer:coarse)').matches)?1:Math.max(1,Math.min(3,(navigator.hardwareConcurrency||2)-1)); /* a phone shares its cores badly (small cores, heat): one worker there */
+    for(let k=0;k<N;k++){const w=new Worker(url),wi=k;QW.load.push(0);
+    w.onmessage=e=>{if(!e.data.stage)QW.load[wi]=Math.max(0,QW.load[wi]-1);if(e.data.stage){try{const fam=QW.fam&&QW.fam.get(e.data.id);if(fam&&QW.onStage)QW.onStage(fam,e.data.stage,e.data.data);}catch(_){}return;}const f=QW.cb.get(e.data.id);if(f){QW.cb.delete(e.data.id);if(QW.fam)QW.fam.delete(e.data.id);f(e.data);}};
     w.onerror=e=>{console.warn('qs worker',e.message);QW.failed=true;QW.cb.forEach(f=>f({M:null,err:1}));QW.cb.clear();};
-    QW.w=w;return w;}catch(e){QW.failed=true;return null;}}
+    QW.ws.push(w);}
+    QW.w=QW.ws[0];return QW.w;}catch(e){QW.failed=true;return null;}}
+/* the least busy worker of the pool */
+function qsPick(){let k=0;for(let i=1;i<QW.ws.length;i++)if(QW.load[i]<QW.load[k])k=i;QW.load[k]++;return QW.ws[k];}
 function qsWorkerMain(){ /* runs inside the worker */
   const mkAt=o=>{if(!o)return null;const parts=o.parts,ok=v=>v>-500&&v<9000;return {R:parts.length>1?1e9:parts[0].R,res:parts[0].res,W:parts[0].W,at:(x,y)=>{for(const p of parts){const i=Math.floor((x-p.cx+p.R)/p.res),j=Math.floor((p.R-(y-p.cy))/p.res);if(i<0||j<0||i>=p.W||j>=p.W)continue;const v=p.f[j*p.W+i];if(ok(v))return v;}return null;}};};
   let F=null,C=null,GD=null;
@@ -4438,12 +4549,13 @@ function qsWorkerMain(){ /* runs inside the worker */
     const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0,pw:l.pw,shared:l.shared}))});
     const ro=S.rawOrtho,green=ro?((x,y)=>{const W=ro.raw.width,H=ro.raw.height,mpp=(ro.e-ro.w)/W,d=GD||(GD=ro.raw.getContext().getImageData().data);const px=Math.round((x-ro.w)/mpp),py=Math.round((ro.n-y)/mpp);if(px<0||py<0||px>=W||py>=H)return -99;const k=(py*W+px)*4;return 2*d[k+1]-d[k]-d[k+2];}):null;
     let staged=!m.stages;const run=o=>{try{const st=staged?null:(k,d)=>self.postMessage({id:m.id,stage:k,data:d});staged=true;const M=qsModel5(R,Object.assign({big:m.big,green,onStage:st},o));return M&&M.cells.length?pack(M,o):null;}catch(err){return null;}};
+    if(m.only){self.postMessage({id:m.id,M:run(m.only),ms:performance.now()-t0});return;}
     let M=run({});if(!M||(!m.big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
     if(!M||M.rms>0.3){const M3=run({big:false,lam:4,kinks:true});if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
     self.postMessage({id:m.id,M,ms:performance.now()-t0});};}
 function qsWorkerData(){const w=qsWorker();if(!w)return;const L=S.lidarR||{},pk=o=>o?{parts:o.parts||[{f:o.f,W:o.W,R:o.R,res:o.res,cx:0,cy:0}]}:null;
-  if(QW.sent!==S.T||QW.sentH!==L.mnh){QW.sent=S.T;QW.sentH=L.mnh;QW.ortho=null;w.postMessage({kind:'data',mnh:pk(L.mnh),F:pk(S.mnsF||L.mnsFine),C:pk(L.mns)});}
-  const ro=S.rawOrtho;if(ro&&ro.raw&&QW.ortho!==ro){QW.ortho=ro;let o=null;try{const W=ro.raw.width,H=ro.raw.height;o={width:W,height:H,data:ro.raw.getContext('2d').getImageData(0,0,W,H).data,w:ro.w,e:ro.e,n:ro.n,s:ro.s};}catch(e){}w.postMessage({kind:'data',ortho:o});}}
+  if(QW.sent!==S.T||QW.sentH!==L.mnh){QW.sent=S.T;QW.sentH=L.mnh;QW.ortho=null;const msg={kind:'data',mnh:pk(L.mnh),F:pk(S.mnsF||L.mnsFine),C:pk(L.mns)};QW.ws.forEach(x=>x.postMessage(msg));}
+  const ro=S.rawOrtho;if(ro&&ro.raw&&QW.ortho!==ro){QW.ortho=ro;let o=null;try{const W=ro.raw.width,H=ro.raw.height;o={width:W,height:H,data:ro.raw.getContext('2d').getImageData(0,0,W,H).data,w:ro.w,e:ro.e,n:ro.n,s:ro.s};}catch(e){}QW.ws.forEach(x=>x.postMessage({kind:'data',ortho:o}));}}
 /* the model of a group of blocks, computed in the worker; resolves to the same shape as qsV4Model (or null: the current roofs stay) */
 /* the neighbours' footprints next to a family: the laser over them belongs to them (a shared garage, a semi-detached house), never to this model */
 function qsOthers(fam){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;fam.forEach(o=>o.userData.rings&&o.userData.rings[0].forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
@@ -4452,18 +4564,31 @@ function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.us
   const R=roofCells(main);if(!R||R.cells.length<16)return Promise.resolve(null);
   const ud=main.userData,area=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0),big=(ud.floors||0)>=3||(ud.h||0)>9.5||area>800;
   const w=qsWorker();if(!w)return Promise.resolve(undefined); /* no worker: done on the page */
-  qsWorkerData();const id=++QW.seq;
-  return new Promise(res=>{QW.cb.set(id,d=>{if(d.err)return res(undefined);const P=d.M;QV4.tWorker=(QV4.tWorker||0)+(d.ms||0);
-      if(P&&P.TT){QV4.TT=QV4.TT||{};for(const k in P.TT)QV4.TT[k]=(QV4.TT[k]||0)+P.TT[k];}
+  qsWorkerData();
+  /* the answer of the model (the best of its tries) turned into the shape qsV4One draws, or null (the current roofs stay) */
+  const done=(P,res)=>{
       if(!P||P.rms>0.6)return res(null);
       const t=[Math.cos(P.Ad),Math.sin(P.Ad)],n=[-t[1],t[0]],XY=(u,v)=>[u*t[0]+v*n[0],u*t[1]+v*n[1]],U=(x,y)=>x*t[0]+y*t[1],V=(x,y)=>x*n[0]+y*n[1];
       const leaves=P.leaves.map(l=>{l.pred=qsV5Pred(l);return l;});
       const pieces=leaves.map(l=>{const P4=[[l.R[0],l.R[2]],[l.R[1],l.R[2]],[l.R[1],l.R[3]],[l.R[0],l.R[3]]].map(([u,v])=>XY(u,v));return {P:P4,roofZ:(x,y)=>l.pred(U(x,y),V(x,y))+P.Z0};});
       const M={rms:P.rms,v4:P.v4,pieces,sh0:P.noShift?{dx:0,dy:0}:R.sh,L5:{leaves,XY,U,V,Z0:P.Z0,Ad:P.Ad,faceSet:qsFaceSet}};
       const cur=qsCurErr(fam,R),mine=qsV4Err(M,R);QV4.log.push({x:Math.round(main.userData.rings[0][0].x),y:Math.round(main.userData.rings[0][0].y),cur:+cur.toFixed(2),v4:+mine.toFixed(2),types:M.v4.types.join(',')});
-      res(mine<cur*0.8&&cur-mine>0.08?{M,main}:null);});
-    const wantStages=!!(QW.onStage&&QW.wantStages&&QW.wantStages(fam));if(wantStages){(QW.fam||(QW.fam=new Map())).set(id,fam);}
-    const others=qsOthers(fam);w.postMessage({kind:'model',id,big,stages:wantStages,R:{rings:R.rings,sh:R.sh,s:R.s,others}});});}
+      res(mine<cur*0.8&&cur-mine>0.08?{M,main}:null);};
+  const wantStages=!!(QW.onStage&&QW.wantStages&&QW.wantStages(fam));const others=qsOthers(fam),Rq={rings:R.rings,sh:R.sh,s:R.s,others};
+  const ask=(msg,stages)=>new Promise(r=>{const id=++QW.seq;if(stages)(QW.fam||(QW.fam=new Map())).set(id,fam);
+    QW.cb.set(id,d=>{QV4.tWorker=(QV4.tWorker||0)+(d.ms||0);if(d.M&&d.M.TT){QV4.TT=QV4.TT||{};for(const k in d.M.TT)QV4.TT[k]=(QV4.TT[k]||0)+d.M.TT[k];}r(d);});
+    qsPick().postMessage(Object.assign({kind:'model',id,big,stages,R:Rq},msg));});
+  /* the studied house, with more than one worker: its three tries side by side, then the same choice as one after the other */
+  const own=S.addrTarget&&fam.includes(S.addrTarget);
+  /* the studied house, with more than one worker: its first two tries side by side; the answer is taken as soon as it is known
+     (the same choice as one after the other), the third try only when it is needed */
+  if(own&&QW.ws.length>1){const pa=ask({only:{}},wantStages),pb=ask({only:{noShift:true}},false);
+    return pa.then(a=>{let M=a.M;const enough=M=>M&&M.rms<=0.3;
+      if(M&&(big||M.rms<=0.12))return enough(M)?M:ask({only:{big:false,lam:4,kinks:true}},false).then(c=>{const M3=c.M;return (M3&&M3.rms<M.rms*0.9)?M3:M;});
+      return pb.then(b=>{const M2=b.M;if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;
+        if(!M||M.rms>0.3)return ask({only:{big:false,lam:4,kinks:true}},false).then(c=>{const M3=c.M;return (M3&&(!M||M3.rms<M.rms*0.9))?M3:M;});return M;});
+    }).then(M=>new Promise(res=>done(M,res)));}
+  return ask({},wantStages).then(d=>new Promise(res=>{if(d.err)return res(undefined);done(d.M,res);}));}
 /* windows on the v5 walls: the wall lines, their top and bottom are known along them, so no ray is needed to find the wall;
    rays only for what stands in front (a neighbour, a wing in a corner). Same rules as before: the study's storeys, 3.5 m bays,
    lintel under the eave, sill above the ground in front. */
