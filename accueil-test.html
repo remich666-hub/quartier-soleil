@@ -440,9 +440,40 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
   let PROG=null,UL={};
   if(GL){
     const FS=`precision highp float;
-uniform vec2 uRes;uniform float uD,uWW,uWH,uLI,uOR,uOH,uR,uLS,uPH0,uPI,uSun,uLit,uNt,uWallA;uniform vec4 uWin;uniform vec3 uTop,uBot,uLC,uLC2,uPatch,uPal,uWarm,uPink,uCold;uniform vec2 uL,uW;
+uniform vec2 uRes;uniform float uD,uWW,uWH,uLI,uOR,uOH,uR,uLS,uPH0,uPI,uSun,uLit,uNt,uWallA;uniform vec4 uWin;uniform vec3 uTop,uBot,uLC,uLC2,uPatch,uPal,uWarm,uPink,uCold;uniform vec2 uL,uW;uniform float uStage,uK,uLv;uniform vec3 uFlat,uLine,uOut;
 float hs(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
 float soft(float d,float s){return d>0.?0.5*exp(-d/s):1.-0.5*exp(d/s);}
+vec3 winCol(vec2 P,float t2,float t3){
+  bool sun=uSun>0.5;float dl=length(P-uL);
+  vec3 col=mix(uTop,uBot,clamp((P.y-uWin.y)/uWH,0.,1.));
+  float q=dl/uOR,qh=dl/uOH;
+  float hk=uLI*exp(-qh*qh*0.12)*(sun?0.85:0.45)*0.8;
+  vec3 hc=mix(uLC,vec3(255.,168.,196.),sun?smoothstep(1.,3.2,qh):0.);
+  if(sun&&qh>1.)col=mix(col,uPink,uLit*exp(-(qh-1.)*0.9)*0.2);
+  col=mix(col,hc,hk*(0.7+0.6*t2));
+  if(uLI>0.02&&q<2.5&&soft((q-1.)*uOR,uOR*0.22)>t3){
+    vec3 c=sun?mix(vec3(255.,248.,238.),uWarm,smoothstep(0.15,1.1,q)):mix(vec3(236.,240.,255.),uCold,smoothstep(0.3,1.1,q));
+    col=mix(col,c,sun?uLI:uNt);}
+  return col;}
+/* the window computed like the tool computes a house: its outline, its laser points, rough blocks, finer blocks */
+vec3 fx(vec2 P,float d){
+  float ln=1.2*uD;
+  if(uStage<1.5){ /* the outline alone, on a plain ground */
+    return d>-ln?uLine:uFlat;}
+  if(uStage<2.5){ /* the laser: the window's own light as points, sized by the light, row after row */
+    float g=9.*uD;vec2 o=P-uWin.xy;vec2 c=floor(o/g)*g+g*0.5+uWin.xy;
+    if((c.y-uWin.y)/uWH>uK)return d>-ln?uLine:uFlat;
+    vec3 wc=winCol(c,0.5,0.4);float L=dot(wc,vec3(0.3,0.59,0.11))/255.;float r=g*(0.16+0.3*L);
+    vec3 plate=mix(uFlat,wc,0.18);
+    return length(P-c)<r?wc:(d>-ln?uLine:plate);}
+  /* blocks: the window split in rectangles (the model's volumes), each one flat in the light at its centre; thin seams */
+  vec2 a=uWin.xy,b=uWin.zw;float id=1.;
+  for(int i=0;i<5;i++){if(float(i)>=uLv)break;float f=0.3+0.4*hs(vec2(id*7.13,3.7));
+    if(mod(float(i),2.)<0.5){float sx=mix(a.x,b.x,f);if(P.x<sx){b.x=sx;id=id*2.;}else{a.x=sx;id=id*2.+1.;}}
+    else{float sy=mix(a.y,b.y,f);if(P.y<sy){b.y=sy;id=id*2.;}else{a.y=sy;id=id*2.+1.;}}}
+  float e=min(min(P.x-a.x,b.x-P.x),min(P.y-a.y,b.y-P.y));
+  vec3 bc=winCol((a+b)*0.5,0.5,0.4);
+  return (e<ln||d>-ln)?uLine:bc;}
 void main(){
   vec2 P=vec2(gl_FragCoord.x,uRes.y-gl_FragCoord.y);
   float t1=hs(P),t2=hs(P+vec2(171.3,-311.7)),t3=hs(P+vec2(-532.1,917.9));
@@ -452,6 +483,7 @@ void main(){
   float u=dlw/uLS,w=uLI*exp(-u*u),s=0.35*uD+w*uWW*0.07;
   float mW=d<-uWW*0.3?1.:soft(d,s);
   bool sun=uSun>0.5;
+  if(uStage>0.5&&uStage<4.5&&d<0.){gl_FragColor=vec4(fx(P,d)/255.,1.);return;}
   if(mW>t1){
     vec3 col=mix(uTop,uBot,clamp((P.y-uWin.y)/uWH,0.,1.));
     float q=dl/uOR,qh=dl/uOH;
@@ -463,6 +495,10 @@ void main(){
       vec3 c=sun?mix(vec3(255.,248.,238.),uWarm,smoothstep(0.15,1.1,q)):mix(vec3(236.,240.,255.),uCold,smoothstep(0.3,1.1,q));
       col=mix(col,c,sun?uLI:uNt);}
     gl_FragColor=vec4(col/255.,1.);return;}
+  if(uStage>4.5&&d>=0.&&d<3.5*uD){gl_FragColor=vec4(uOut/255.*uK,uK);return;}
+  if(uStage>0.5&&uStage<4.5&&d>=0.&&d<1.2*uD){gl_FragColor=vec4(uLine/255.,1.);return;}
+  if(uStage>1.5&&uStage<2.5&&d>=0.&&d<16.*uD){float g=9.*uD;vec2 c=floor((P-uWin.xy)/g)*g+g*0.5+uWin.xy;float k=1.-d/(16.*uD);
+    if(length(P-c)<g*0.14*(0.6+k)){gl_FragColor=vec4(uLine/255.*0.8*k,0.8*k);return;}}
   float an=atan(P.y-uW.y,P.x-uW.x);
   float f=dlw/(uR*2.3)*(1.+0.13*sin(3.*an+uPH0)+0.07*sin(5.*an-uPH0*1.4));
   float gl=(sun?1.05:0.65)*uLI*exp(-f*f*1.7);
@@ -483,7 +519,7 @@ void main(){
     PROG=GL.createProgram();GL.attachShader(PROG,sh(GL.VERTEX_SHADER,'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}'));GL.attachShader(PROG,sh(GL.FRAGMENT_SHADER,FS));GL.linkProgram(PROG);GL.useProgram(PROG);
     const vb=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,vb);GL.bufferData(GL.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),GL.STATIC_DRAW);
     const lp=GL.getAttribLocation(PROG,'p');GL.enableVertexAttribArray(lp);GL.vertexAttribPointer(lp,2,GL.FLOAT,false,0,0);
-    for(const k of ['uRes','uD','uWW','uWH','uLI','uOR','uOH','uR','uLS','uPH0','uPI','uSun','uLit','uNt','uWallA','uWin','uTop','uBot','uLC','uLC2','uPatch','uPal','uWarm','uPink','uCold','uL','uW'])UL[k]=GL.getUniformLocation(PROG,k);
+    for(const k of ['uRes','uD','uWW','uWH','uLI','uOR','uOH','uR','uLS','uPH0','uPI','uSun','uLit','uNt','uWallA','uWin','uTop','uBot','uLC','uLC2','uPatch','uPal','uWarm','uPink','uCold','uL','uW','uStage','uK','uLv','uFlat','uLine','uOut'])UL[k]=GL.getUniformLocation(PROG,k);
   }
   const clockT=document.getElementById('clockT'),clockL=document.getElementById('clockL');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -535,6 +571,8 @@ void main(){
       f2('uRes',PW,PH);f1('uD',D);f1('uWW',g.ww);f1('uWH',g.wh);f1('uLI',LI);f1('uOR',OR);f1('uOH',OH);f1('uR',R);f1('uLS',LS);f1('uPH0',PH0);f1('uPI',PI);
       f1('uSun',sunUp?1:0);f1('uLit',lit);f1('uNt',nt);f1('uWallA',wallA);GL.uniform4f(U.uWin,g.x0,g.y0,g.x1,g.y1);
       f3('uTop',top);f3('uBot',bot);f3('uLC',LC);f3('uLC2',LC2);f3('uPatch',[py0,py1,sh]);f3('uPal',pal);f3('uWarm',warm);f3('uPink',pink);f3('uCold',cold);f2('uL',LX,LY);f2('uW',WX,WY);
+      {const F=window.__heroFx||{stage:0,k:0,lv:0},dk2=HERO.dataset.mode==='dark';f1('uStage',F.stage);f1('uK',F.k);f1('uLv',F.lv);
+       f3('uFlat',dk2?[20,26,60]:[246,233,239]);f3('uLine',dk2?[232,214,184]:[201,162,122]);f3('uOut',dk2?[251,227,196]:[240,119,58]);}
       GL.clearColor(0,0,0,0);GL.clear(GL.COLOR_BUFFER_BIT);GL.drawArrays(GL.TRIANGLES,0,3);
     }else{
     /* the smooth fields are evaluated once per block (4×4 on the open wall, 2×2 along the window's edge); the grain stays per pixel */
@@ -596,7 +634,7 @@ void main(){
   const follow=a=>{const want=a<-0.06?'dark':'light';if(HERO.dataset.mode!==want)HERO.dataset.mode=want;};
   const CYCLE=18000;let t0=performance.now()-0.2*18000,visible=true,raf=0,last=-1e9;
   const hourAt=p=>{const k=[[0,4],[0.1,6],[0.2,8],[0.68,19],[0.82,21.5],[1,28]];let i=0;while(i<k.length-2&&p>k[i+1][0])i++;const t=(p-k[i][0])/(k[i+1][0]-k[i][0]),e=0.5-0.5*Math.cos(Math.PI*t);return k[i][1]+(k[i+1][1]-k[i][1])*e;};
-  function frame(now){raf=0;if(now-last>=32||reduce){last=now;const p=reduce?0.66:((now-t0)%CYCLE)/CYCLE;const h=window.__heroHour!=null?window.__heroHour:hourAt(p)%24;window.__heroH=hourAt(p)%24;draw(h);const dd=(h-6)/15;follow(dd>=0&&dd<=1?Math.sin(Math.PI*dd):-Math.min(1,(dd<0?-dd:dd-1)*5));}if(visible&&!reduce)raf=requestAnimationFrame(frame);}
+  function frame(now){raf=0;if(now-last>=32||reduce||window.__heroFx){last=now;const p=reduce?0.66:((now-t0)%CYCLE)/CYCLE;const h=window.__heroHour!=null?window.__heroHour:hourAt(p)%24;window.__heroH=hourAt(p)%24;draw(h);const dd=(h-6)/15;follow(dd>=0&&dd<=1?Math.sin(Math.PI*dd):-Math.min(1,(dd<0?-dd:dd-1)*5));}if(visible&&!reduce)raf=requestAnimationFrame(frame);}
   resize();addEventListener('resize',()=>{resize();last=-1e9;if(!raf)raf=requestAnimationFrame(frame);});
   if('IntersectionObserver' in window)new IntersectionObserver(es=>{visible=es[0].isIntersecting;if(visible&&!raf)raf=requestAnimationFrame(frame);}).observe(stage);
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{last=-1e9;});
@@ -604,60 +642,27 @@ void main(){
 })();
 
 
-/* ===== hero: the window "recomputes" itself now and then, with the tool's own stages, in hard cuts:
-   wireframe (the window as an extruded volume, the hours jump), laser points, the solid window with its selection outline,
-   then contour rings run out through the halo. Rare and short; never with reduced motion. ===== */
+/* ===== hero: now and then the window computes itself the way the tool computes a house — its outline alone, its own light
+   as laser points (row after row), rough blocks, finer blocks, then the smooth window with the selection outline.
+   Hard cuts between the stages, real holds on each one; once on arrival, then once per day of the cycle (before sunset).
+   The stages are drawn by the hero's shader (window.__heroFx); never with reduced motion. ===== */
 (function(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
   const stage=document.getElementById('stage');if(!stage)return;
-  const cv=document.createElement('canvas');cv.setAttribute('aria-hidden','true');stage.appendChild(cv);const g=cv.getContext('2d');
-  const HERO=stage.closest('.hero')||document.body;const dark=()=>HERO.dataset.mode==='dark';
-  let geo=null,DPR=1;
-  const fit=()=>{geo=window.__heroGeo;if(!geo)return;DPR=Math.min(2,devicePixelRatio||1);
-    Object.assign(cv.style,{position:'absolute',left:-geo.MX+'px',top:-geo.MY+'px',width:geo.W+'px',height:geo.H+'px',zIndex:'-1',pointerEvents:'none'});
-    cv.width=Math.round(geo.W*DPR);cv.height=Math.round(geo.H*DPR);};
-  addEventListener('resize',()=>setTimeout(fit,50));
-  const C={bgL:'#eef0fb',bgD:'#141a3c',wireL:'#c9a27a',wireD:'#e8d6b8',dot:'#f2a0bf',out:['#f0773a','#fbe3c4'],ring:'#ff8fb0',sweep:'#d8b46a'};
+  /* [start ms, stage, level, progress] */
+  const T=[[0,1,0],[850,2,0,'rows'],[1900,3,2],[2350,3,3],[2700,3,4],[3050,5,0,'fade'],[3700,0,0]];
+  let run=null;
   const ease=x=>x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
-  let run=null,quietUntil=0;
-  function start(){if(run||!window.__heroGeo)return;fit();run={t0:performance.now(),h0:window.__heroH||17};tick();}
-  function rect(x,y,w,h){g.strokeRect(x,y,w,h);}
   function tick(){
-    const t=performance.now()-run.t0,{x0,y0,ww,wh,MX,MY}=geo,d=DPR,X=x0*d,Y=y0*d,Wd=ww*d,Hd=wh*d,nt=dark();
-    g.clearRect(0,0,cv.width,cv.height);
-    /* hours jump in hard cuts while the window is a wireframe */
-    const jumps=[[120,3],[240,6],[360,9],[480,null]];let hh=null;for(const [tt,k] of jumps)if(t>=tt)hh=k;window.__heroHour=t<120||t>=480||hh==null?null:(run.h0+hh)%24;
-    if(t<900){
-      /* the window's place: emptied to the page ground */
-      g.fillStyle=nt?C.bgD:C.bgL;g.fillRect(X-1,Y-1,Wd+2,Hd+2);
-      /* 1. wireframe: the window as a volume seen from below the sky, its back face toward a vanishing point */
-      const k=0.78,cx=X+Wd*0.5,cy=Y+Hd*1.35,bx=cx+(X-cx)*k,by=cy+(Y-cy)*k,bw=Wd*k,bh=Hd*k;
-      g.lineWidth=1*d;g.strokeStyle=nt?C.wireD:C.wireL;g.globalAlpha=t<560?0.95:0.35;
-      rect(X,Y,Wd,Hd);rect(bx,by,bw,bh);
-      [[X,Y,bx,by],[X+Wd,Y,bx+bw,by],[X,Y+Hd,bx,by+bh],[X+Wd,Y+Hd,bx+bw,by+bh]].forEach(([a,b,c,e])=>{g.beginPath();g.moveTo(a,b);g.lineTo(c,e);g.stroke();});
-      for(let i=1;i<4;i++){const f=i/4;g.beginPath();g.moveTo(X,Y+Hd*f);g.lineTo(X+Wd,Y+Hd*f);g.stroke();} /* storeys */
-      g.globalAlpha=1;
-      /* the scan sweep: a golden arc turning once round the window */
-      if(t<560){const a0=-Math.PI*0.9+ease(Math.min(1,t/560))*Math.PI*2,rx=Wd*0.95,ry=Hd*0.42;g.save();g.translate(X+Wd/2,Y+Hd*0.72);g.lineWidth=3*d;g.strokeStyle=C.sweep;g.globalAlpha=0.85;
-        g.beginPath();g.ellipse(0,0,rx,ry,0,a0,a0+1.1);g.stroke();g.restore();g.globalAlpha=1;}
-      /* 2. laser: a regular grid of points fills it, row after row, and holds */
-      if(t>=560){const step=7*d,rows=Math.floor(Hd/step),shown=Math.min(rows,Math.floor((t-560)/120*rows));g.fillStyle=C.dot;
-        for(let r=0;r<shown;r++)for(let x=X+step/2;x<X+Wd;x+=step){g.beginPath();g.arc(x,Y+step/2+r*step,1.25*d,0,6.283);g.fill();}}
-    }else{
-      /* 3. the solid window comes back with the selection outline, fading */
-      const k=Math.max(0,1-(t-900)/450);if(k>0){g.lineWidth=3*d;g.strokeStyle=nt?C.out[1]:C.out[0];g.globalAlpha=k;rect(X-3*d,Y-3*d,Wd+6*d,Hd+6*d);g.globalAlpha=1;}
-      /* 4. contour rings run out through the halo */
-      for(let i=0;i<3;i++){const s=(t-900-i*110)/600;if(s<=0||s>=1)continue;const m=ease(s)*ww*0.55*d;g.lineWidth=1.2*d;g.strokeStyle=C.ring;g.globalAlpha=(1-s)*0.8;
-        const r=Math.min(40*d,m*0.5);g.beginPath();g.roundRect?g.roundRect(X-m,Y-m,Wd+2*m,Hd+2*m,r):g.rect(X-m,Y-m,Wd+2*m,Hd+2*m);g.stroke();}
-      g.globalAlpha=1;
-    }
-    if(t<1600)requestAnimationFrame(tick);else{g.clearRect(0,0,cv.width,cv.height);window.__heroHour=null;run=null;quietUntil=performance.now()+1500;}
-  }
-  /* when: once after the page settles, then every 11 s; and when day turns to night (or back), not during its own jumps */
-  setTimeout(()=>{fit();start();},1400);
-  setInterval(()=>{if(document.visibilityState==='visible')start();},11000);
-  /* its own hour jumps flip the mode too: those are not a real dusk */
-  let lastMode=HERO.dataset.mode;new MutationObserver(()=>{const m=HERO.dataset.mode;if(m!==lastMode){lastMode=m;if(!run&&performance.now()>quietUntil)setTimeout(start,250);}}).observe(HERO,{attributes:true,attributeFilter:['data-mode']});
+    const t=performance.now()-run.t0;let cur=T[0];for(const s of T)if(t>=s[0])cur=s;
+    if(cur[1]===0){window.__heroFx=null;run=null;return;}
+    const nx=T[T.indexOf(cur)+1],k0=(t-cur[0])/(nx[0]-cur[0]);
+    const k=cur[3]==='rows'?ease(Math.min(1,(t-cur[0])/450)):cur[3]==='fade'?1-ease(Math.min(1,k0)):1;
+    window.__heroFx={stage:cur[1],k,lv:cur[2]};requestAnimationFrame(tick);}
+  function start(){if(run||document.visibilityState!=='visible')return;run={t0:performance.now()};tick();}
+  setTimeout(start,1400);
+  /* once per cycle, a little before sunset on the hero's clock, never twice in a row */
+  let armed=true;setInterval(()=>{const h=window.__heroH;if(h==null)return;if(h>17.4&&h<18.2){if(armed){armed=false;start();}}else if(h<16||h>20)armed=true;},200);
 })();
 
 </script>
