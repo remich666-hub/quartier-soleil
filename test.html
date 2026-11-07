@@ -3924,14 +3924,14 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   if(location.hash==='#perf'){const box=document.createElement('pre');box.style.cssText='position:fixed;left:8px;top:calc(env(safe-area-inset-top,0px) + 64px);z-index:99;background:rgba(20,22,50,.82);color:#fff;font:11px/1.35 ui-monospace,monospace;padding:8px 10px;border-radius:10px;pointer-events:none;max-width:60vw';document.body.appendChild(box);
     const ev={};let frames=0,fps=0,ft=performance.now();const cnt=()=>{frames++;requestAnimationFrame(cnt);};requestAnimationFrame(cnt);
     setInterval(()=>{try{const now=performance.now();if(now-ft>=1000){fps=Math.round(frames*1000/(now-ft));frames=0;ft=now;}
-      const q=(typeof QV4!=='undefined'&&QV4)||{},v=document.getElementById('qsVeil'),t0=(S.T&&S.T.start)||0,r=x=>((x-t0)/1000).toFixed(1)+' s';
+      const u0=window.__QSU,q=(typeof QV4!=='undefined'&&QV4)||{},v=document.getElementById('qsVeil'),t0=(S.T&&S.T.start)||0,r=x=>((x-t0)/1000).toFixed(1)+' s';
       if(v&&!v.classList.contains('on')&&!ev.veil&&S.T&&S.T.scene)ev.veil=now;if(q.done&&q.done.length&&!ev.roof)ev.roof=now;
-      if(S.addrTarget&&q.used&&q.used.has(S.addrTarget)&&!ev.house)ev.house=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
-      const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.veil&&!ev.scan)ev.scan=now;
+      const LR=S.lidarR||{};if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
+      const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.scan0&&!ev.scan)ev.scan=now;
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
       const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
-      box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'laser '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),'1er toit '+(ev.roof?r(ev.roof):'…'),'maison '+(ev.house?r(ev.house):'…'),
-        'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','scan fini '+(ev.scan?r(ev.scan):'…'),'calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
+      box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
+        'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
         fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
 }catch(e){console.warn('perf',e);}})();
 
