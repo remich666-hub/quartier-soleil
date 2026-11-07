@@ -2913,7 +2913,10 @@ async function qsV4(){
     if(it.fam.some(o=>!o.parent))continue; /* rebuilt meanwhile */
     if(it.fam.some(o=>QV4.used.has(o)))continue; /* a block already rebuilt with another group (an annex linked to two): once only */
     const legacy=window.__qsOld||window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4';let pre;
-    if(!legacy){const tq=performance.now();try{pre=await qsModelReq(it.fam);}catch(e){console.error('v5 model',e);pre=null;}QV4.tWait=(QV4.tWait||0)+performance.now()-tq;
+    /* the next blocks of the list are asked of the other workers meanwhile (their answers wait on the item) */
+    if(!legacy&&!it.req)it.req=qsModelReq(it.fam).catch(e=>{console.error('v5 model',e);return null;}); /* this block first, then the next ones */
+    if(!legacy&&typeof QW!=='undefined'&&QW.ws&&QW.ws.length>1){let k=0;for(const nx of list){if(k>=QW.ws.length-1)break;if(!nx.req&&!nx.fam.some(o=>QV4.used.has(o))){nx.req=qsModelReq(nx.fam).catch(()=>null);}k++;}}
+    if(!legacy){const tq=performance.now();try{pre=await (it.req||qsModelReq(it.fam));}catch(e){console.error('v5 model',e);pre=null;}QV4.tWait=(QV4.tWait||0)+performance.now()-tq;
       if(S.T!==T)return;if(it.fam.some(o=>!o.parent||QV4.used.has(o)))continue;while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;}}
     it.fam.forEach(o=>QV4.tried.add(o));
     const t0=performance.now(); try{if(qsV4One(it.fam,pre)){QV4.n++;it.fam.forEach(o=>QV4.used.add(o));}}catch(e){console.error('v4 quartier',e);} QV4.ms+=performance.now()-t0;(QV4.times=QV4.times||[]).push([Math.round(performance.now()-t0),it.fam.length,Math.round(it.fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0))]);
@@ -4663,13 +4666,18 @@ function qsFaceSet(l){const [a,b,c,d]=l.R,p=l.pred,F=[];const q=pp=>F.push(pp.ma
     return F;}
 
 /* ===== the model in a worker: the laser fit no longer freezes the view ===== */
-const QW={w:null,failed:false,seq:0,cb:new Map(),sent:null,ortho:null};
+const QW={w:null,ws:[],load:[],failed:false,seq:0,cb:new Map(),sent:null,ortho:null};
 function qsWorker(){if(QW.failed)return null;if(QW.w)return QW.w;
   try{const src='const RAD=Math.PI/180;const MK={};MK.area='+MK.area.toString()+';MK.clipHalf='+MK.clipHalf.toString()+';const RF={};const S={};\n'+qsModel5.toString()+'\n('+qsWorkerMain.toString()+')();';
-    const w=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
-    w.onmessage=e=>{if(e.data.stage){try{const fam=QW.fam&&QW.fam.get(e.data.id);if(fam&&QW.onStage)QW.onStage(fam,e.data.stage,e.data.data);}catch(_){}return;}const f=QW.cb.get(e.data.id);if(f){QW.cb.delete(e.data.id);if(QW.fam)QW.fam.delete(e.data.id);f(e.data);}};
+    const url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+    const N=Math.max(1,Math.min(3,(navigator.hardwareConcurrency||2)-1));
+    for(let k=0;k<N;k++){const w=new Worker(url),wi=k;QW.load.push(0);
+    w.onmessage=e=>{if(!e.data.stage)QW.load[wi]=Math.max(0,QW.load[wi]-1);if(e.data.stage){try{const fam=QW.fam&&QW.fam.get(e.data.id);if(fam&&QW.onStage)QW.onStage(fam,e.data.stage,e.data.data);}catch(_){}return;}const f=QW.cb.get(e.data.id);if(f){QW.cb.delete(e.data.id);if(QW.fam)QW.fam.delete(e.data.id);f(e.data);}};
     w.onerror=e=>{console.warn('qs worker',e.message);QW.failed=true;QW.cb.forEach(f=>f({M:null,err:1}));QW.cb.clear();};
-    QW.w=w;return w;}catch(e){QW.failed=true;return null;}}
+    QW.ws.push(w);}
+    QW.w=QW.ws[0];return QW.w;}catch(e){QW.failed=true;return null;}}
+/* the least busy worker of the pool */
+function qsPick(){let k=0;for(let i=1;i<QW.ws.length;i++)if(QW.load[i]<QW.load[k])k=i;QW.load[k]++;return QW.ws[k];}
 function qsWorkerMain(){ /* runs inside the worker */
   const mkAt=o=>{if(!o)return null;const parts=o.parts,ok=v=>v>-500&&v<9000;return {R:parts.length>1?1e9:parts[0].R,res:parts[0].res,W:parts[0].W,at:(x,y)=>{for(const p of parts){const i=Math.floor((x-p.cx+p.R)/p.res),j=Math.floor((p.R-(y-p.cy))/p.res);if(i<0||j<0||i>=p.W||j>=p.W)continue;const v=p.f[j*p.W+i];if(ok(v))return v;}return null;}};};
   let F=null,C=null,GD=null;
@@ -4680,12 +4688,13 @@ function qsWorkerMain(){ /* runs inside the worker */
     const pack=(M,o)=>({rms:M.rms,noShift:!!o.noShift,v4:M.v4,TT:M.TT,Ad:M.L5.Ad,Z0:M.L5.Z0,leaves:M.L5.leaves.map(l=>({R:l.R,type:l.type,x:l.x,r:l.r,w0:l.w0,pw:l.pw,shared:l.shared}))});
     const ro=S.rawOrtho,green=ro?((x,y)=>{const W=ro.raw.width,H=ro.raw.height,mpp=(ro.e-ro.w)/W,d=GD||(GD=ro.raw.getContext().getImageData().data);const px=Math.round((x-ro.w)/mpp),py=Math.round((ro.n-y)/mpp);if(px<0||py<0||px>=W||py>=H)return -99;const k=(py*W+px)*4;return 2*d[k+1]-d[k]-d[k+2];}):null;
     let staged=!m.stages;const run=o=>{try{const st=staged?null:(k,d)=>self.postMessage({id:m.id,stage:k,data:d});staged=true;const M=qsModel5(R,Object.assign({big:m.big,green,onStage:st},o));return M&&M.cells.length?pack(M,o):null;}catch(err){return null;}};
+    if(m.only){self.postMessage({id:m.id,M:run(m.only),ms:performance.now()-t0});return;}
     let M=run({});if(!M||(!m.big&&M.rms>0.12)){const M2=run({noShift:true});if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
     if(!M||M.rms>0.3){const M3=run({big:false,lam:4,kinks:true});if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
     self.postMessage({id:m.id,M,ms:performance.now()-t0});};}
 function qsWorkerData(){const w=qsWorker();if(!w)return;const L=S.lidarR||{},pk=o=>o?{parts:o.parts||[{f:o.f,W:o.W,R:o.R,res:o.res,cx:0,cy:0}]}:null;
-  if(QW.sent!==S.T||QW.sentH!==L.mnh){QW.sent=S.T;QW.sentH=L.mnh;QW.ortho=null;w.postMessage({kind:'data',mnh:pk(L.mnh),F:pk(S.mnsF||L.mnsFine),C:pk(L.mns)});}
-  const ro=S.rawOrtho;if(ro&&ro.raw&&QW.ortho!==ro){QW.ortho=ro;let o=null;try{const W=ro.raw.width,H=ro.raw.height;o={width:W,height:H,data:ro.raw.getContext('2d').getImageData(0,0,W,H).data,w:ro.w,e:ro.e,n:ro.n,s:ro.s};}catch(e){}w.postMessage({kind:'data',ortho:o});}}
+  if(QW.sent!==S.T||QW.sentH!==L.mnh){QW.sent=S.T;QW.sentH=L.mnh;QW.ortho=null;const msg={kind:'data',mnh:pk(L.mnh),F:pk(S.mnsF||L.mnsFine),C:pk(L.mns)};QW.ws.forEach(x=>x.postMessage(msg));}
+  const ro=S.rawOrtho;if(ro&&ro.raw&&QW.ortho!==ro){QW.ortho=ro;let o=null;try{const W=ro.raw.width,H=ro.raw.height;o={width:W,height:H,data:ro.raw.getContext('2d').getImageData(0,0,W,H).data,w:ro.w,e:ro.e,n:ro.n,s:ro.s};}catch(e){}QW.ws.forEach(x=>x.postMessage({kind:'data',ortho:o}));}}
 /* the model of a group of blocks, computed in the worker; resolves to the same shape as qsV4Model (or null: the current roofs stay) */
 /* the neighbours' footprints next to a family: the laser over them belongs to them (a shared garage, a semi-detached house), never to this model */
 function qsOthers(fam){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;fam.forEach(o=>o.userData.rings&&o.userData.rings[0].forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
@@ -4694,18 +4703,28 @@ function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.us
   const R=roofCells(main);if(!R||R.cells.length<16)return Promise.resolve(null);
   const ud=main.userData,area=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0),big=(ud.floors||0)>=3||(ud.h||0)>9.5||area>800;
   const w=qsWorker();if(!w)return Promise.resolve(undefined); /* no worker: done on the page */
-  qsWorkerData();const id=++QW.seq;
-  return new Promise(res=>{QW.cb.set(id,d=>{if(d.err)return res(undefined);const P=d.M;QV4.tWorker=(QV4.tWorker||0)+(d.ms||0);
-      if(P&&P.TT){QV4.TT=QV4.TT||{};for(const k in P.TT)QV4.TT[k]=(QV4.TT[k]||0)+P.TT[k];}
+  qsWorkerData();
+  /* the answer of the model (the best of its tries) turned into the shape qsV4One draws, or null (the current roofs stay) */
+  const done=(P,res)=>{
       if(!P||P.rms>0.6)return res(null);
       const t=[Math.cos(P.Ad),Math.sin(P.Ad)],n=[-t[1],t[0]],XY=(u,v)=>[u*t[0]+v*n[0],u*t[1]+v*n[1]],U=(x,y)=>x*t[0]+y*t[1],V=(x,y)=>x*n[0]+y*n[1];
       const leaves=P.leaves.map(l=>{l.pred=qsV5Pred(l);return l;});
       const pieces=leaves.map(l=>{const P4=[[l.R[0],l.R[2]],[l.R[1],l.R[2]],[l.R[1],l.R[3]],[l.R[0],l.R[3]]].map(([u,v])=>XY(u,v));return {P:P4,roofZ:(x,y)=>l.pred(U(x,y),V(x,y))+P.Z0};});
       const M={rms:P.rms,v4:P.v4,pieces,sh0:P.noShift?{dx:0,dy:0}:R.sh,L5:{leaves,XY,U,V,Z0:P.Z0,Ad:P.Ad,faceSet:qsFaceSet}};
       const cur=qsCurErr(fam,R),mine=qsV4Err(M,R);QV4.log.push({x:Math.round(main.userData.rings[0][0].x),y:Math.round(main.userData.rings[0][0].y),cur:+cur.toFixed(2),v4:+mine.toFixed(2),types:M.v4.types.join(',')});
-      res(mine<cur*0.8&&cur-mine>0.08?{M,main}:null);});
-    const wantStages=!!(QW.onStage&&QW.wantStages&&QW.wantStages(fam));if(wantStages){(QW.fam||(QW.fam=new Map())).set(id,fam);}
-    const others=qsOthers(fam);w.postMessage({kind:'model',id,big,stages:wantStages,R:{rings:R.rings,sh:R.sh,s:R.s,others}});});}
+      res(mine<cur*0.8&&cur-mine>0.08?{M,main}:null);};
+  const wantStages=!!(QW.onStage&&QW.wantStages&&QW.wantStages(fam));const others=qsOthers(fam),Rq={rings:R.rings,sh:R.sh,s:R.s,others};
+  const ask=(msg,stages)=>new Promise(r=>{const id=++QW.seq;if(stages)(QW.fam||(QW.fam=new Map())).set(id,fam);
+    QW.cb.set(id,d=>{QV4.tWorker=(QV4.tWorker||0)+(d.ms||0);if(d.M&&d.M.TT){QV4.TT=QV4.TT||{};for(const k in d.M.TT)QV4.TT[k]=(QV4.TT[k]||0)+d.M.TT[k];}r(d);});
+    qsPick().postMessage(Object.assign({kind:'model',id,big,stages,R:Rq},msg));});
+  /* the studied house, with more than one worker: its three tries side by side, then the same choice as one after the other */
+  const own=S.addrTarget&&fam.includes(S.addrTarget);
+  if(own&&QW.ws.length>1)return Promise.all([ask({only:{}},wantStages),ask({only:{noShift:true}},false),ask({only:{big:false,lam:4,kinks:true}},false)]).then(([a,b,c])=>new Promise(res=>{
+    if(a.err&&b.err&&c.err)return res(undefined);let M=a.M;
+    if(!M||(!big&&M.rms>0.12)){const M2=b.M;if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
+    if(!M||M.rms>0.3){const M3=c.M;if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
+    done(M,res);}));
+  return ask({},wantStages).then(d=>new Promise(res=>{if(d.err)return res(undefined);done(d.M,res);}));}
 /* windows on the v5 walls: the wall lines, their top and bottom are known along them, so no ray is needed to find the wall;
    rays only for what stands in front (a neighbour, a wing in a corner). Same rules as before: the study's storeys, 3.5 m bays,
    lintel under the eave, sill above the ground in front. */
