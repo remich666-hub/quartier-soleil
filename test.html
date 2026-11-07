@@ -3755,7 +3755,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     await drawHouse(t);if(t!==token)return;
     veil.classList.remove('on');await sleep(1300);if(t!==token)return;
     /* 3. the scan, paced on the roof queue */
-    const R1=Math.max(u.uQsD1.value+30,u.uQsL1.value),T=6000,MAX=9000,s0=performance.now();let p=0,last=s0;const swp=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},100);
+    const R1=Math.max(u.uQsD1.value+30,u.uQsL1.value),T=4500,MAX=0,s0=performance.now(); /* the scan no longer waits for the neighbours' roofs: they settle in while and after it runs */let p=0,last=s0;const swp=setInterval(()=>{try{window.__qsSweep&&window.__qsSweep();}catch(e){}},100);
     while(t===token&&p<1){await sleep(16);const now=performance.now(),dt=Math.min(64,now-last);last=now;const q=Q(),slow=q&&q.busy&&now-s0<MAX;p=Math.min(1,p+dt/T*(slow?0.45:1));
       const e=p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;u.uScanR.value=e*R1;}
     clearInterval(swp);if(t!==token)return;u.uScanR.value=1e6;soloShadows(false);try{sunPath.visible=true;}catch(e){}};
@@ -3896,6 +3896,41 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     const key=S.label||'';if(key!==shownFor){shownFor=key;touched=false;hint.classList.remove('on');hint._t=performance.now();}
     if(!touched&&orbit&&!loading&&S.building&&performance.now()-(hint._t||0)>6000)hint.classList.add('on');}catch(e){}},300);
 }catch(e){console.warn('window flow',e);}})();
+
+/* ===== Performance: shadows only when something changed, nothing drawn beyond the fade, a lighter pixel ratio on phones;
+   and a small timing panel on the test page with #perf in the address ===== */
+(()=>{try{
+  /* 1. shadows: the sun's light and the scene rarely change between two frames; the shadow map is redrawn only when they do */
+  renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;let skey='',busyT=0;
+  const R1=renderer.render.bind(renderer);
+  renderer.render=function(sc,c){if(sc===scene&&!renderer.getRenderTarget()){
+      const sp=sun.position,tp=sun.target.position,n=scene.children.length+(S.meshes?S.meshes.length:0);
+      const k=[sp.x,sp.y,sp.z,tp.x,tp.y,tp.z].map(v=>Math.round(v*4)).join(',')+'|'+n;
+      const q=(typeof QV4!=='undefined'&&QV4)||{},now=performance.now(),live=q.busy||S.loading||(window.__QSU&&__QSU.uScanR.value<1e5);
+      if(k!==skey||(live&&now-busyT>500)){skey=k;busyT=now;renderer.shadowMap.needsUpdate=true;}}
+    return R1(sc,c);};
+  /* 2. beyond the fade nothing shows (faces and edges are discarded there): those buildings are not drawn at all */
+  const cull=()=>{try{const u=window.__QSU;if(!u||!S.meshes)return;const cx=u.uQsC.value.x,cy=u.uQsC.value.y,lim=Math.max(u.uQsD1.value,u.uQsL1.value)+20;
+    const scanning=u.uScanR.value<1e5;
+    S.meshes.forEach(m=>{if(!m||!m.geometry)return;const g=m.geometry;if(!g.boundingSphere)g.computeBoundingSphere();const b=g.boundingSphere,far=!scanning&&Math.hypot(b.center.x-cx,b.center.y-cy)-b.radius>lim;
+      if(far&&m.visible){m.visible=false;m.userData._qsFar=1;}else if(!far&&m.userData._qsFar){m.visible=true;delete m.userData._qsFar;}});}catch(e){}};
+  setInterval(cull,700);
+  /* 3. phones: a pixel ratio of 1.5 at most (the grain of the screen hides the difference, the GPU does half the work) */
+  try{const ph=matchMedia('(pointer:coarse)').matches;const want=Math.min(devicePixelRatio||1,ph?1.5:2);if(Math.abs(renderer.getPixelRatio()-want)>0.01){renderer.setPixelRatio(want);dispatchEvent(new Event('resize'));}}catch(e){}
+  /* 4. the timing panel (test page, #perf) */
+  if(location.hash==='#perf'){const box=document.createElement('pre');box.style.cssText='position:fixed;left:8px;top:calc(env(safe-area-inset-top,0px) + 64px);z-index:99;background:rgba(20,22,50,.82);color:#fff;font:11px/1.35 ui-monospace,monospace;padding:8px 10px;border-radius:10px;pointer-events:none;max-width:60vw';document.body.appendChild(box);
+    const ev={};let frames=0,fps=0,ft=performance.now();const cnt=()=>{frames++;requestAnimationFrame(cnt);};requestAnimationFrame(cnt);
+    setInterval(()=>{try{const now=performance.now();if(now-ft>=1000){fps=Math.round(frames*1000/(now-ft));frames=0;ft=now;}
+      const q=(typeof QV4!=='undefined'&&QV4)||{},v=document.getElementById('qsVeil'),t0=(S.T&&S.T.start)||0,r=x=>((x-t0)/1000).toFixed(1)+' s';
+      if(v&&!v.classList.contains('on')&&!ev.veil&&S.T&&S.T.scene)ev.veil=now;if(q.done&&q.done.length&&!ev.roof)ev.roof=now;
+      if(S.addrTarget&&q.used&&q.used.has(S.addrTarget)&&!ev.house)ev.house=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
+      const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.veil&&!ev.scan)ev.scan=now;
+      let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
+      const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
+      box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'laser '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),'1er toit '+(ev.roof?r(ev.roof):'…'),'maison '+(ev.house?r(ev.house):'…'),
+        'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','scan fini '+(ev.scan?r(ev.scan):'…'),'calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
+        fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
+}catch(e){console.warn('perf',e);}})();
 
 /* ===== the loading veil plays the home page's window (copy of home-hero.js, own ids) ===== */
 window.QS_SUN=window.QS_SUN||3;
