@@ -2085,7 +2085,7 @@ function fitWallsToLaser(ring,u,F,others){
       if(e!=null)E.push(e);}
     if(E.length<Math.max(5,0.5*tried))continue;E.sort((p,q)=>p-q);
     const md=E[E.length>>1],iqr=E[Math.floor(E.length*0.75)]-E[Math.floor(E.length*0.25)];
-    if(iqr>1.25||Math.abs(md)<0.5||Math.abs(md)>4.5)continue;
+    if(iqr>1.25||Math.abs(md)<1||Math.abs(md)>4.5)continue; // under 1 m: an eave or a cornice, not a misplaced wall
     if(md>0){let hit=false;for(let t=0.1;t<=0.9&&!hit;t+=0.2)for(const o of [md*0.5,md*0.9]){const x=a.x+(c.x-a.x)*t+nx*o,y=a.y+(c.y-a.y)*t+ny*o;if(others.some(m=>pointInPoly(x,y,m.userData.rings[0]))){hit=true;break;}}if(hit)continue;}
     if(md<0&&-md>dep*0.4)continue; // never shrink a building to a sliver
     moves[i]={nx,ny,e:md};log.push(+md.toFixed(2));}
