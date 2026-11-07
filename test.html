@@ -3824,10 +3824,10 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   const st=document.createElement('style');st.textContent=`
   #qsFade{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:30;background:var(--qs-fade,#f3effa);transition:opacity .12s cubic-bezier(.65,0,.35,1)}
   #qsFade.on{opacity:1}
-  #qsMiniBox{position:fixed;top:calc(env(safe-area-inset-top,0px) + 76px);left:max(12px,env(safe-area-inset-left,0px));width:min(36vw,190px);aspect-ratio:1;border-radius:18px;
+  #qsMiniBox{position:fixed;right:12px;bottom:200px;width:min(34vw,180px);aspect-ratio:1;border-radius:18px;
     box-shadow:0 10px 30px rgba(40,40,90,.28),inset 0 0 0 1px rgba(255,255,255,.55);z-index:25;touch-action:none;cursor:grab;overflow:hidden}
   #qsMiniBox[hidden]{display:none}
-  #qsBack{position:fixed;left:max(12px,env(safe-area-inset-left,0px));top:calc(env(safe-area-inset-top,0px) + 76px + min(36vw,190px) + 10px);z-index:25;
+  #qsBack{position:fixed;left:max(12px,env(safe-area-inset-left,0px));bottom:200px;z-index:25;
     font:500 14px/1 'Instrument Sans',system-ui,sans-serif;padding:10px 14px;border-radius:999px;border:0;background:rgba(255,255,255,.92);color:#2a2650;box-shadow:0 6px 18px rgba(40,40,90,.22)}
   #qsBack[hidden]{display:none}
   #qsSee{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 150px);z-index:25;
@@ -3863,7 +3863,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       mark.position.copy(w.pos);mark.visible=true;
       const cr=renderer.domElement.getBoundingClientRect(),rr=box.getBoundingClientRect();if(!rr.width)return;
       const x=rr.left-cr.left,y=cr.bottom-rr.bottom,W=rr.width,H=rr.height;mc.aspect=W/H;mc.updateProjectionMatrix();placeCam();
-      mc.layers.set(LH);mc.layers.enable(LM);
+      mc.layers.set(LH);mc.layers.enable(LM);if(!this._lit){scene.traverse(o=>{if(o.isLight){o.layers.enable(LH);o.layers.enable(LM);}});this._lit=1;}
       const au=renderer.autoClear,su=renderer.shadowMap.autoUpdate,sn=renderer.shadowMap.needsUpdate,ca=renderer.getClearAlpha(),bg=scene.background;renderer.getClearColor(cc);
       renderer.autoClear=false;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=false;scene.background=null;
       renderer.setScissorTest(true);renderer.setScissor(x,y,W,H);renderer.setViewport(x,y,W,H);renderer.setClearColor(isDay()?0xeef0fb:0x232750,1);renderer.clear(true,true,false);
@@ -3887,6 +3887,10 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       if(S.win&&S.win.pos){const n=S.win.normal;cam.baseYaw=Math.atan2(n.x,n.y);cam.yaw=0;cam.pitch=0.05;}setFov();applyCam();update();});});
   /* 3. "see from the window" next to the chosen window on the model; the hint only if nothing was touched for a while */
   let touched=false,shownFor='';renderer.domElement.addEventListener('pointerdown',()=>{touched=true;hint.classList.remove('on');});
+  const place=()=>{try{const sh=document.getElementById('sheet');if(!sh)return;const r=sh.getBoundingClientRect(),side=r.width<innerWidth*0.7&&r.height>innerHeight*0.5;
+      const bot=side?16:Math.max(16,innerHeight-r.top+12),right=side?Math.max(12,innerWidth-r.left+16):12;
+      box.style.bottom=bot+'px';box.style.right=right+'px';back.style.bottom=bot+'px';see.style.bottom=(bot+(side?0:0))+'px';hint.style.bottom=(bot+56)+'px';}catch(e){}};
+  setInterval(place,250);addEventListener('resize',place);
   setInterval(()=>{try{const orbit=cam.mode==='orbit',veil=document.getElementById('qsVeil');const loading=veil&&veil.classList.contains('on');
     see.hidden=!(orbit&&S.win&&S.win.pos&&!busy&&!loading);
     const key=S.label||'';if(key!==shownFor){shownFor=key;touched=false;hint.classList.remove('on');hint._t=performance.now();}
