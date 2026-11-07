@@ -3942,7 +3942,8 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   setInterval(()=>{try{const orbit=cam.mode==='orbit',veil=document.getElementById('qsVeil');const loading=veil&&veil.classList.contains('on');
     see.hidden=docked||!(orbit&&S.win&&S.win.pos&&!busy&&!loading);
     const key=S.label||'';if(key!==shownFor){shownFor=key;touched=false;hint.classList.remove('on');hint._t=performance.now();}
-    if(!touched&&orbit&&!loading&&S.building&&performance.now()-(hint._t||0)>6000)hint.classList.add('on');}catch(e){}},300);
+    if(!orbit||(S.win&&S.win.pos))hint.classList.remove('on'); /* a window chosen, or the view from it: nothing to hint */
+    else if(!touched&&!loading&&S.building&&performance.now()-(hint._t||0)>6000)hint.classList.add('on');}catch(e){}},300);
 }catch(e){console.warn('window flow',e);}})();
 
 /* ===== Performance: shadows only when something changed, nothing drawn beyond the fade, a lighter pixel ratio on phones;
