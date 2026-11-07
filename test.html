@@ -3921,8 +3921,8 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       const p0=v.fromBufferAttribute(a,i).applyMatrix4(d.matrixWorld).clone(),p1=v.fromBufferAttribute(a,i+1).applyMatrix4(d.matrixWorld).clone(),p2=v.fromBufferAttribute(a,i+2).applyMatrix4(d.matrixWorld).clone();
       const dx=p1.x-p0.x,dy=p1.y-p0.y,L=Math.hypot(dx,dy);if(L<0.05)continue;const ux=dx/L,uy=dy/L;
       wins.push({c:new THREE.Vector3((p0.x+p1.x)/2,(p0.y+p1.y)/2,(p0.z+p2.z)/2),ux,uy,nx:uy,ny:-ux,hw:L/2,z0:p0.z,z1:p2.z});}});return wins;};
-  const winAt=(p,tol)=>{let best=null,bd=1e9;for(const w of wins){const ex=p.x-w.c.x,ey=p.y-w.c.y,dn=Math.abs(ex*w.nx+ey*w.ny),t=Math.abs(ex*w.ux+ey*w.uy);
-      if(dn>0.8||t>w.hw+tol||p.z<w.z0-tol||p.z>w.z1+tol)continue;const d=dn+Math.max(0,t-w.hw)+Math.max(0,w.z0-p.z,p.z-w.z1);if(d<bd){bd=d;best=w;}}return best;};
+  const winAt=(p,tol,n)=>{let best=null,bd=1e9;for(const w of wins){if(n&&w.nx*n.x+w.ny*n.y<0.9)continue;const ex=p.x-w.c.x,ey=p.y-w.c.y,dn=Math.abs(ex*w.nx+ey*w.ny),t=Math.abs(ex*w.ux+ey*w.uy);
+      if(dn>(n?3:0.8)||t>w.hw+tol||p.z<w.z0-tol||p.z>w.z1+tol)continue;const d=dn+Math.max(0,t-w.hw)+Math.max(0,w.z0-p.z,p.z-w.z1);if(d<bd){bd=d;best=w;}}return best;};
   let tgt=null,lastWin='',hovW=null;
   const cc=new THREE.Color();
   const placeCam=()=>{const ph=0.5,d=rad*3.3;mc.position.set(ctr.x+d*Math.cos(ph)*Math.sin(mth),ctr.y+d*Math.cos(ph)*Math.cos(mth),ctr.z+d*Math.sin(ph));mc.up.set(0,0,1);mc.lookAt(ctr);mc.updateMatrixWorld();};
@@ -3933,9 +3933,9 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       /* a new window: the miniature turns (smoothly) to face it, a little from the side */
       const wk=w.pos.x.toFixed(2)+','+w.pos.y.toFixed(2)+','+w.pos.z.toFixed(2);if(wk!==lastWin){lastWin=wk;tgt=Math.atan2(w.normal.x,w.normal.y)+0.45;}
       if(tgt!==null){const d=wrap(tgt,mth)-mth;if(Math.abs(d)<0.002){mth=tgt;tgt=null;}else mth+=d*0.14;}
-      winsOf(fam);const sw=winAt(w.pos,0.9);
+      winsOf(fam);const sw=winAt(w.pos,0.9,w.normal);
       if(sw){setQ(selB,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw+0.35,sw.z0-0.35,sw.z1+0.35,0.08);setQ(selF,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw,sw.z0,sw.z1,0.12);}
-      else{const n=w.normal,ux=-n.y,uy=n.x;setQ(selB,w.pos,ux,uy,n.x,n.y,1,w.pos.z-1.1,w.pos.z+1.1,0.08);setQ(selF,w.pos,ux,uy,n.x,n.y,0.65,w.pos.z-0.75,w.pos.z+0.75,0.12);}
+      else{const n=w.normal,ux=-n.y,uy=n.x,e=(window.__qsEyeD||0);setQ(selB,w.pos,ux,uy,n.x,n.y,1,w.pos.z-1.1,w.pos.z+1.1,e+0.08);setQ(selF,w.pos,ux,uy,n.x,n.y,0.65,w.pos.z-0.75,w.pos.z+0.75,e+0.12);}
       { /* the fan: where the big view looks (its yaw), from the window, flat */
         const o=sw?sw.c:w.pos,yaw=cam.baseYaw+cam.yaw,hf=Math.min(1.2,((cam.hfov||70)*Math.PI/180)/2),Lf=rad*0.9,a=fan.geometry.attributes.position.array;let k=0;
         for(let i=0;i<8;i++){const t0=yaw-hf+2*hf*i/8,t1=yaw-hf+2*hf*(i+1)/8;a.set([o.x,o.y,o.z, o.x+Lf*Math.sin(t0),o.y+Lf*Math.cos(t0),o.z, o.x+Lf*Math.sin(t1),o.y+Lf*Math.cos(t1),o.z],k);k+=9;}
@@ -4041,7 +4041,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       rc.set(w.pos,dir);rc.near=0;rc.far=4;
       /* walls crossed from the inside (their face turned the same way as the ray): the eye goes just past the last one */
       for(const h of rc.intersectObjects(objs,false)){const n=h.face&&h.face.normal.clone().transformDirection(h.object.matrixWorld);if(!n)continue;if(n.dot(dir)>0.2)d0=h.distance+0.15;else break;}}
-    if(d0>0){off.set(w.normal.x,w.normal.y,0).normalize().multiplyScalar(d0);camera.position.add(off);camera.updateMatrixWorld();}
+    window.__qsEyeD=d0;if(d0>0){off.set(w.normal.x,w.normal.y,0).normalize().multiplyScalar(d0);camera.position.add(off);camera.updateMatrixWorld();}
   }catch(e){}};
 }catch(e){console.warn('window eye',e);}})();
 
