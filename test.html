@@ -3235,6 +3235,9 @@ function qsV4One(fam,pre){
   qsFoldRoofs(); try{if(typeof partsSync==='function')fam.forEach(o=>partsSync(o));}catch(e){}
   S.obstacles=(S.obstacles||[]).filter(o=>!goneObs.has(o)).concat(adds);
   QV4.tBuild=(QV4.tBuild||0)+performance.now()-tm0;main.userData._v4={fam,XL,OUT,w5:V5?V5.walls:null,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(q=>d.vzOf?d.vzOf(q):d.zf(q[0],q[1]))}))}; QV4.done.push(main); {const tw0=performance.now();try{qsWindows(main);}catch(e){console.error('v4 windows',e);}QV4.tWin=(QV4.tWin||0)+performance.now()-tw0;}
+  /* the windows test what stands in front of each one: neighbours still being rebuilt from the laser at this moment hid some
+     of them for good (91 rue … : 48 windows of 181). Once the neighbourhood has settled, they are placed again. */
+  setTimeout(()=>{if(main.parent&&main.userData._v4)try{qsWindows(main);}catch(e){}},3000);
   try{if(S.gfWalls)buildGroundFloors(S.gfWalls);}catch(e){}
   rebuildEdges(); return true;}
 /* the IGN pitched roofs of these buildings live in shared meshes: their triangles are folded under the ground */
