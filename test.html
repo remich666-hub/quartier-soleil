@@ -3909,7 +3909,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   const qGeo=()=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(12),3));g.setIndex([0,1,2,0,2,3]);return g;};
   const qMat=(c,o,dt)=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:o,fog:false,toneMapped:false,depthTest:dt,depthWrite:false,side:THREE.DoubleSide});
   const selB=new THREE.Mesh(qGeo(),qMat(0xb8461c,1,true)),selF=new THREE.Mesh(qGeo(),qMat(0xff8a3d,1,true)),hov=new THREE.Mesh(qGeo(),qMat(0xfff4e6,0.95,true));
-  const fanG=new THREE.BufferGeometry();fanG.setAttribute('position',new THREE.BufferAttribute(new Float32Array(9*8),3));const fan=new THREE.Mesh(fanG,qMat(0xf0773a,0.28,false));
+  const fanG=new THREE.BufferGeometry();fanG.setAttribute('position',new THREE.BufferAttribute(new Float32Array(9*8),3));const fan=new THREE.Mesh(fanG,qMat(0xf0773a,0.38,false));
   [selB,selF,hov,fan].forEach((m,i)=>{m.layers.set(LM);m.renderOrder=10+i;m.visible=false;m.frustumCulled=false;scene.add(m);});
   const mark={get visible(){return selF.visible;},set visible(v){selB.visible=selF.visible=fan.visible=v;if(!v)hov.visible=false;},position:new THREE.Vector3()};
   const setQ=(m,c,ux,uy,nx,ny,hw,z0,z1,o)=>{const a=m.geometry.attributes.position.array,ox=nx*o,oy=ny*o;
@@ -3934,8 +3934,9 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       const wk=w.pos.x.toFixed(2)+','+w.pos.y.toFixed(2)+','+w.pos.z.toFixed(2);if(wk!==lastWin){lastWin=wk;tgt=Math.atan2(w.normal.x,w.normal.y)+0.45;}
       if(tgt!==null){const d=wrap(tgt,mth)-mth;if(Math.abs(d)<0.002){mth=tgt;tgt=null;}else mth+=d*0.14;}
       winsOf(fam);const sw=winAt(w.pos,0.9,w.normal);
-      if(sw){setQ(selB,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw+0.35,sw.z0-0.35,sw.z1+0.35,0.08);setQ(selF,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw,sw.z0,sw.z1,0.12);}
-      else{const n=w.normal,ux=-n.y,uy=n.x,e=(window.__qsEyeD||0);setQ(selB,w.pos,ux,uy,n.x,n.y,1,w.pos.z-1.1,w.pos.z+1.1,e+0.08);setQ(selF,w.pos,ux,uy,n.x,n.y,0.65,w.pos.z-0.75,w.pos.z+0.75,e+0.12);}
+      const pad=Math.max(0.35,rad*0.05); /* the border grows with the building, so the chosen window reads at any size */
+      if(sw){setQ(selB,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw+pad,sw.z0-pad,sw.z1+pad,0.08);setQ(selF,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw,sw.z0,sw.z1,0.12);}
+      else{const n=w.normal,ux=-n.y,uy=n.x,e=(window.__qsEyeD||0);setQ(selB,w.pos,ux,uy,n.x,n.y,0.65+pad,w.pos.z-0.75-pad,w.pos.z+0.75+pad,e+0.08);setQ(selF,w.pos,ux,uy,n.x,n.y,0.65,w.pos.z-0.75,w.pos.z+0.75,e+0.12);}
       { /* the fan: where the big view looks (its yaw), from the window, flat */
         const o=sw?sw.c:w.pos,yaw=cam.baseYaw+cam.yaw,hf=Math.min(1.2,((cam.hfov||70)*Math.PI/180)/2),Lf=rad*0.9,a=fan.geometry.attributes.position.array;let k=0;
         for(let i=0;i<8;i++){const t0=yaw-hf+2*hf*i/8,t1=yaw-hf+2*hf*(i+1)/8;a.set([o.x,o.y,o.z, o.x+Lf*Math.sin(t0),o.y+Lf*Math.cos(t0),o.z, o.x+Lf*Math.sin(t1),o.y+Lf*Math.cos(t1),o.z],k);k+=9;}
