@@ -1011,6 +1011,15 @@ async function buildMNT(MS,MH,feats){ const yl=slicer(); // bare ground from the
       polys.forEach(poly=>{if(!poly[0]||poly[0].length<4)return;cg.beginPath();poly.forEach(r=>{ringToLocal(r).forEach((q,i)=>{const X=(q.x+MNT_R)/MNT_ST+0.5,Y=(MNT_R-q.y)/MNT_ST+0.5;i?cg.lineTo(X,Y):cg.moveTo(X,Y);});cg.closePath();});cg.fill('evenodd');cg.lineWidth=2/MNT_ST;cg.strokeStyle='#000';cg.stroke();});});
     // (the outline is widened by ~1 m: eaves and the 1 m pixels astride the wall read the roof, not the ground)
     const occ=cg.getImageData(0,0,N,N).data; const val=new Float32Array(N*N), seen=new Uint8Array(N*N), q=new Int32Array(N*N); let qh=0,qt=0;
+    /* at the foot of a building the laser "ground" can read the building itself (a facade or eaves the height grid missed, a roof that
+       stands out of the IGN outline): metres-high peaks along the wall. Within 4 m of a footprint, a cell more than 2.5 m above the low
+       part of the ground around it (20th percentile over ±6 m, outside the footprints) takes that value. */
+    if(!/[?&]avant\b/.test(location.search)){const near=new Uint8Array(N*N);
+      for(let j=0;j<N;j++)for(let i=0;i<N;i++){if(occ[(j*N+i)*4+3]<128)continue;for(let dj=-4;dj<=4;dj+=2){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-4;di<=4;di+=2){const ii=i+di;if(ii>=0&&ii<N)near[jj*N+ii]=1;}}}
+      const ww=[],fix=[];for(let j=0;j<N;j++){if(!(j&31))await yl();for(let i=0;i<N;i++){const k=j*N+i;if(!near[k]||occ[k*4+3]>=128||isNaN(raw[k]))continue;ww.length=0;
+        for(let dj=-6;dj<=6;dj+=2){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-6;di<=6;di+=2){const ii=i+di;if(ii<0||ii>=N)continue;const kk=jj*N+ii;if(occ[kk*4+3]>=128)continue;const v=raw[kk];if(v===v)ww.push(v);}}
+        if(ww.length<8)continue;ww.sort((a,b)=>a-b);const lo=ww[Math.floor(ww.length*0.2)];if(raw[k]>lo+2.5)fix.push(k,lo);}}
+      for(let t=0;t<fix.length;t+=2)raw[fix[t]]=fix[t+1];S.mntFix=fix.length/2;}
     for(let k=0;k<N*N;k++){if(occ[k*4+3]<128&&!isNaN(raw[k])){val[k]=raw[k];seen[k]=1;q[qt++]=k;}}
     while(qh<qt){const k=q[qh++],i=k%N,j=(k/N)|0;[[1,0],[-1,0],[0,1],[0,-1]].forEach(([di,dj])=>{const ii=i+di,jj=j+dj;if(ii<0||jj<0||ii>=N||jj>=N)return;const kk=jj*N+ii;if(seen[kk])return;seen[kk]=1;val[kk]=val[k];q[qt++]=kk;});}
     for(let k=0;k<N*N;k++)if(seen[k])raw[k]=val[k];}
