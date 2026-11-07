@@ -619,11 +619,11 @@ void main(){
   addEventListener('resize',()=>setTimeout(fit,50));
   const C={bgL:'#eef0fb',bgD:'#141a3c',wireL:'#c9a27a',wireD:'#e8d6b8',dot:'#f2a0bf',out:['#f0773a','#fbe3c4'],ring:'#ff8fb0',sweep:'#d8b46a'};
   const ease=x=>x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
-  let run=null;
+  let run=null,quietUntil=0;
   function start(){if(run||!window.__heroGeo)return;fit();run={t0:performance.now(),h0:window.__heroH||17};tick();}
   function rect(x,y,w,h){g.strokeRect(x,y,w,h);}
   function tick(){
-    const t=performance.now()-run.t0,{x0,y0,ww,wh,MX,MY}=geo,d=DPR,X=(x0+MX)*d,Y=(y0+MY)*d,Wd=ww*d,Hd=wh*d,nt=dark();
+    const t=performance.now()-run.t0,{x0,y0,ww,wh,MX,MY}=geo,d=DPR,X=x0*d,Y=y0*d,Wd=ww*d,Hd=wh*d,nt=dark();
     g.clearRect(0,0,cv.width,cv.height);
     /* hours jump in hard cuts while the window is a wireframe */
     const jumps=[[120,3],[240,6],[360,9],[480,null]];let hh=null;for(const [tt,k] of jumps)if(t>=tt)hh=k;window.__heroHour=t<120||t>=480||hh==null?null:(run.h0+hh)%24;
@@ -651,12 +651,13 @@ void main(){
         const r=Math.min(40*d,m*0.5);g.beginPath();g.roundRect?g.roundRect(X-m,Y-m,Wd+2*m,Hd+2*m,r):g.rect(X-m,Y-m,Wd+2*m,Hd+2*m);g.stroke();}
       g.globalAlpha=1;
     }
-    if(t<1600)requestAnimationFrame(tick);else{g.clearRect(0,0,cv.width,cv.height);window.__heroHour=null;run=null;}
+    if(t<1600)requestAnimationFrame(tick);else{g.clearRect(0,0,cv.width,cv.height);window.__heroHour=null;run=null;quietUntil=performance.now()+1500;}
   }
   /* when: once after the page settles, then every 11 s; and when day turns to night (or back), not during its own jumps */
   setTimeout(()=>{fit();start();},1400);
   setInterval(()=>{if(document.visibilityState==='visible')start();},11000);
-  let lastMode=HERO.dataset.mode;new MutationObserver(()=>{const m=HERO.dataset.mode;if(m!==lastMode){lastMode=m;if(!run)setTimeout(start,250);}}).observe(HERO,{attributes:true,attributeFilter:['data-mode']});
+  /* its own hour jumps flip the mode too: those are not a real dusk */
+  let lastMode=HERO.dataset.mode;new MutationObserver(()=>{const m=HERO.dataset.mode;if(m!==lastMode){lastMode=m;if(!run&&performance.now()>quietUntil)setTimeout(start,250);}}).observe(HERO,{attributes:true,attributeFilter:['data-mode']});
 })();
 
 </script>
