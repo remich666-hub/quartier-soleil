@@ -3886,7 +3886,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   box.hidden=true;back.hidden=true;see.hidden=true;back.type='button';see.type='button';
   const cv2=document.createElement('canvas');box.appendChild(cv2);const ctx2=cv2.getContext('2d');
   const arrow=(cls,txt,dir)=>{const a=document.createElement('button');a.type='button';a.className='qa '+cls;a.textContent=txt;a.setAttribute('aria-label',dir>0?'Tourner vers la droite':'Tourner vers la gauche');
-    a.addEventListener('pointerdown',e=>e.stopPropagation());a.addEventListener('click',e=>{e.stopPropagation();if(mth!==null)tgt=(tgt!==null?tgt:mth)+dir*Math.PI/2;});box.appendChild(a);};
+    a.addEventListener('pointerdown',e=>e.stopPropagation());a.addEventListener('click',e=>{e.stopPropagation();if(mth!==null)tgt=(tgt!==null?tgt:mth)-dir*Math.PI/2;});box.appendChild(a);};
   arrow('l','‹',-1);arrow('r','›',1);
   const cap=document.createElement('div');cap.id='qsMiniCap';cap.textContent='Votre fenêtre. Glissez pour tourner, touchez une façade pour y placer la fenêtre.';cap.hidden=true;
   /* desktop (side panel): the miniature sits in the panel, above the façade and floor settings it goes with; the floating
@@ -3957,7 +3957,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   /* turn it, or touch it: a wall moves the window there (the same rules as on the model), the roof goes back to the model */
   let pd=null;
   box.addEventListener('pointerdown',e=>{pd={x:e.clientX,y:e.clientY,x0:e.clientX,moved:false,id:e.pointerId};try{box.setPointerCapture(e.pointerId);}catch(_){}e.stopPropagation();});
-  box.addEventListener('pointermove',e=>{if(!pd||e.pointerId!==pd.id)return;const dx=e.clientX-pd.x;if(Math.abs(e.clientX-pd.x0)>6)pd.moved=true;mth-=dx*0.012;tgt=null;hovW=null;pd.x=e.clientX;});
+  box.addEventListener('pointermove',e=>{if(!pd||e.pointerId!==pd.id)return;const dx=e.clientX-pd.x;if(Math.abs(e.clientX-pd.x0)>6)pd.moved=true;mth+=dx*0.012;tgt=null;hovW=null;pd.x=e.clientX;});
   const under=(cx,cy)=>{const rr=box.getBoundingClientRect(),nx=((cx-rr.left)/rr.width)*2-1,ny=-((cy-rr.top)/rr.height)*2+1;
     const rc=new THREE.Raycaster();rc.layers.set(7);rc.setFromCamera(new THREE.Vector2(nx,ny),mc);return {nx,ny,h:rc.intersectObjects(scene.children,true)[0]};};
   box.addEventListener('pointermove',e=>{if(pd||e.pointerType!=='mouse')return;try{const u=under(e.clientX,e.clientY);hovW=u.h&&Math.abs(u.h.face.normal.clone().transformDirection(u.h.object.matrixWorld).z)<0.3?winAt(u.h.point,0.6):null;box.style.cursor=hovW?'pointer':'grab';}catch(_){hovW=null;}});
@@ -4056,14 +4056,22 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   #qsWhen svg{width:20px;height:20px;color:var(--accent);flex:none}#qsWhen .t{flex:1;min-width:0}#qsWhen .t small{display:block;font-size:11px;color:var(--muted);font-weight:400}
   #qsWhen .m{color:var(--accent);font-size:13px;white-space:nowrap}
   #bottom.inl{position:static;width:auto;left:auto;bottom:auto;top:auto;margin-top:-8px;box-shadow:none;padding:12px}
-  body.qsSide #timePill{display:none}`;
+  body.qsSide #timePill{display:none}
+  #bottom.bar{position:absolute;left:24px;bottom:20px;top:auto;width:auto;display:grid;grid-template-columns:auto minmax(120px,1fr) auto minmax(200px,2.2fr) auto;align-items:center;gap:6px 14px;padding:10px 14px;border-radius:16px}
+  #bottom.bar .slider label{font-size:11px}#bottom.bar .btns{grid-column:auto;display:flex;gap:8px;margin:0}#bottom.bar .btns button{white-space:nowrap}
+  #bottom.bar .val{font-size:14px;font-weight:600}`;
   document.head.appendChild(st);
   const left=document.getElementById('left'),bottom=document.getElementById('bottom'),pill=document.getElementById('timePill'),home=bottom.parentNode,next=bottom.nextSibling;
   const row=document.createElement('button');row.type='button';row.id='qsWhen';row.hidden=true;row.setAttribute('aria-controls','bottom');row.setAttribute('aria-expanded','false');
   row.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="currentColor"/></svg><span class="t"><small>Date et heure du soleil</small><span id="qsWhenT">—</span></span><span class="m">Modifier</span>';
   row.addEventListener('click',()=>{bottom.hidden=!bottom.hidden;row.setAttribute('aria-expanded',String(!bottom.hidden));row.querySelector('.m').textContent=bottom.hidden?'Modifier':'Fermer';});
+  const BAR=!/[?&]date=panel\b/.test(location.search);
   let side=null;
   const sync=()=>{try{const sh=document.getElementById('sheet').getBoundingClientRect(),s=sh.width<innerWidth*0.7&&sh.height>innerHeight*0.5;
+    if(BAR){ /* option 2: the bar, always there on a computer, across the view (left of the panel) */
+      if(s!==side){side=s;document.body.classList.toggle('qsSide',s);bottom.classList.toggle('bar',s);if(!s)bottom.hidden=true;}
+      if(s){bottom.hidden=false;bottom.style.right=Math.max(24,innerWidth-sh.left+24)+'px';}else bottom.style.right='';
+      row.hidden=true;return;}
     if(s!==side){side=s;document.body.classList.toggle('qsSide',s);
       if(s){const ad=document.getElementById('addrDone');(ad||left.firstChild).after(row);row.after(bottom);bottom.classList.add('inl');}
       else{row.remove();home.insertBefore(bottom,next);bottom.classList.remove('inl');}}
