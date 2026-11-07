@@ -2631,7 +2631,10 @@ function splitByLevel(rings,pts,cell,depth){
   let cut=null;for(const [ax,ay] of tryAxes){
     const pr=pts.map(p=>({s:p.x*ax+p.y*ay,b:p.h>=best.t})).sort((a,b)=>a.s-b.s);const totB=B.length;let aL=0,bL=0;
     for(let i=0;i<pr.length;i++){if(pr[i].b)bL++;else aL++;const acc=(aL+(totB-bL))/pr.length;if(!cut||acc>cut.acc)cut={acc,ax,ay,c:(pr[i].s+(pr[i+1]?pr[i+1].s:pr[i].s))/2};}}
-  if(!cut||cut.acc<(hard?0.86:0.9))return parts;
+  if(!cut)return parts;
+  if(hard&&cut.acc<0.86)return parts;
+  if(soft){ // an L of lean-tos is not split by one straight wall: what matters is that the low side is low; the rest is cut again
+    let lo=0,lA=0;pts.forEach(p=>{if(p.x*cut.ax+p.y*cut.ay-cut.c<0){lo++;if(p.h<best.t)lA++;}});if(!lo||lA/lo<0.85||lo*cell<9)return parts;}
   if(soft){const nA=[],nB=[];pts.forEach(p=>{const d=p.x*cut.ax+p.y*cut.ay-cut.c;if(d>-1.25&&d<-0.25)nA.push(p.h);else if(d>0.25&&d<1.25)nB.push(p.h);});
     if(nA.length<4||nB.length<4)return parts;nA.sort((a,b)=>a-b);nB.sort((a,b)=>a-b);if(qtl(nB,0.5)-qtl(nA,0.5)<1.8)return parts;}
   const side=(sg)=>{const o=clipHalf(rings[0],sg*cut.ax,sg*cut.ay,-sg*cut.c);if(!o)return null;const hl=rings.slice(1).map(r=>clipHalf(r,sg*cut.ax,sg*cut.ay,-sg*cut.c)).filter(Boolean);
