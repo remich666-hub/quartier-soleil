@@ -2718,7 +2718,7 @@ function findTowers(rings,u,F,green){
       // a tree crown over the roof is not a tower: roofs are smooth at 50 cm (median step ≈ 0.1 m), foliage is rough (≥ 0.4 m)
       // measured on the raw laser surface over the whole rectangle (the vegetation filter above would hide the crown's ragged edges)
       {const rk=i0+','+i1+','+j0+','+j1;let rg=rough.get(rk);
-       if(rg===undefined){const st2=[];for(let jj=j0;jj<=j1;jj++)for(let ii=i0;ii<=i1;ii++){const k=jj*nu+ii,x=XY[k*2]+sh.dx,y=XY[k*2+1]+sh.dy;if(!pointInPoly(x-sh.dx,y-sh.dy,r0))continue;
+       if(rg===undefined||QS_AV){const st2=[];for(let jj=j0;jj<=j1;jj++)for(let ii=i0;ii<=i1;ii++){const k=jj*nu+ii,x=XY[k*2]+sh.dx,y=XY[k*2+1]+sh.dy;if(!pointInPoly(x-sh.dx,y-sh.dy,r0))continue;
          const a0=F.at(x,y),a1=F.at(x+st,y),a2=F.at(x,y+st);if(a0==null||a1==null||a2==null)continue;st2.push(Math.abs(a0-a1),Math.abs(a0-a2));}
         rg=st2.length>=10&&(st2.sort((p,q)=>p-q),st2[st2.length>>1]>0.3||st2[Math.floor(st2.length*0.75)]>0.45);rough.set(rk,rg);if(typeof LB_N!=='undefined')LB_N.rough++;}
        else if(typeof LB_N!=='undefined')LB_N.hit++;
@@ -2740,7 +2740,7 @@ function findTowers(rings,u,F,green){
 let _pcLib=null;
 function polyClip(){if(!_pcLib)_pcLib=import('https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/+esm').then(m=>{PCSYNC=m.default||m;return PCSYNC;});return _pcLib;}
 setTimeout(()=>polyClip().catch(()=>{}),800);
-let GID=0; var LB_N={rough:0,hit:0};
+let GID=0; var LB_N={rough:0,hit:0}; const QS_AV=/[?&]avant\b/.test(location.search);
 async function lidarBuildings(){
   // cancelled only by a new address (S.T is per load), not by the tree refinement that the photo starts meanwhile:
   // that used to abort the rebuild half-way whenever the photo arrived during it (no laser buildings, or different ones per load)
