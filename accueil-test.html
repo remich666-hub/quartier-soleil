@@ -440,7 +440,7 @@ document.getElementById('addrForm').addEventListener('submit',async e=>{e.preven
   let PROG=null,UL={};
   if(GL){
     const FS=`precision highp float;
-uniform vec2 uRes;uniform float uD,uWW,uWH,uLI,uOR,uOH,uR,uLS,uPH0,uPI,uSun,uLit,uNt,uWallA;uniform vec4 uWin;uniform vec3 uTop,uBot,uLC,uLC2,uPatch,uPal,uWarm,uPink,uCold;uniform vec2 uL,uW;uniform float uStage,uK,uLv;uniform vec3 uFlat,uLine,uOut;
+uniform vec2 uRes;uniform float uD,uWW,uWH,uLI,uOR,uOH,uR,uLS,uPH0,uPI,uSun,uLit,uNt,uWallA;uniform vec4 uWin;uniform vec3 uTop,uBot,uLC,uLC2,uPatch,uPal,uWarm,uPink,uCold;uniform vec2 uL,uW;uniform float uStage,uK,uLv,uAng;uniform vec3 uFlat,uLine,uOut;
 float hs(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
 float soft(float d,float s){return d>0.?0.5*exp(-d/s):1.-0.5*exp(d/s);}
 vec3 winCol(vec2 P,float t2,float t3){
@@ -483,7 +483,17 @@ void main(){
   float u=dlw/uLS,w=uLI*exp(-u*u),s=0.35*uD+w*uWW*0.07;
   float mW=d<-uWW*0.3?1.:soft(d,s);
   bool sun=uSun>0.5;
-  if(uStage>0.5&&uStage<4.5&&d<0.){gl_FragColor=vec4(fx(P,d)/255.,1.);return;}
+  if(uStage>0.5&&uStage<4.5){
+    /* the window as a thin frame turning on its vertical axis: each pixel finds where its ray meets the turned plane */
+    vec2 C=(uWin.xy+uWin.zw)*0.5,hw=(uWin.zw-uWin.xy)*0.5;float Fd=2.6*uWW,cs=cos(uAng),sn=sin(uAng),th=0.07*uWW;
+    vec2 q=P-C;float den=q.x*sn-Fd*cs;
+    for(int f=0;f<2;f++){ /* front face, then the back face (its outline only) */
+      float off=f==0?0.:th;float tt=(-Fd*cs-off)/den; /* plane: n.(X-C+n*off)=0, n=(sn,0,cs) */
+      vec3 X=vec3(q*tt,Fd*(1.-tt));float u=X.x*cs-X.z*sn,v=X.y;
+      if(tt>0.&&abs(u)<hw.x&&abs(v)<hw.y){float dw=max(abs(u)-hw.x,abs(v)-hw.y);
+        if(f==0){gl_FragColor=vec4(fx(C+vec2(u,v),dw)/255.,1.);return;}
+        if(dw>-1.2*uD){gl_FragColor=vec4(uLine/255.,1.);return;}}}
+    mW=0.;}
   if(mW>t1){
     vec3 col=mix(uTop,uBot,clamp((P.y-uWin.y)/uWH,0.,1.));
     float q=dl/uOR,qh=dl/uOH;
@@ -496,8 +506,7 @@ void main(){
       col=mix(col,c,sun?uLI:uNt);}
     gl_FragColor=vec4(col/255.,1.);return;}
   if(uStage>4.5&&d>=0.&&d<3.5*uD){gl_FragColor=vec4(uOut/255.*uK,uK);return;}
-  if(uStage>0.5&&uStage<4.5&&d>=0.&&d<1.2*uD){gl_FragColor=vec4(uLine/255.,1.);return;}
-  if(uStage>1.5&&uStage<2.5&&d>=0.&&d<16.*uD){float g=9.*uD;vec2 c=floor((P-uWin.xy)/g)*g+g*0.5+uWin.xy;float k=1.-d/(16.*uD);
+  if(false){float g=9.*uD;vec2 c=floor((P-uWin.xy)/g)*g+g*0.5+uWin.xy;float k=1.-d/(16.*uD);
     if(length(P-c)<g*0.14*(0.6+k)){gl_FragColor=vec4(uLine/255.*0.8*k,0.8*k);return;}}
   float an=atan(P.y-uW.y,P.x-uW.x);
   float f=dlw/(uR*2.3)*(1.+0.13*sin(3.*an+uPH0)+0.07*sin(5.*an-uPH0*1.4));
@@ -519,7 +528,7 @@ void main(){
     PROG=GL.createProgram();GL.attachShader(PROG,sh(GL.VERTEX_SHADER,'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}'));GL.attachShader(PROG,sh(GL.FRAGMENT_SHADER,FS));GL.linkProgram(PROG);GL.useProgram(PROG);
     const vb=GL.createBuffer();GL.bindBuffer(GL.ARRAY_BUFFER,vb);GL.bufferData(GL.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),GL.STATIC_DRAW);
     const lp=GL.getAttribLocation(PROG,'p');GL.enableVertexAttribArray(lp);GL.vertexAttribPointer(lp,2,GL.FLOAT,false,0,0);
-    for(const k of ['uRes','uD','uWW','uWH','uLI','uOR','uOH','uR','uLS','uPH0','uPI','uSun','uLit','uNt','uWallA','uWin','uTop','uBot','uLC','uLC2','uPatch','uPal','uWarm','uPink','uCold','uL','uW','uStage','uK','uLv','uFlat','uLine','uOut'])UL[k]=GL.getUniformLocation(PROG,k);
+    for(const k of ['uRes','uD','uWW','uWH','uLI','uOR','uOH','uR','uLS','uPH0','uPI','uSun','uLit','uNt','uWallA','uWin','uTop','uBot','uLC','uLC2','uPatch','uPal','uWarm','uPink','uCold','uL','uW','uStage','uK','uLv','uAng','uFlat','uLine','uOut'])UL[k]=GL.getUniformLocation(PROG,k);
   }
   const clockT=document.getElementById('clockT'),clockL=document.getElementById('clockL');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -571,7 +580,7 @@ void main(){
       f2('uRes',PW,PH);f1('uD',D);f1('uWW',g.ww);f1('uWH',g.wh);f1('uLI',LI);f1('uOR',OR);f1('uOH',OH);f1('uR',R);f1('uLS',LS);f1('uPH0',PH0);f1('uPI',PI);
       f1('uSun',sunUp?1:0);f1('uLit',lit);f1('uNt',nt);f1('uWallA',wallA);GL.uniform4f(U.uWin,g.x0,g.y0,g.x1,g.y1);
       f3('uTop',top);f3('uBot',bot);f3('uLC',LC);f3('uLC2',LC2);f3('uPatch',[py0,py1,sh]);f3('uPal',pal);f3('uWarm',warm);f3('uPink',pink);f3('uCold',cold);f2('uL',LX,LY);f2('uW',WX,WY);
-      {const F=window.__heroFx||{stage:0,k:0,lv:0},dk2=HERO.dataset.mode==='dark';f1('uStage',F.stage);f1('uK',F.k);f1('uLv',F.lv);
+      {const F=window.__heroFx||{stage:0,k:0,lv:0},dk2=HERO.dataset.mode==='dark';f1('uStage',F.stage);f1('uK',F.k);f1('uLv',F.lv);f1('uAng',F.ang||0);
        f3('uFlat',dk2?[20,26,60]:[246,233,239]);f3('uLine',dk2?[232,214,184]:[201,162,122]);f3('uOut',dk2?[251,227,196]:[240,119,58]);}
       GL.clearColor(0,0,0,0);GL.clear(GL.COLOR_BUFFER_BIT);GL.drawArrays(GL.TRIANGLES,0,3);
     }else{
@@ -658,7 +667,9 @@ void main(){
     if(cur[1]===0){window.__heroFx=null;run=null;return;}
     const nx=T[T.indexOf(cur)+1],k0=(t-cur[0])/(nx[0]-cur[0]);
     const k=cur[3]==='rows'?ease(Math.min(1,(t-cur[0])/450)):cur[3]==='fade'?1-ease(Math.min(1,k0)):1;
-    window.__heroFx={stage:cur[1],k,lv:cur[2]};requestAnimationFrame(tick);}
+    /* the turn: one full turn while it is a frame of lines, ending three-quarter on; face-on again for the solid window */
+    const A1=-0.44,ang=cur[1]===1?ease(Math.min(1,t/850))*(Math.PI*2+A1):cur[1]===5?0:A1;
+    window.__heroFx={stage:cur[1],k,lv:cur[2],ang};requestAnimationFrame(tick);}
   function start(){if(run||document.visibilityState!=='visible')return;run={t0:performance.now()};tick();}
   setTimeout(start,1400);
   /* once per cycle, a little before sunset on the hero's clock, never twice in a row */
