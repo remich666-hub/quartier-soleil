@@ -2368,14 +2368,14 @@ async function load(q,at){
       S.startIRC=()=>{if(S.ircP||S.lat!==myLat)return S.ircP;S.ircP=fetchIRC(myLat,myLon).then(I=>{if(!I||S.lat!==myLat)return null;S.irc=I;if(classifyTrees()&&!S.loading)applyVegetation();return I;}).catch(()=>null);return S.ircP;};
       setTimeout(()=>{if(S.lat===myLat)S.startIRC();},9000);}
     status('Bâtiments et relief IGN…');
-    const [alt,feats]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]); const terrain=null;
+    const [alt,feats]=await Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]); S.T.feats=performance.now(); const terrain=null;
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
     S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.rawOrtho=null; S.slopeHouses=[]; S.lot=null; S.loading=true; /* nothing of the previous address may feed this one */ S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
     try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
-    S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} S.T.scene=performance.now(); loadOrtho(g.lat,g.lon); loadLot(g.lat,g.lon);
+    S.T.relief=performance.now(); S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} S.T.scene=performance.now(); loadOrtho(g.lat,g.lon); loadLot(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
     status('Routes, monuments, arbres, météo…');
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
@@ -2384,16 +2384,17 @@ async function load(q,at){
     const roadsP=wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,RW,5000).catch(()=>[]), T0=S.T;
     const [veg,osm,wx,roads0,pois,hedges,walls,rails,water]=await Promise.all([wfs('BDTOPO_V3:zone_de_vegetation',g.lat,g.lon,RW,1500).catch(()=>[]),Promise.resolve({trees:[],hedges:[]}),fetchWeather(g.lat,g.lon).catch(()=>null),
       Promise.race([roadsP,new Promise(r=>setTimeout(()=>r(null),1500))]),L('zone_d_activite_ou_d_interet',600),L('haie',2000),L('construction_lineaire',2000),wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,RW,800).catch(()=>[]),wfs('BDTOPO_V3:surface_hydrographique',g.lat,g.lon,RW,500).catch(()=>[])]);
+    S.T.netA=performance.now();
     const [surf,reservoirs,points,pylons,postes]=await Promise.all([wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,DETAIL_R+80,500).catch(()=>[]),L('reservoir',200),L('construction_ponctuelle',400),L('pylone',300),L('poste_de_transformation',200)]);
-    const roads=roads0||[];
+    S.T.netB=performance.now(); const roads=roads0||[];
     if(!roads0)roadsP.then(rs=>{if(S.T!==T0||!rs.length)return; try{buildRoads(rs,rails);buildLayers(rs,hedges,walls,rails,water);try{buildPlan(veg,rs);}catch(err){}applyFade();
       if(roadMeshes.length&&S.obstacles&&!S.obstacles.includes(roadMeshes[0]))S.obstacles.push(roadMeshes[0]); if(S.T)S.T.roadsLate=performance.now();
       buildParcels(g.lat,g.lon);}catch(err){console.error('late roads',err);}});
-    const nr=buildRoads(roads,rails); const ns=buildStructures(surf,reservoirs,points,pylons,postes); const lay=buildLayers(roads,hedges,walls,rails,water); try{buildPlan(veg,roads);}catch(err){console.error('plan',err);} const nl=applyLandmarks(pois);
+    const nr=buildRoads(roads,rails); S.T.bRoads=performance.now(); const ns=buildStructures(surf,reservoirs,points,pylons,postes); S.T.bStruct=performance.now(); const lay=buildLayers(roads,hedges,walls,rails,water); S.T.bLayers=performance.now(); try{buildPlan(veg,roads);}catch(err){console.error('plan',err);} const nl=applyLandmarks(pois);
     S.vegZoneRings=vegKinds(veg); treeSets.ign=vegZoneSpots(veg).filter(t=>Math.hypot(t.x!=null?t.x:t[0],t.y!=null?t.y:t[1])<DETAIL_R+40); treeSets.osm=osm.trees; S.osmHedges=osm.hedges; S.counts=Object.assign(S.counts||{},{osm:osm.trees.length,hedges:lay.hedges,walls:lay.walls,viaduct:nr,structures:ns,landmarks:nl,terrain:!!(S.mnt||S.terrain)}); S.wx=wx; if(!wx)toast('Météo indisponible');
-    try{applyFade();}catch(err){console.error('fade',err);}
-    S.T.layers=performance.now(); buildParcels(g.lat,g.lon);
-    S.loading=false; applyVegetation(); $('stepPick').hidden=!!S.building;
+    S.T.bPlan=performance.now(); try{applyFade();}catch(err){console.error('fade',err);}
+    S.T.layers=performance.now(); buildParcels(g.lat,g.lon); S.T.parcels=performance.now();
+    S.loading=false; applyVegetation(); S.T.veg=performance.now(); $('stepPick').hidden=!!S.building;
     S.introP=null; lidarBuildings(); // runs during the establishing shot; the push-in waits for it
     try{localStorage.setItem('qs-addr',q);}catch(e){}
   }catch(e){status(e.message||'Erreur de chargement',true);S.loading=false;}
@@ -3951,7 +3952,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.scan0&&!ev.scan)ev.scan=now;
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
       const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
-      box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
+      const T_=S.T||{},dd=(a,b)=>(T_[a]&&T_[b])?((T_[b]-T_[a])/1000).toFixed(2):'…';box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'  adresse '+dd('start','geo')+' · bâtiment de l\'adresse '+dd('geo','link')+' · bâtiments+altitude IGN '+dd(T_.link?'link':'geo','feats')+' · relief laser '+dd('feats','relief')+' · construction '+dd('relief','scene'),'après la scène : routes/végétation/météo… (réseau) '+dd('scene','netA')+' · constructions (réseau) '+dd('netA','netB')+' · routes '+dd('netB','bRoads')+' · ouvrages '+dd('bRoads','bStruct')+' · couches '+dd('bStruct','bLayers')+' · plan+arbres IGN '+dd('bLayers','bPlan')+' · fondu '+dd('bPlan','layers')+' · parcelles '+dd('layers','parcels')+' · végétation '+dd('parcels','veg'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
         'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
         fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
 }catch(e){console.warn('perf',e);}})();
