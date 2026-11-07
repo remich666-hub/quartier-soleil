@@ -583,7 +583,7 @@ function gpf(url,opt){
 }
 setTimeout(()=>{QC.trim();},8000);
 // what the model needs first goes first: data (buildings, laser, relief) before the 20 cm photo, the photo before the wide/infrared ones
-const prioOf=u=>/\/wmts\?/.test(u)?(/TILEMATRIX=19&/.test(u)?1:2):0;
+const prioOf=u=>/\/wmts\?/.test(u)?(/TILEMATRIX=19&/.test(u)?1:2):/TYPENAME=BDTOPO_V3:(troncon_de_route|zone_de_vegetation|zone_d_activite|haie|construction_lineaire|troncon_de_voie_ferree|surface_hydrographique|construction_surfacique|reservoir|construction_ponctuelle|pylone|poste_de_transformation)&/.test(u)?1.5:0;
 function pump(){while(GPF.active<GPF.max&&GPF.q.length){let bi=0;for(let i=0;i<GPF.q.length;i++){if(GPF.q[i].p<GPF.q[bi].p)bi=i;if(GPF.q[bi].p===0)break;}const t=GPF.q.splice(bi,1)[0];GPF.active++;(async()=>{let r=null,err=null;
   // a retry asks for a fresh copy: the IGN front caches an error (a 504 served again in a few ms for the exact same URL)
   for(let a=0;a<4;a++){try{const u=a&&/^https:\/\/data\.geopf\.fr\//.test(t.url)?t.url+(t.url.includes('?')?'&':'?')+'_qsr='+Date.now():t.url;const t0=performance.now();r=await fetch(u,t.opt);if(r.status===429||r.status>=500){await sleep(r.status!==429&&a===0&&performance.now()-t0<100?50:700*(a+1)+Math.random()*500);continue;} /* an error back in a few ms is a cached one: ask again at once */err=null;break;}catch(e){err=e;await sleep(400);}}
@@ -2371,11 +2371,13 @@ async function load(q,at){
     const pBat=Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]);
     /* the context layers (roads, vegetation, weather, small constructions) are asked now, queued behind the buildings and the laser,
        instead of once the model is built: they used to cost ~2.5 s of waiting on a phone after the scene */
-    const PN=(()=>{const R=DETAIL_R+40,RW=CONTEXT_R,L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
+    const PN0=()=>{const R=DETAIL_R+40,RW=CONTEXT_R,L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
       const roadsP=wfs('BDTOPO_V3:troncon_de_route',g.lat,g.lon,RW,5000).catch(()=>[]);
       return {roadsP,veg:wfs('BDTOPO_V3:zone_de_vegetation',g.lat,g.lon,RW,1500).catch(()=>[]),wx:fetchWeather(g.lat,g.lon).catch(()=>null),pois:L('zone_d_activite_ou_d_interet',600),hedges:L('haie',2000),walls:L('construction_lineaire',2000),
         rails:wfs('BDTOPO_V3:troncon_de_voie_ferree',g.lat,g.lon,RW,800).catch(()=>[]),water:wfs('BDTOPO_V3:surface_hydrographique',g.lat,g.lon,RW,500).catch(()=>[]),
-        surf:wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,DETAIL_R+80,500).catch(()=>[]),res:L('reservoir',200),pts:L('construction_ponctuelle',400),pyl:L('pylone',300),post:L('poste_de_transformation',200)};})();
+        surf:wfs('BDTOPO_V3:construction_surfacique',g.lat,g.lon,DETAIL_R+80,500).catch(()=>[]),res:L('reservoir',200),pts:L('construction_ponctuelle',400),pyl:L('pylone',300),post:L('poste_de_transformation',200)};};
+    /* once the buildings and the laser relief are in (they must not share the line with them), not after the whole model */
+    const PNp=Promise.all([pBat.catch(()=>null),S.lidarP.mnh,S.lidarP.mns]).then(PN0);
     const [alt,feats]=await pBat; S.T.feats=performance.now(); const terrain=null;
     if(!feats.length)throw new Error('Aucun bâtiment IGN ici (hors France ?)');
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
@@ -2389,7 +2391,7 @@ async function load(q,at){
     const R=DETAIL_R+40, RW=CONTEXT_R, L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
     // the roads are the heaviest IGN answer (2–3 MB) and the IGN is sometimes slow on it: the model does not wait more than
     // 1.5 s for them; when they come later they are laid in then (roads, plan, the street-coloured lots), the rest is already there
-    const roadsP=PN.roadsP, T0=S.T;
+    const PN=await PNp; const roadsP=PN.roadsP, T0=S.T;
     const [veg,osm,wx,roads0,pois,hedges,walls,rails,water]=await Promise.all([PN.veg,Promise.resolve({trees:[],hedges:[]}),PN.wx,
       Promise.race([roadsP,new Promise(r=>setTimeout(()=>r(null),1500))]),PN.pois,PN.hedges,PN.walls,PN.rails,PN.water]);
     S.T.netA=performance.now();
@@ -3966,6 +3968,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       if(v&&!v.classList.contains('on')&&!ev.veil&&S.T&&S.T.scene)ev.veil=now;if(q.done&&q.done.length&&!ev.roof)ev.roof=now;
       if(S.T!==ev._T){for(const k in ev)delete ev[k];ev._T=S.T;}const LR=S.lidarR&&S.lidarR._T===S.T&&S.T?S.lidarR:{};if(S.rawOrtho&&!ev.ortho)ev.ortho=now;if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
       const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.scan0&&!ev.scan)ev.scan=now;
+      box.style.display=(ev.idle&&ev.scan)||(t0&&now-t0>90000)?'':'none'; /* only once the roofs and the reveal are done: it would hide the intro */
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
       const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
       const T_=S.T||{},dd=(a,b)=>(T_[a]&&T_[b])?((T_[b]-T_[a])/1000).toFixed(2):'…';box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'  adresse '+dd('start','geo')+' · bâtiment de l\'adresse '+dd('geo','link')+' · bâtiments+altitude IGN '+dd(T_.link?'link':'geo','feats')+' · relief laser '+dd('feats','relief')+' · construction '+dd('relief','scene'),'après la scène : routes/végétation/météo… (réseau) '+dd('scene','netA')+' · constructions (réseau) '+dd('netA','netB')+' · routes '+dd('netB','bRoads')+' · ouvrages '+dd('bRoads','bStruct')+' · couches '+dd('bStruct','bLayers')+' · plan+arbres IGN '+dd('bLayers','bPlan')+' · fondu '+dd('bPlan','layers')+' · parcelles '+dd('layers','bParc')+' · végétation '+dd('bParc','bVeg'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' (tours '+x(B.ft||0)+(typeof LB_N!=='undefined'?' [grille '+x(LB_N.g)+' · seuils '+x(LB_N.l)+']':'')+' · modèle '+x(B.pm||0)+')'+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
