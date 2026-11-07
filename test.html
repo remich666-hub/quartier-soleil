@@ -4809,9 +4809,11 @@ function qsModel5ref(R,opt){opt=opt||{};
       /* hip roofs of plain blocks are merged per material into a few shared meshes, outside the blocks: count them too */
       (S.roofSetMeshes||[]).forEach(m=>{if(m.parent&&m.visible)objs.push(m);});
       const near=S.meshes.filter(m=>!fam.includes(m)&&m.userData.rings&&m.userData.rings[0].some(p=>p.x>x0-4&&p.x<x1+4&&p.y>y0-4&&p.y<y1+4));
+      const big=fam.slice().sort((a,b)=>Math.abs(areaOf(b.userData.rings[0]))-Math.abs(areaOf(a.userData.rings[0])))[0],SH=(big.userData.shift)||{dx:0,dy:0};
       const D=[],P=[];let nIn=0,nEmpty=0,nOut=0,nBand=0;
       for(let x=x0;x<=x1;x+=ST)for(let y=y0;y<=y1;y+=ST){if(!inAny(x,y,fam))continue;
-        const zl=F.at(x,y),h=MH.at(x,y);if(zl==null||h==null||green(x,y)||rough(x,y,zl))continue;nIn++;
+        const bk=fam.find(b=>pointInPoly(x,y,b.userData.rings[0])),sh=(bk&&bk.userData.shift)||SH,lx=x+sh.dx,ly=y+sh.dy; /* the model reads the laser with its footprint's offset: so does the check */
+        const zl=F.at(lx,ly),h=MH.at(lx,ly);if(zl==null||h==null||green(lx,ly)||rough(lx,ly,zl))continue;nIn++;
         org.set(x,y,800);rc.set(org,down);const hit=rc.intersectObjects(objs,false)[0];if(!hit)continue;const zm=hit.point.z;
         if(h<1.2){nEmpty++;P.push([x,y,zm+0.3,0]);continue;}
         const d=zm-(zl-S.alt0);D.push(d);if(Math.abs(d)>1)P.push([x,y,zm+0.3,d>0?1:2]);}
@@ -4821,8 +4823,8 @@ function qsModel5ref(R,opt){opt=opt||{};
       fam.forEach(b=>{const r=b.userData.rings[0];for(let i=0,j=r.length-1;i<r.length;j=i++){const a=r[j],c=r[i],L=Math.hypot(c.x-a.x,c.y-a.y);if(L<0.5)continue;
         let nx=(c.y-a.y)/L,ny=-(c.x-a.x)/L;const mx=(a.x+c.x)/2,my=(a.y+c.y)/2;if(pointInPoly(mx+nx*0.4,my+ny*0.4,r)){nx=-nx;ny=-ny;}
         for(let t=0.4;t<L-0.3;t+=ST)for(const off of [0.9,1.7]){const x=a.x+(c.x-a.x)*t/L+nx*off,y=a.y+(c.y-a.y)*t/L+ny*off;if(inAny(x,y,fam)||inAny(x,y,near))continue;
-          const zl=F.at(x,y),h=MH.at(x,y);if(zl==null||h==null||green(x,y)||rough(x,y,zl))continue;nBand++;const z=zl-S.alt0;
-          if(h>2.5&&z>zTop-3&&z<zTop+3&&planar(x,y)){nOut++;P.push([x,y,z+0.3,3]);}}}});
+          const lx=x+SH.dx,ly=y+SH.dy,zl=F.at(lx,ly),h=MH.at(lx,ly);if(zl==null||h==null||green(lx,ly)||rough(lx,ly,zl))continue;nBand++;const z=zl-S.alt0;
+          if(h>2.5&&z>zTop-3&&z<zTop+3&&planar(lx,ly)){nOut++;P.push([x,y,z+0.3,3]);}}}});
       D.sort((a,b)=>Math.abs(a)-Math.abs(b));const q=f=>Math.abs(D[Math.min(D.length-1,Math.floor(D.length*f))]);
       const med=q(0.5),p80=q(0.8),empty=nEmpty/nIn,outF=nBand?nOut/nBand:0,bias=D.reduce((s,v)=>s+v,0)/D.length;
       const score=med+0.5*p80+4*empty+4*outF;let cx=(x0+x1)/2,cy=(y0+y1)/2;
