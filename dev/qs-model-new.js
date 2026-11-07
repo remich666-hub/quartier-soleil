@@ -70,7 +70,7 @@ function qsModel5(R,opt){opt=opt||{};
      Flat typed arrays, no allocation per pass, and no second solve when the second pass kept every point (same sums, same result). */
   /* the features written out per kind (no closure per cell: the closures were megamorphic and slow); same expressions and
      same order of the sums as the generic version below, so the very same numbers */
-  const fitK=(I,K,np)=>{const _t=performance.now();PRF.nFit++;try{return fitK0(I,K,np);}finally{PRF.fit+=performance.now()-_t;}};
+  const fitK=(I,K,np)=>{PRF.nFit++;return fitK0(I,K,np);};
   const fitK0=(I,K,np)=>{const t=K.t,a0=K.a,r=K.r,w0=K.w0,Rc=K.Rc;let M00,M01,M02,M11,M12,M22,B0,B1,B2;
     const pass=x=>{M00=M01=M02=M11=M12=M22=B0=B1=B2=0;let n=0;const x0=x?x[0]:0,x1=x?x[1]:0,x2=x&&np>2?x[2]:0;
       for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;let f1,f2=0;
@@ -89,11 +89,11 @@ function qsModel5(R,opt){opt=opt||{};
         M02=r*NB-XB;M22=qb(SXX)-2*r*XB+r*r*NB;B2=r*ZB-qb(SXZ);M12=0; /* f2=r-c above r */}}
     else n0=pass(null);
     /* second pass: count the points within 50 cm; the sums again (over those only) only when some were left out */
-    const cnt=x=>{let n=0;const x0=x[0],x1=x[1],x2=np>2?x[2]:0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;let f1,f2=0;
+    const cnt=x=>{const x0=x[0],x1=x[1],x2=np>2?x[2]:0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;let f1,f2=0;
         if(t===0)f1=u-a0;else if(t===1)f1=v-a0;else if(t===2){f1=-Math.max(0,r-v);f2=-Math.max(0,v-r);}else if(t===3){f1=-Math.max(0,r-u);f2=-Math.max(0,u-r);}
         else{const d=Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);if(t===4)f1=d;else{f1=Math.min(d,w0);f2=Math.max(0,d-w0);}}
-        let pz=0;pz+=1*x0;pz+=f1*x1;if(np>2)pz+=f2*x2;if(Math.abs(z-pz)<0.5)n++;}}return n;};
-    let x=sol();const n1=cnt(x);if(n1>np+3&&n1!==n0){pass(x);x=sol();}return x;};
+        let pz=0;pz+=1*x0;pz+=f1*x1;if(np>2)pz+=f2*x2;if(!(Math.abs(z-pz)<0.5))return true;}}return false;};
+    let x=sol();if(cnt(x)){const n1=pass(x);if(n1>np+3&&n1!==n0)x=sol();}return x;};
   const fitM0=(I,feat,np)=>{const f=new Float64Array(np),M=new Float64Array(np*np),B=new Float64Array(np);
     const pass=x=>{M.fill(0);B.fill(0);let n=0;
       for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;feat(u,v,f);
@@ -103,7 +103,7 @@ function qsModel5(R,opt){opt=opt||{};
     const n0=pass(null);let x=sol();const n1=pass(x);if(n1>np+3&&n1!==n0)x=sol();return x;};
   const costI=(I,pred)=>{const _t=performance.now();PRF.nCost++;try{return costI0(I,pred);}finally{PRF.cost+=performance.now()-_t;}};
   /* the same per kind, written out: same expressions as each candidate's pred */
-  const costK=(I,c,Rc)=>{const _t=performance.now();PRF.nCost++;try{return costK0(I,c,Rc);}finally{PRF.cost+=performance.now()-_t;}};
+  const costK=(I,c,Rc)=>{PRF.nCost++;return costK0(I,c,Rc);};
   const costK0=(I,c,Rc)=>{const T=c.type,x=c.x||[0,0,0],x0=x[0],x1=x[1],x2=x[2],r=c.r,w0=c.w0;let s=0;
     const t=T==='none'?-1:T==='flat'?5:T==='shedU'?0:T==='shedV'?1:T==='gableU'?2:T==='gableV'?3:T==='hip'?4:T==='mansard'?6:7;if(t===7)return costI0(I,c.pred);
     for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const v=v0+(j+.5)*g;let p;
