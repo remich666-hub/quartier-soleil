@@ -2711,8 +2711,8 @@ function findTowers(rings,u,F,green){
       for(let c=0;c<cells.length;c++){const ci=cells[c]%nu,cj=(cells[c]/nu)|0;for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv)continue;const nk=nj*nu+ni;if(lab[nk]<0&&!used[nk]&&H[nk]>=T){lab[nk]=id;cells.push(nk);}}}
       const area=cells.length*cA; if(area<6||area>0.6*nIn*cA)continue;
       const dh=[];let i0=1e9,i1=-1,j0=1e9,j1=-1;
-      cells.forEach(c=>{const ci=c%nu,cj=(c/nu)|0;i0=Math.min(i0,ci);i1=Math.max(i1,ci);j0=Math.min(j0,cj);j1=Math.max(j1,cj);
-        [[1,0],[-1,0],[0,1],[0,-1]].forEach(([di,dj])=>{const ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv||lab[nj*nu+ni]===id)return;const fi=ci+2*di,fj=cj+2*dj;if(fi<0||fj<0||fi>=nu||fj>=nv)return;const f=fj*nu+fi;if(lab[f]===id||!(H[f]===H[f]))return;dh.push(H[c]-H[f]);});});
+      for(let q=0;q<cells.length;q++){const c=cells[q],ci=c%nu,cj=(c/nu)|0;if(ci<i0)i0=ci;if(ci>i1)i1=ci;if(cj<j0)j0=cj;if(cj>j1)j1=cj; /* plain loops: same steps, same order, no allocation per cell */
+        for(let d=0;d<4;d++){const di=d===0?1:d===1?-1:0,dj=d===2?1:d===3?-1:0,ni=ci+di,nj=cj+dj;if(ni<0||nj<0||ni>=nu||nj>=nv||lab[nj*nu+ni]===id)continue;const fi=ci+2*di,fj=cj+2*dj;if(fi<0||fj<0||fi>=nu||fj>=nv)continue;const f=fj*nu+fi;if(lab[f]===id||!(H[f]===H[f]))continue;dh.push(H[c]-H[f]);}}
       if(dh.length<6)continue; dh.sort((p,q)=>p-q); if(qtl(dh,0.5)<1.4)continue;
       const fill=cells.length/((i1-i0+1)*(j1-j0+1)); if(fill<0.55)continue;
       // a tree crown over the roof is not a tower: roofs are smooth at 50 cm (median step ≈ 0.1 m), foliage is rough (≥ 0.4 m)
@@ -3939,7 +3939,11 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   const AVANT=/[?&]avant\b/.test(location.search); /* ?avant: this morning's render savings off, to compare in the same conditions */
   if(!AVANT){renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;let skey='',busyT=0;
   const R1=renderer.render.bind(renderer);
+  let skipK=0;
   renderer.render=function(sc,c){if(sc===scene&&!renderer.getRenderTarget()){
+      /* while the laser rebuilds the neighbourhood (the page's busiest seconds), one frame out of two: every frame drawn there is
+         ~40 ms a phone does not spend on the laser; the image just stays one frame longer */
+      const B=S.LB;if(B&&B.T===S.T&&B.list&&!B.loop&&(skipK++&1))return;
       const sp=sun.position,tp=sun.target.position,n=scene.children.length+(S.meshes?S.meshes.length:0);
       const k=[sp.x,sp.y,sp.z,tp.x,tp.y,tp.z].map(v=>Math.round(v*4)).join(',')+'|'+n;
       const q=(typeof QV4!=='undefined'&&QV4)||{},now=performance.now(),live=q.busy||S.loading||(window.__QSU&&__QSU.uScanR.value<1e5);
