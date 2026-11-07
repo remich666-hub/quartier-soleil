@@ -3987,6 +3987,23 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
         fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
 }catch(e){console.warn('perf',e);}})();
 
+/* ===== the eye at the window stands on the wall that is drawn: the roof model's walls can sit a little outside the IGN outline
+   the window was placed on (up to a metre or two); the eye was then inside the building and the view was one flat wall colour ===== */
+(()=>{try{
+  const rc=new THREE.Raycaster(),off=new THREE.Vector3();let key='',d0=0;
+  const _ac=applyCam;
+  applyCam=function(){_ac.apply(this,arguments);try{
+    if(cam.mode!=='window'||!S.win||!S.win.pos||!S.win.normal)return;const w=S.win;
+    const k=w.pos.x.toFixed(2)+','+w.pos.y.toFixed(2)+','+w.pos.z.toFixed(2)+'|'+(w.obj?w.obj.uuid:'');
+    if(k!==key){key=k;d0=0;const dir=new THREE.Vector3(w.normal.x,w.normal.y,0).normalize(),objs=[];
+      (w.obj?family(w.obj):[]).forEach(o=>{o.traverse(c=>{if(c.isMesh&&c.visible&&!c.userData.winDecal)objs.push(c);});});
+      rc.set(w.pos,dir);rc.near=0;rc.far=4;
+      /* walls crossed from the inside (their face turned the same way as the ray): the eye goes just past the last one */
+      for(const h of rc.intersectObjects(objs,false)){const n=h.face&&h.face.normal.clone().transformDirection(h.object.matrixWorld);if(!n)continue;if(n.dot(dir)>0.2)d0=h.distance+0.15;else break;}}
+    if(d0>0){off.set(w.normal.x,w.normal.y,0).normalize().multiplyScalar(d0);camera.position.add(off);camera.updateMatrixWorld();}
+  }catch(e){}};
+}catch(e){console.warn('window eye',e);}})();
+
 /* ===== the loading veil plays the home page's window (copy of home-hero.js, own ids) ===== */
 window.QS_SUN=window.QS_SUN||3;
 /* hero: a window and only the light through it, drawn entirely in fine grain like the reference —
