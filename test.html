@@ -2606,16 +2606,21 @@ function lidarSamples(u,F,green){
   const r0=u.rings[0],sh=u.shift||{dx:0,dy:0}; let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; r0.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});
   const st=(x1-x0)*(y1-y0)>3000?1:0.5; const pts=[]; let nin=0;
   for(let x=x0+st/2;x<x1;x+=st)for(let y=y0+st/2;y<y1;y+=st){if(!pointInPoly(x,y,r0))continue;let hole=false;for(let k=1;k<u.rings.length;k++)if(pointInPoly(x,y,u.rings[k])){hole=true;break;}if(hole)continue;
-    nin++;const v=F.at(x+sh.dx,y+sh.dy);if(v==null)continue;const hh=v-S.alt0-u.zBase;if(hh<2)continue;if(green(x+sh.dx,y+sh.dy)>12)continue;pts.push({x,y,h:hh});}
+    nin++;const v=F.at(x+sh.dx,y+sh.dy);if(v==null)continue;const hh=v-S.alt0-u.zBase;if(hh<1.6)continue; /* garden sheds and lean-tos stand 2 to 2.5 m: keep them */if(green(x+sh.dx,y+sh.dy)>12)continue;pts.push({x,y,h:hh});}
   return {pts,nin,cell:st*st};
 }
 function splitByLevel(rings,pts,cell,depth){
   const parts=[{rings,pts}]; if(depth>=2||pts.length*cell<40)return parts;
   const hs=pts.map(p=>p.h).sort((a,b)=>a-b),n=hs.length; const pre=[0];hs.forEach(v=>pre.push(pre[pre.length-1]+v));const pre2=[0];hs.forEach(v=>pre2.push(pre2[pre2.length-1]+v*v));
-  let best=null;for(let k=Math.ceil(n*0.12);k<=Math.floor(n*0.88);k++){const sA=pre[k],sB=pre[n]-pre[k],qA=pre2[k],qB=pre2[n]-pre2[k];const v=(qA-sA*sA/k)+(qB-sB*sB/(n-k));if(!best||v<best.v)best={v,t:(hs[k-1]+hs[k])/2,k};}
+  let best=null;for(let k=Math.ceil(n*0.06);k<=Math.floor(n*0.94);k++){const sA=pre[k],sB=pre[n]-pre[k],qA=pre2[k],qB=pre2[n]-pre2[k];const v=(qA-sA*sA/k)+(qB-sB*sB/(n-k));if(!best||v<best.v)best={v,t:(hs[k-1]+hs[k])/2,k};}
   if(!best)return parts; const A=pts.filter(p=>p.h<best.t),B=pts.filter(p=>p.h>=best.t);
   const mA=qtl(A.map(p=>p.h).sort((a,b)=>a-b),0.5),mB=qtl(B.map(p=>p.h).sort((a,b)=>a-b),0.5);
-  if(mB-mA<3.5||A.length*cell<18||B.length*cell<18)return parts;
+  /* a full storey between the two levels (3.5 m), or a lean-to, a garage, a low wing against a house: a flat lower part at
+     least 2.2 m below, set off by a wall (checked once the cut is found: the height jumps there, a sloping roof only ramps) */
+  const hard=mB-mA>=3.5&&A.length*cell>=18&&B.length*cell>=18;
+  const sA=A.map(p=>p.h).sort((a,b)=>a-b),iqA=qtl(sA,0.75)-qtl(sA,0.25);
+  const soft=!hard&&mB-mA>=2.2&&iqA<0.8&&A.length*cell>=9&&B.length*cell>=9;
+  if(!hard&&!soft)return parts;
   const cA=A.reduce((s,p)=>[s[0]+p.x/A.length,s[1]+p.y/A.length],[0,0]),cB=B.reduce((s,p)=>[s[0]+p.x/B.length,s[1]+p.y/B.length],[0,0]);
   let wx=cB[0]-cA[0],wy=cB[1]-cA[1];const wl=Math.hypot(wx,wy);if(wl<1.5)return parts;wx/=wl;wy/=wl;
   // best straight cut perpendicular to the A→B direction, tried at a few angles
@@ -2626,7 +2631,9 @@ function splitByLevel(rings,pts,cell,depth){
   let cut=null;for(const [ax,ay] of tryAxes){
     const pr=pts.map(p=>({s:p.x*ax+p.y*ay,b:p.h>=best.t})).sort((a,b)=>a.s-b.s);const totB=B.length;let aL=0,bL=0;
     for(let i=0;i<pr.length;i++){if(pr[i].b)bL++;else aL++;const acc=(aL+(totB-bL))/pr.length;if(!cut||acc>cut.acc)cut={acc,ax,ay,c:(pr[i].s+(pr[i+1]?pr[i+1].s:pr[i].s))/2};}}
-  if(!cut||cut.acc<0.86)return parts;
+  if(!cut||cut.acc<(hard?0.86:0.9))return parts;
+  if(soft){const nA=[],nB=[];pts.forEach(p=>{const d=p.x*cut.ax+p.y*cut.ay-cut.c;if(d>-1.25&&d<-0.25)nA.push(p.h);else if(d>0.25&&d<1.25)nB.push(p.h);});
+    if(nA.length<4||nB.length<4)return parts;nA.sort((a,b)=>a-b);nB.sort((a,b)=>a-b);if(qtl(nB,0.5)-qtl(nA,0.5)<1.8)return parts;}
   const side=(sg)=>{const o=clipHalf(rings[0],sg*cut.ax,sg*cut.ay,-sg*cut.c);if(!o)return null;const hl=rings.slice(1).map(r=>clipHalf(r,sg*cut.ax,sg*cut.ay,-sg*cut.c)).filter(Boolean);
     return {rings:[o].concat(hl),pts:pts.filter(p=>sg*(p.x*cut.ax+p.y*cut.ay-cut.c)>=0)};};
   const lo=side(-1),hi=side(1); if(!lo||!hi||lo.pts.length*cell<12||hi.pts.length*cell<12)return parts;
