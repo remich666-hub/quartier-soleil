@@ -4005,6 +4005,32 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   }catch(e){}};
 }catch(e){console.warn('window eye',e);}})();
 
+/* ===== the date and hour in the panel (desktop): the button far down the left corner read as a label, alone and away from
+   everything else. On a computer it is now a line of the panel, under the address, and its sliders open in place ===== */
+(()=>{try{
+  const st=document.createElement('style');st.textContent=`
+  #qsWhen{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 70%,#fff 30%);
+    font:500 14px/1.25 'Instrument Sans',system-ui,sans-serif;color:inherit;cursor:pointer;text-align:left;transition:border-color .2s cubic-bezier(.65,0,.35,1),background .2s cubic-bezier(.65,0,.35,1)}
+  #qsWhen:hover{border-color:var(--accent)}#qsWhen[hidden]{display:none}
+  #qsWhen svg{width:20px;height:20px;color:var(--accent);flex:none}#qsWhen .t{flex:1;min-width:0}#qsWhen .t small{display:block;font-size:11px;color:var(--muted);font-weight:400}
+  #qsWhen .m{color:var(--accent);font-size:13px;white-space:nowrap}
+  #bottom.inl{position:static;width:auto;left:auto;bottom:auto;top:auto;margin-top:-8px;box-shadow:none;padding:12px}
+  body.qsSide #timePill{display:none}`;
+  document.head.appendChild(st);
+  const left=document.getElementById('left'),bottom=document.getElementById('bottom'),pill=document.getElementById('timePill'),home=bottom.parentNode,next=bottom.nextSibling;
+  const row=document.createElement('button');row.type='button';row.id='qsWhen';row.hidden=true;row.setAttribute('aria-controls','bottom');row.setAttribute('aria-expanded','false');
+  row.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="currentColor"/></svg><span class="t"><small>Date et heure du soleil</small><span id="qsWhenT">—</span></span><span class="m">Modifier</span>';
+  row.addEventListener('click',()=>{bottom.hidden=!bottom.hidden;row.setAttribute('aria-expanded',String(!bottom.hidden));row.querySelector('.m').textContent=bottom.hidden?'Modifier':'Fermer';});
+  let side=null;
+  const sync=()=>{try{const sh=document.getElementById('sheet').getBoundingClientRect(),s=sh.width<innerWidth*0.7&&sh.height>innerHeight*0.5;
+    if(s!==side){side=s;document.body.classList.toggle('qsSide',s);
+      if(s){const ad=document.getElementById('addrDone');(ad||left.firstChild).after(row);row.after(bottom);bottom.classList.add('inl');}
+      else{row.remove();home.insertBefore(bottom,next);bottom.classList.remove('inl');}}
+    const ad=document.getElementById('addrDone');row.hidden=!s||!ad||ad.hidden;if(row.hidden&&s&&!bottom.hidden&&(!ad||ad.hidden))bottom.hidden=true;
+    const d=document.getElementById('pillDate'),t=document.getElementById('pillTime');if(d&&t)document.getElementById('qsWhenT').textContent=d.textContent+' · '+t.textContent;}catch(e){}};
+  setInterval(sync,300);addEventListener('resize',sync);sync();
+}catch(e){console.warn('when row',e);}})();
+
 /* ===== the loading veil plays the home page's window (copy of home-hero.js, own ids) ===== */
 window.QS_SUN=window.QS_SUN||3;
 /* hero: a window and only the light through it, drawn entirely in fine grain like the reference —
