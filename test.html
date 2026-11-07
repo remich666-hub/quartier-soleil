@@ -4070,7 +4070,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   const sync=()=>{try{const sh=document.getElementById('sheet').getBoundingClientRect(),s=matchMedia('(min-width:761px)').matches; /* the page's own phone breakpoint */
     if(BAR){ /* option 2: the bar, always there on a computer, across the view (left of the panel) */
       if(s!==side){side=s;document.body.classList.toggle('qsSide',s);bottom.classList.toggle('bar',s);if(!s)bottom.hidden=true;}
-      const ad0=document.getElementById('addrDone');if(s){bottom.hidden=!ad0||ad0.hidden;bottom.style.right=Math.max(24,innerWidth-sh.left+24)+'px';}else bottom.style.right='';
+      const ad0=document.getElementById('addrDone');if(s){bottom.hidden=!(S.label&&S.T&&S.T.scene);bottom.style.right=Math.max(24,innerWidth-sh.left+24)+'px';}else bottom.style.right='';
       row.hidden=true;return;}
     if(s!==side){side=s;document.body.classList.toggle('qsSide',s);
       if(s){const ad=document.getElementById('addrDone');(ad||left.firstChild).after(row);row.after(bottom);bottom.classList.add('inl');}
