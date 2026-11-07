@@ -3866,6 +3866,9 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   #qsMiniBox[hidden]{display:none}
   #qsMiniBox.dock{position:relative;right:auto;bottom:auto;width:100%;aspect-ratio:auto;height:170px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line,rgba(0,0,0,.08));z-index:auto;flex:none}
   #qsMiniBox canvas{display:none;width:100%;height:100%}#qsMiniBox.dock canvas{display:block}
+  #qsMiniBox .qa{position:absolute;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;border:0;background:rgba(255,255,255,.88);color:#2a2650;font:500 18px/1 system-ui,sans-serif;
+    box-shadow:0 3px 10px rgba(40,40,90,.18);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;z-index:2}
+  #qsMiniBox .qa.l{left:8px}#qsMiniBox .qa.r{right:8px}#qsMiniBox .qa:hover{background:#fff;color:#f0773a}
   #qsMiniCap{font:400 12px/1.35 'Instrument Sans',system-ui,sans-serif;color:var(--muted,#6b6580);margin-top:-8px}#qsMiniCap[hidden]{display:none}
   #qsBack{position:fixed;left:max(12px,env(safe-area-inset-left,0px));bottom:200px;z-index:25;
     font:500 14px/1 'Instrument Sans',system-ui,sans-serif;padding:10px 14px;border-radius:999px;border:0;background:rgba(255,255,255,.92);color:#2a2650;box-shadow:0 6px 18px rgba(40,40,90,.22)}
@@ -3882,6 +3885,9 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   const fadeEl=mk('div','qsFade'),box=mk('div','qsMiniBox'),back=mk('button','qsBack','← Maquette'),see=mk('button','qsSee','Voir depuis la fenêtre'),hint=mk('div','qsHint','<b>Touchez votre fenêtre</b><small>Vous pourrez ajuster l\'étage et la façade ensuite.</small>');
   box.hidden=true;back.hidden=true;see.hidden=true;back.type='button';see.type='button';
   const cv2=document.createElement('canvas');box.appendChild(cv2);const ctx2=cv2.getContext('2d');
+  const arrow=(cls,txt,dir)=>{const a=document.createElement('button');a.type='button';a.className='qa '+cls;a.textContent=txt;a.setAttribute('aria-label',dir>0?'Tourner vers la droite':'Tourner vers la gauche');
+    a.addEventListener('pointerdown',e=>e.stopPropagation());a.addEventListener('click',e=>{e.stopPropagation();if(mth!==null)tgt=(tgt!==null?tgt:mth)+dir*Math.PI/2;});box.appendChild(a);};
+  arrow('l','‹',-1);arrow('r','›',1);
   const cap=document.createElement('div');cap.id='qsMiniCap';cap.textContent='Votre fenêtre. Glissez pour tourner, touchez une façade pour y placer la fenêtre.';cap.hidden=true;
   /* desktop (side panel): the miniature sits in the panel, above the façade and floor settings it goes with; the floating
      "back" and "see from the window" buttons go (the panel has its own button for both) */
@@ -3898,15 +3904,44 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   see.addEventListener('click',()=>{hint.classList.remove('on');setMode('window');});
   /* 2. the house in miniature: only the studied house (its own layer), turned by the finger, drawn in a corner of the same canvas */
   const mc=new THREE.PerspectiveCamera(30,1,0.5,3000);let mth=null,boxKey='',ctr=new THREE.Vector3(),rad=10;const LM=9;
-  const mark=new THREE.Mesh(new THREE.SphereGeometry(0.55,16,12),new THREE.MeshBasicMaterial({color:0xf0773a,fog:false,toneMapped:false,depthTest:false}));
-  mark.layers.set(LM);mark.renderOrder=10;scene.add(mark);
+  /* the chosen window drawn exactly (a quad over its own decal, with a border), the window under the mouse, and a fan showing where
+     the big view is looking; all on the miniature's own layer */
+  const qGeo=()=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(12),3));g.setIndex([0,1,2,0,2,3]);return g;};
+  const qMat=(c,o,dt)=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:o,fog:false,toneMapped:false,depthTest:dt,depthWrite:false,side:THREE.DoubleSide});
+  const selB=new THREE.Mesh(qGeo(),qMat(0xb8461c,1,true)),selF=new THREE.Mesh(qGeo(),qMat(0xff8a3d,1,true)),hov=new THREE.Mesh(qGeo(),qMat(0xfff4e6,0.95,true));
+  const fanG=new THREE.BufferGeometry();fanG.setAttribute('position',new THREE.BufferAttribute(new Float32Array(9*8),3));const fan=new THREE.Mesh(fanG,qMat(0xf0773a,0.28,false));
+  [selB,selF,hov,fan].forEach((m,i)=>{m.layers.set(LM);m.renderOrder=10+i;m.visible=false;m.frustumCulled=false;scene.add(m);});
+  const mark={get visible(){return selF.visible;},set visible(v){selB.visible=selF.visible=fan.visible=v;if(!v)hov.visible=false;},position:new THREE.Vector3()};
+  const setQ=(m,c,ux,uy,nx,ny,hw,z0,z1,o)=>{const a=m.geometry.attributes.position.array,ox=nx*o,oy=ny*o;
+    a.set([c.x-ux*hw+ox,c.y-uy*hw+oy,z0, c.x+ux*hw+ox,c.y+uy*hw+oy,z0, c.x+ux*hw+ox,c.y+uy*hw+oy,z1, c.x-ux*hw+ox,c.y-uy*hw+oy,z1]);m.geometry.attributes.position.needsUpdate=true;m.geometry.computeBoundingSphere();};
+  /* the windows of the family, read from the decals that draw them (6 vertices a window: bottom-left, bottom-right, top-right…) */
+  let winKey='',wins=[];
+  const winsOf=fam=>{const decs=[];fam.forEach(o=>o.children.forEach(c=>{if(c.userData.winDecal)decs.push(c);}));const k=decs.map(d=>d.geometry.uuid).join();if(k===winKey)return wins;winKey=k;wins=[];
+    const v=new THREE.Vector3();decs.forEach(d=>{d.updateMatrixWorld(true);const a=d.geometry.attributes.position;for(let i=0;i+5<a.count;i+=6){
+      const p0=v.fromBufferAttribute(a,i).applyMatrix4(d.matrixWorld).clone(),p1=v.fromBufferAttribute(a,i+1).applyMatrix4(d.matrixWorld).clone(),p2=v.fromBufferAttribute(a,i+2).applyMatrix4(d.matrixWorld).clone();
+      const dx=p1.x-p0.x,dy=p1.y-p0.y,L=Math.hypot(dx,dy);if(L<0.05)continue;const ux=dx/L,uy=dy/L;
+      wins.push({c:new THREE.Vector3((p0.x+p1.x)/2,(p0.y+p1.y)/2,(p0.z+p2.z)/2),ux,uy,nx:uy,ny:-ux,hw:L/2,z0:p0.z,z1:p2.z});}});return wins;};
+  const winAt=(p,tol)=>{let best=null,bd=1e9;for(const w of wins){const ex=p.x-w.c.x,ey=p.y-w.c.y,dn=Math.abs(ex*w.nx+ey*w.ny),t=Math.abs(ex*w.ux+ey*w.uy);
+      if(dn>0.8||t>w.hw+tol||p.z<w.z0-tol||p.z>w.z1+tol)continue;const d=dn+Math.max(0,t-w.hw)+Math.max(0,w.z0-p.z,p.z-w.z1);if(d<bd){bd=d;best=w;}}return best;};
+  let tgt=null,lastWin='',hovW=null;
   const cc=new THREE.Color();
   const placeCam=()=>{const ph=0.5,d=rad*3.3;mc.position.set(ctr.x+d*Math.cos(ph)*Math.sin(mth),ctr.y+d*Math.cos(ph)*Math.cos(mth),ctr.z+d*Math.sin(ph));mc.up.set(0,0,1);mc.lookAt(ctr);mc.updateMatrixWorld();};
   window.__qsMini={hide(){box.hidden=true;back.hidden=true;cap.hidden=true;mark.visible=false;},
     draw(R0,b,LH){const w=S.win;if(!w||!w.pos){this.hide();return;}box.hidden=false;back.hidden=docked;cap.hidden=!docked;
       const fam=family(b),key=b.uuid+fam.length;if(key!==boxKey){const bb=new THREE.Box3();fam.forEach(o=>bb.expandByObject(o));bb.getCenter(ctr);const sz=bb.getSize(new THREE.Vector3());rad=Math.max(4,Math.max(sz.x,sz.y,sz.z)/2);boxKey=key;mth=null;}
       if(mth===null)mth=Math.atan2(w.normal.x,w.normal.y)+0.6; /* first seen from the window's side, a little turned */
-      mark.position.copy(w.pos);mark.visible=true;
+      /* a new window: the miniature turns (smoothly) to face it, a little from the side */
+      const wk=w.pos.x.toFixed(2)+','+w.pos.y.toFixed(2)+','+w.pos.z.toFixed(2);if(wk!==lastWin){lastWin=wk;tgt=Math.atan2(w.normal.x,w.normal.y)+0.45;}
+      if(tgt!==null){const d=wrap(tgt,mth)-mth;if(Math.abs(d)<0.002){mth=tgt;tgt=null;}else mth+=d*0.14;}
+      winsOf(fam);const sw=winAt(w.pos,0.9);
+      if(sw){setQ(selB,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw+0.35,sw.z0-0.35,sw.z1+0.35,0.08);setQ(selF,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw,sw.z0,sw.z1,0.12);}
+      else{const n=w.normal,ux=-n.y,uy=n.x;setQ(selB,w.pos,ux,uy,n.x,n.y,1,w.pos.z-1.1,w.pos.z+1.1,0.08);setQ(selF,w.pos,ux,uy,n.x,n.y,0.65,w.pos.z-0.75,w.pos.z+0.75,0.12);}
+      { /* the fan: where the big view looks (its yaw), from the window, flat */
+        const o=sw?sw.c:w.pos,yaw=cam.baseYaw+cam.yaw,hf=Math.min(1.2,((cam.hfov||70)*Math.PI/180)/2),Lf=rad*0.9,a=fan.geometry.attributes.position.array;let k=0;
+        for(let i=0;i<8;i++){const t0=yaw-hf+2*hf*i/8,t1=yaw-hf+2*hf*(i+1)/8;a.set([o.x,o.y,o.z, o.x+Lf*Math.sin(t0),o.y+Lf*Math.cos(t0),o.z, o.x+Lf*Math.sin(t1),o.y+Lf*Math.cos(t1),o.z],k);k+=9;}
+        fan.geometry.attributes.position.needsUpdate=true;fan.geometry.computeBoundingSphere();}
+      mark.visible=true;
+      if(hovW&&(!sw||hovW!==sw)){setQ(hov,hovW.c,hovW.ux,hovW.uy,hovW.nx,hovW.ny,hovW.hw,hovW.z0,hovW.z1,0.1);hov.visible=true;}else hov.visible=false;
       const cr=renderer.domElement.getBoundingClientRect(),rr=box.getBoundingClientRect();if(!rr.width)return;
       const x=rr.left-cr.left,y=cr.bottom-rr.bottom,W=rr.width,H=rr.height;mc.aspect=W/H;mc.updateProjectionMatrix();placeCam();
       mc.layers.set(LH);mc.layers.enable(LM);if(!this._lit){scene.traverse(o=>{if(o.isLight){o.layers.enable(LH);o.layers.enable(LM);}});this._lit=1;}
@@ -3921,11 +3956,16 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   /* turn it, or touch it: a wall moves the window there (the same rules as on the model), the roof goes back to the model */
   let pd=null;
   box.addEventListener('pointerdown',e=>{pd={x:e.clientX,y:e.clientY,x0:e.clientX,moved:false,id:e.pointerId};try{box.setPointerCapture(e.pointerId);}catch(_){}e.stopPropagation();});
-  box.addEventListener('pointermove',e=>{if(!pd||e.pointerId!==pd.id)return;const dx=e.clientX-pd.x;if(Math.abs(e.clientX-pd.x0)>6)pd.moved=true;mth-=dx*0.012;pd.x=e.clientX;});
-  box.addEventListener('pointerup',e=>{if(!pd||e.pointerId!==pd.id)return;const was=pd;pd=null;if(was.moved)return;
-    const rr=box.getBoundingClientRect(),nx=((e.clientX-rr.left)/rr.width)*2-1,ny=-((e.clientY-rr.top)/rr.height)*2+1;
-    const rc=new THREE.Raycaster();rc.layers.set(7);rc.setFromCamera(new THREE.Vector2(nx,ny),mc);const h=rc.intersectObjects(scene.children,true)[0];
+  box.addEventListener('pointermove',e=>{if(!pd||e.pointerId!==pd.id)return;const dx=e.clientX-pd.x;if(Math.abs(e.clientX-pd.x0)>6)pd.moved=true;mth-=dx*0.012;tgt=null;hovW=null;pd.x=e.clientX;});
+  const under=(cx,cy)=>{const rr=box.getBoundingClientRect(),nx=((cx-rr.left)/rr.width)*2-1,ny=-((cy-rr.top)/rr.height)*2+1;
+    const rc=new THREE.Raycaster();rc.layers.set(7);rc.setFromCamera(new THREE.Vector2(nx,ny),mc);return {nx,ny,h:rc.intersectObjects(scene.children,true)[0]};};
+  box.addEventListener('pointermove',e=>{if(pd||e.pointerType!=='mouse')return;try{const u=under(e.clientX,e.clientY);hovW=u.h&&Math.abs(u.h.face.normal.clone().transformDirection(u.h.object.matrixWorld).z)<0.3?winAt(u.h.point,0.6):null;box.style.cursor=hovW?'pointer':'grab';}catch(_){hovW=null;}});
+  box.addEventListener('pointerleave',()=>{hovW=null;});
+  box.addEventListener('pointerup',e=>{if(!pd||e.pointerId!==pd.id)return;const was=pd;pd=null;if(was.moved){tgt=null;return;}
+    let {nx,ny,h}=under(e.clientX,e.clientY);
     if(!h){return;}if(Math.abs(h.face.normal.clone().transformDirection(h.object.matrixWorld).z)>=0.3){setMode('orbit');return;}
+    /* on a window: aim at its centre, so the very window touched is the one chosen */
+    {const ww=winAt(h.point,0.6);if(ww){const c=ww.c.clone().addScaledVector(new THREE.Vector3(ww.nx,ww.ny,0),0.05).project(mc);nx=c.x;ny=c.y;}}
     /* a wall: run the model's own pick as if the finger had touched this point on the big view, seen from the miniature's camera */
     fade(()=>{const sv={p:camera.position.clone(),q:camera.quaternion.clone(),pm:camera.projectionMatrix.clone(),pi:camera.projectionMatrixInverse.clone()},lay=ray.layers.mask;
       camera.position.copy(mc.position);camera.quaternion.copy(mc.quaternion);camera.updateMatrixWorld(true);camera.projectionMatrix.copy(mc.projectionMatrix);camera.projectionMatrixInverse.copy(mc.projectionMatrixInverse);ray.layers.set(7);
