@@ -3602,15 +3602,17 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
   const poolW=new THREE.MeshLambertMaterial({color:new THREE.Color(0xc9d2f2).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-12});
   const poolC=new THREE.MeshLambertMaterial({color:new THREE.Color(0xf6f6fb).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10});
   try{fadeMat(poolW);fadeMat(poolC);}catch(e){}
+  const upN=g=>{const n=new Float32Array(g.attributes.position.count*3);for(let i=2;i<n.length;i+=3)n[i]=1;g.setAttribute('normal',new THREE.BufferAttribute(n,3));}; /* flat water: straight up */
+  poolW.side=THREE.DoubleSide;
   const isPool=o=>o&&o.isGroup&&o.children.some(c=>c.material===poolMat||c.material===poolW);
   try{ROOF.tuile.color.set(0xdcdde6);ROOF.ardoise.color.set(0xc9ccd8);ROOF.zinc.color.set(0xd6d8e2);ROOF.autre.color.set(0xdfe1e9);}catch(e){}
   const swap=(m,mat)=>{if(m&&m.material!==mat){m.material=mat;if(m.isInstancedMesh&&m.instanceColor)m.instanceColor=null;}};
   function flatten(){if(typeof photoMode!=='undefined'&&photoMode)return;
     try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
     try{if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}if(groundMat.map&&!photoMode){groundMat.map=null;groundMat.needsUpdate=true;}}catch(e){}
-    try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(isPool(o)){o.visible=true;o.children.forEach(c=>{if(c.material===poolMat){if(!c.geometry.attributes.normal)c.geometry.computeVertexNormals();swap(c,poolW);} /* the water carried no normals (its old shader did not need them): lit, it came out black */else if(c.material!==poolW)swap(c,poolC);});}
+    try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(isPool(o)){o.visible=true;o.children.forEach(c=>{if(c.material===poolMat){if(!c.geometry.attributes.normal)upN(c.geometry);swap(c,poolW);} /* the water carried no normals (its old shader did not need them): lit, it came out black */else if(c.material!==poolW)swap(c,poolC);});}
       else if(o.material===poolMat||(o.isGroup||o.type==='Group'))o.visible=false;});}catch(e){}
-    try{scene.traverse(o=>{if(o.material===poolMat){if(o.geometry&&!o.geometry.attributes.normal)o.geometry.computeVertexNormals();swap(o,poolW);}});}catch(e){}}
+    try{scene.traverse(o=>{if(o.material===poolMat){if(o.geometry&&!o.geometry.attributes.normal)upN(o.geometry);swap(o,poolW);}});}catch(e){}}
   setInterval(flatten,1200);
   const quick=()=>{if(typeof photoMode!=='undefined'&&photoMode)return;try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
     try{if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}}catch(e){}};
