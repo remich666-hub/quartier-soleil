@@ -3235,9 +3235,9 @@ function qsV4One(fam,pre){
   qsFoldRoofs(); try{if(typeof partsSync==='function')fam.forEach(o=>partsSync(o));}catch(e){}
   S.obstacles=(S.obstacles||[]).filter(o=>!goneObs.has(o)).concat(adds);
   QV4.tBuild=(QV4.tBuild||0)+performance.now()-tm0;main.userData._v4={fam,XL,OUT,w5:V5?V5.walls:null,drawn:drawn.map(d=>({outer:d.outer,holes:d.holes,n:d.n,z:d.outer.map(q=>d.vzOf?d.vzOf(q):d.zf(q[0],q[1]))}))}; QV4.done.push(main); {const tw0=performance.now();try{qsWindows(main);}catch(e){console.error('v4 windows',e);}QV4.tWin=(QV4.tWin||0)+performance.now()-tw0;}
-  /* the windows test what stands in front of each one: neighbours still being rebuilt from the laser at this moment hid some
-     of them for good (48 windows of 181 on one test building). Once the neighbourhood has settled, they are placed again. */
-  setTimeout(()=>{if(main.parent&&main.userData._v4)try{qsWindows(main);}catch(e){}},3000);
+  /* the windows test what stands in front of each one, and the neighbours keep being rebuilt after this one: every rebuild
+     marks its surroundings, and the windows there are placed again on what now stands (48 windows of 181 were lost before) */
+  {const bs=main.geometry.boundingSphere;if(bs)qsWinDirty(bs.center.x,bs.center.y,bs.radius);}
   try{if(S.gfWalls)buildGroundFloors(S.gfWalls);}catch(e){}
   rebuildEdges(); return true;}
 /* the IGN pitched roofs of these buildings live in shared meshes: their triangles are folded under the ground */
@@ -3279,6 +3279,28 @@ function qsRows(o){const u=o.userData;let base=u.zBase,sh=0;
   try{if(u.lidar&&u.facades&&nFloorsRaw(u)<=2){const off=floorBase(u)-u.zBase;if(off>=0.3||u._gl){base=u.zBase+off;sh=u._gl?u._glH:3;}}}catch(e){}
   if(!sh){const b=u.floors||Math.max(1,Math.round(u.h/3));sh=u.h/b;}
   return {base,sh};}
+/* The studied window is a drawn one: the point of the study (along the facade, its height) is moved onto the centre of the
+   nearest window drawn on that facade and storey, so the hours shown are those of the window one sees. */
+function qsSnapWin(){const w=S.win;if(!w||!w.pos||!w.obj)return false;const n=w.normal,ux=-n.y,uy=n.x;let best=null,bd=1.8;
+  family(w.obj).forEach(o=>o.children.forEach(c=>{if(!c.userData.winDecal)return;c.updateMatrixWorld(true);const a=c.geometry.attributes.position,v=new THREE.Vector3();
+    for(let i=0;i+5<a.count;i+=6){const p0=v.fromBufferAttribute(a,i).applyMatrix4(c.matrixWorld).clone(),p1=new THREE.Vector3().fromBufferAttribute(a,i+1).applyMatrix4(c.matrixWorld),p2=new THREE.Vector3().fromBufferAttribute(a,i+2).applyMatrix4(c.matrixWorld);
+      const dx=p1.x-p0.x,dy=p1.y-p0.y,L=Math.hypot(dx,dy);if(L<0.05)continue;if((dy/L)*n.x+(-dx/L)*n.y<0.9)continue; /* same facing */
+      const cx=(p0.x+p1.x)/2,cy=(p0.y+p1.y)/2,cz=(p0.z+p2.z)/2,ex=cx-w.pos.x,ey=cy-w.pos.y;if(Math.abs(ex*n.x+ey*n.y)>3||Math.abs(cz-w.pos.z)>1.2)continue;
+      const t=ex*ux+ey*uy;if(Math.abs(t)<bd){bd=Math.abs(t);best={t,cz};}}}));
+  if(!best)return false;if(Math.abs(best.t)<0.02&&Math.abs(best.cz-w.pos.z)<0.02)return false;
+  w.pos.x+=ux*best.t;w.pos.y+=uy*best.t;w.pos.z=best.cz;
+  try{marker.position.copy(w.pos);markerArrow.position.copy(w.pos);skyLine.position.copy(w.pos);}catch(e){}
+  S.skyline=null;try{skyLine.visible=false;skyLine.userData.ready=false;}catch(e){}return true;}
+if(typeof placeMarker==='function'){const _pm=placeMarker;placeMarker=function(){_pm.apply(this,arguments);try{qsSnapWin();}catch(e){}};}
+/* Order of the work: geometry first (laser buildings, then each roof model as it comes), windows on what stands, and the
+   window study last. A change of geometry somewhere marks it; shortly after the last change, the windows within 40 m of it are
+   placed again, and the study's own result is taken again when it was computed on the drawn model (no laser horizon). */
+const QWR={t:0,z:[],all:false};
+function qsWinDirty(x,y,r){if(x==null)QWR.all=true;else QWR.z.push([x,y,r||0]);clearTimeout(QWR.t);QWR.t=setTimeout(qsWinFlush,400);}
+function qsWinFlush(){const Z=QWR.z,all=QWR.all;QWR.z=[];QWR.all=false;
+  const close=(x,y,r,d)=>all||Z.some(([a,b,c])=>Math.hypot(x-a,y-b)<c+r+d);
+  (QV4.done||[]).forEach(m=>{if(!m.parent||!m.userData._v4)return;const bs=m.geometry.boundingSphere;if(!bs||!close(bs.center.x,bs.center.y,bs.radius,40))return;try{qsWindows(m);}catch(e){}});
+  try{const w=S.win;if(w&&w.pos&&close(w.pos.x,w.pos.y,0,60)){const moved=qsSnapWin();if(moved||!S.skyline)scheduleSummary();}}catch(e){}}
 function qsWindows(main){const V=main.userData._v4;if(!V)return;if(V.w5)return qsWindows5(main);const {fam,XL,OUT}=V;
   [...main.children].forEach(c=>{if(c.userData.winDecal){main.remove(c);c.geometry.dispose();}});
   const objs=[];fam.forEach(o=>{objs.push(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal&&!c.userData.hiRoof)objs.push(c);});});
