@@ -4822,14 +4822,18 @@ function qsModel5ref(R,opt){opt=opt||{};
       out.push({score:+score.toFixed(2),med:+med.toFixed(2),p80:+p80.toFixed(2),bias:+bias.toFixed(2),empty:+empty.toFixed(2),out:+outF.toFixed(2),n:nIn,h:+zTop.toFixed(1),cx:Math.round(cx),cy:Math.round(cy),d:Math.round(Math.hypot(cx,cy)),fam,P,bid:fam[0].userData.bid});});
     out.sort((a,b)=>b.score-a.score);window.__qcList=out;
     return out.map((r,i)=>({i,score:r.score,med:r.med,p80:r.p80,bias:r.bias,empty:r.empty,out:r.out,h:r.h,d:r.d,n:r.n,bid:r.bid&&r.bid.slice(-6)}));}
-  function show(i,o){o=o||{};clear();const r=(window.__qcList||[])[i];if(!r)return null;
-    const col={0:[0.05,0.05,0.08],1:[0.95,0.15,0.15],2:[0.15,0.35,1],3:[1,0.85,0.05]},P=new Float32Array(r.P.length*3),C=new Float32Array(r.P.length*3);
-    r.P.forEach((p,k)=>{P.set([p[0],p[1],p[2]],k*3);C.set(col[p[3]],k*3);});
-    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));g.setAttribute('color',new THREE.BufferAttribute(C,3));
-    pts=new THREE.Points(g,new THREE.PointsMaterial({size:o.size||6,sizeAttenuation:false,vertexColors:true,depthTest:false,fog:false,toneMapped:false}));pts.renderOrder=20;pts.frustumCulled=false;scene.add(pts);
+  /* the gaps drawn on a 2D layer over the view (projected each frame): the model's materials are tinted by the theme */
+  let ov=null,raf=0,cur=null;
+  const clear2=()=>{cur=null;if(raf)cancelAnimationFrame(raf);raf=0;if(ov){ov.remove();ov=null;}};
+  function show(i,o){o=o||{};clear2();const r=(window.__qcList||[])[i];if(!r)return null;cur=r;
+    ov=document.createElement('canvas');ov.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:5';document.body.appendChild(ov);
+    const col={0:'#111',1:'#e8231e',2:'#1f5bff',3:'#ffd400'},v=new THREE.Vector3();
+    const draw=()=>{if(!ov||cur!==r)return;const W=innerWidth,H=innerHeight,dpr=devicePixelRatio||1;if(ov.width!==W*dpr){ov.width=W*dpr;ov.height=H*dpr;}const g=ov.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+      const cr=renderer.domElement.getBoundingClientRect();r.P.forEach(p=>{v.set(p[0],p[1],p[2]).project(camera);if(v.z>1)return;const x=cr.left+(v.x+1)/2*cr.width,y=cr.top+(1-v.y)/2*cr.height;
+        g.beginPath();g.arc(x,y,o.r||3.2,0,6.283);g.fillStyle=col[p[3]];g.fill();g.lineWidth=1;g.strokeStyle='rgba(255,255,255,.9)';g.stroke();});raf=requestAnimationFrame(draw);};
     let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.fam.forEach(b=>b.userData.rings[0].forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
-    const sz=Math.max(x1-x0,y1-y0,r.h);cam.mode='orbit';cam.target.set((x0+x1)/2,(y0+y1)/2,r.h*0.4);cam.dist=Math.max(35,sz*2.2);cam.phi=o.phi!=null?o.phi:0.75;cam.theta=o.theta!=null?o.theta:cam.theta;try{camTw=null;}catch(e){}applyCam();return {cx:r.cx,cy:r.cy};}
-  window.__qc=qc;window.__qcShow=show;window.__qcClear=clear;
+    const sz=Math.max(x1-x0,y1-y0,r.h);cam.mode='orbit';cam.target.set((x0+x1)/2,(y0+y1)/2,r.h*0.4);cam.dist=Math.max(35,sz*2.2);cam.phi=o.phi!=null?o.phi:0.75;cam.theta=o.theta!=null?o.theta:cam.theta;try{camTw=null;}catch(e){}applyCam();draw();return {cx:r.cx,cy:r.cy};}
+  window.__qc=qc;window.__qcShow=show;window.__qcClear=()=>{clear();clear2();};
 }catch(e){console.warn('qc',e);}})();
 
 /* ===== Quartier Soleil v5: the building is a union of straight volumes (the model's rectangles, in the axis frame of its walls).
