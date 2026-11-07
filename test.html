@@ -3743,7 +3743,10 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
         if(houseDone()&&(shown>=DR.stages.length)&&(DR.stages.some(x=>x.k==='merged')||performance.now()-s0>1500))break;
         if(performance.now()-s0>12000)break;await sleep(80);}
       if(t!==token)return;
-      {const w0=performance.now();while(t===token&&typeof QV4!=='undefined'&&QV4.busy&&performance.now()-w0<3500)await sleep(100);}if(t!==token)return;
+      { /* only what touches the house (an annex, a garage kept apart in the data) is waited for, not the whole neighbourhood: at most 3.5 s */
+        const H=S.addrTarget?family(S.addrTarget):[],hr=H.flatMap(o=>o.userData.rings?o.userData.rings[0]:[]),hs=new Set(H);
+        const near=S.meshes.filter(m=>!hs.has(m)&&m.userData&&m.userData.rings&&!m.userData.monu&&m.userData.rings[0].some(p=>hr.some(q=>Math.hypot(p.x-q.x,p.y-q.y)<1.5)));
+        const w0=performance.now();while(t===token&&typeof QV4!=='undefined'&&QV4.busy&&near.some(m=>m.parent&&!(QV4.tried&&QV4.tried.has(m)))&&performance.now()-w0<3500)await sleep(100);}if(t!==token)return;
       /* the solid house fills the drawing */
       hidden=false;houseMeshes().forEach(o=>o.visible=true);capShow('solid');await fadeTo(grp.children,0,700);await sleep(300);cap.classList.remove('on');
     }finally{clearInterval(keepHidden);clearInterval(keepSwept);hidden=false;houseMeshes().forEach(o=>o.visible=true);scene.remove(grp);grp.traverse(o=>{if(o.geometry)o.geometry.dispose();});if(typeof QW!=='undefined'){QW.onStage=null;QW.wantStages=null;}}};
