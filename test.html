@@ -3976,9 +3976,9 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       if(S.win&&S.win.pos){const n=S.win.normal;cam.baseYaw=Math.atan2(n.x,n.y);cam.yaw=0;cam.pitch=0.05;}setFov();applyCam();update();});});
   /* 3. "see from the window" next to the chosen window on the model; the hint only if nothing was touched for a while */
   let touched=false,shownFor='';renderer.domElement.addEventListener('pointerdown',()=>{touched=true;hint.classList.remove('on');});
-  const place=()=>{try{const sh=document.getElementById('sheet');if(!sh)return;const r=sh.getBoundingClientRect(),side=r.width<innerWidth*0.7&&r.height>innerHeight*0.5;dock(side);
+  const place=()=>{try{const sh=document.getElementById('sheet');if(!sh)return;const r=sh.getBoundingClientRect(),side=matchMedia('(min-width:761px)').matches;dock(side);
       const bot=side?16:Math.max(16,innerHeight-r.top+12),right=side?Math.max(12,innerWidth-r.left+16):12;
-      if(!docked){box.style.bottom=bot+'px';box.style.right=right+'px';}back.style.bottom=bot+'px';see.style.bottom=(bot+(side?0:0))+'px';hint.style.bottom=(bot+56)+'px';}catch(e){}};
+      if(!docked){box.style.bottom=bot+'px';box.style.right=right+'px';}back.style.bottom=bot+'px';see.style.bottom=(bot+(side?0:0))+'px';hint.style.bottom=(side?104:bot+56)+'px';}catch(e){}};
   setInterval(place,250);addEventListener('resize',place);
   setInterval(()=>{try{const orbit=cam.mode==='orbit',veil=document.getElementById('qsVeil');const loading=veil&&veil.classList.contains('on');
     see.hidden=docked||!(orbit&&S.win&&S.win.pos&&!busy&&!loading);
@@ -4067,7 +4067,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   row.addEventListener('click',()=>{bottom.hidden=!bottom.hidden;row.setAttribute('aria-expanded',String(!bottom.hidden));row.querySelector('.m').textContent=bottom.hidden?'Modifier':'Fermer';});
   const BAR=!/[?&]date=panel\b/.test(location.search);
   let side=null;
-  const sync=()=>{try{const sh=document.getElementById('sheet').getBoundingClientRect(),s=sh.width<innerWidth*0.7&&sh.height>innerHeight*0.5;
+  const sync=()=>{try{const sh=document.getElementById('sheet').getBoundingClientRect(),s=matchMedia('(min-width:761px)').matches; /* the page's own phone breakpoint */
     if(BAR){ /* option 2: the bar, always there on a computer, across the view (left of the panel) */
       if(s!==side){side=s;document.body.classList.toggle('qsSide',s);bottom.classList.toggle('bar',s);if(!s)bottom.hidden=true;}
       const ad0=document.getElementById('addrDone');if(s){bottom.hidden=!ad0||ad0.hidden;bottom.style.right=Math.max(24,innerWidth-sh.left+24)+'px';}else bottom.style.right='';
