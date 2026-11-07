@@ -3864,6 +3864,9 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   #qsMiniBox{position:fixed;right:12px;bottom:200px;width:min(34vw,180px);aspect-ratio:1;border-radius:18px;
     box-shadow:0 10px 30px rgba(40,40,90,.28),inset 0 0 0 1px rgba(255,255,255,.55);z-index:25;touch-action:none;cursor:grab;overflow:hidden}
   #qsMiniBox[hidden]{display:none}
+  #qsMiniBox.dock{position:relative;right:auto;bottom:auto;width:100%;aspect-ratio:auto;height:170px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line,rgba(0,0,0,.08));z-index:auto;flex:none}
+  #qsMiniBox canvas{display:none;width:100%;height:100%}#qsMiniBox.dock canvas{display:block}
+  #qsMiniCap{font:400 12px/1.35 'Instrument Sans',system-ui,sans-serif;color:var(--muted,#6b6580);margin-top:-8px}#qsMiniCap[hidden]{display:none}
   #qsBack{position:fixed;left:max(12px,env(safe-area-inset-left,0px));bottom:200px;z-index:25;
     font:500 14px/1 'Instrument Sans',system-ui,sans-serif;padding:10px 14px;border-radius:999px;border:0;background:rgba(255,255,255,.92);color:#2a2650;box-shadow:0 6px 18px rgba(40,40,90,.22)}
   #qsBack[hidden]{display:none}
@@ -3878,6 +3881,12 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   const mk=(tag,id,html)=>{const e=document.createElement(tag);e.id=id;if(html)e.innerHTML=html;document.body.appendChild(e);return e;};
   const fadeEl=mk('div','qsFade'),box=mk('div','qsMiniBox'),back=mk('button','qsBack','← Maquette'),see=mk('button','qsSee','Voir depuis la fenêtre'),hint=mk('div','qsHint','<b>Touchez votre fenêtre</b><small>Vous pourrez ajuster l\'étage et la façade ensuite.</small>');
   box.hidden=true;back.hidden=true;see.hidden=true;back.type='button';see.type='button';
+  const cv2=document.createElement('canvas');box.appendChild(cv2);const ctx2=cv2.getContext('2d');
+  const cap=document.createElement('div');cap.id='qsMiniCap';cap.textContent='Votre fenêtre. Glissez pour tourner, touchez une façade pour y placer la fenêtre.';cap.hidden=true;
+  /* desktop (side panel): the miniature sits in the panel, above the façade and floor settings it goes with; the floating
+     "back" and "see from the window" buttons go (the panel has its own button for both) */
+  let docked=false;const dock=on=>{if(on===docked)return;docked=on;const wb=document.getElementById('winBox'),lab=wb&&wb.querySelector(':scope > .n');
+    if(on&&lab){lab.after(box);box.after(cap);box.classList.add('dock');}else{document.body.appendChild(box);cap.remove();box.classList.remove('dock');}};
   const isDay=()=>{try{return sun.position.z-sun.target.position.z>0;}catch(e){return true;}};
   const fade=(mid)=>new Promise(res=>{fadeEl.style.setProperty('--qs-fade',isDay()?'#f3effa':'#1d2048');fadeEl.classList.add('on');
     setTimeout(()=>{try{mid&&mid();}catch(e){console.warn(e);}requestAnimationFrame(()=>{fadeEl.classList.remove('on');setTimeout(res,130);});},125);});
@@ -3893,8 +3902,8 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   mark.layers.set(LM);mark.renderOrder=10;scene.add(mark);
   const cc=new THREE.Color();
   const placeCam=()=>{const ph=0.5,d=rad*3.3;mc.position.set(ctr.x+d*Math.cos(ph)*Math.sin(mth),ctr.y+d*Math.cos(ph)*Math.cos(mth),ctr.z+d*Math.sin(ph));mc.up.set(0,0,1);mc.lookAt(ctr);mc.updateMatrixWorld();};
-  window.__qsMini={hide(){box.hidden=true;back.hidden=true;mark.visible=false;},
-    draw(R0,b,LH){const w=S.win;if(!w||!w.pos){this.hide();return;}box.hidden=false;back.hidden=false;
+  window.__qsMini={hide(){box.hidden=true;back.hidden=true;cap.hidden=true;mark.visible=false;},
+    draw(R0,b,LH){const w=S.win;if(!w||!w.pos){this.hide();return;}box.hidden=false;back.hidden=docked;cap.hidden=!docked;
       const fam=family(b),key=b.uuid+fam.length;if(key!==boxKey){const bb=new THREE.Box3();fam.forEach(o=>bb.expandByObject(o));bb.getCenter(ctr);const sz=bb.getSize(new THREE.Vector3());rad=Math.max(4,Math.max(sz.x,sz.y,sz.z)/2);boxKey=key;mth=null;}
       if(mth===null)mth=Math.atan2(w.normal.x,w.normal.y)+0.6; /* first seen from the window's side, a little turned */
       mark.position.copy(w.pos);mark.visible=true;
@@ -3905,6 +3914,8 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       renderer.autoClear=false;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=false;scene.background=null;
       renderer.setScissorTest(true);renderer.setScissor(x,y,W,H);renderer.setViewport(x,y,W,H);renderer.setClearColor(isDay()?0xeef0fb:0x232750,1);renderer.clear(true,true,false);
       R0(scene,mc);
+      if(docked){const pr=renderer.getPixelRatio(),cw=Math.round(W*pr),ch=Math.round(H*pr);if(cv2.width!==cw||cv2.height!==ch){cv2.width=cw;cv2.height=ch;}
+        try{ctx2.drawImage(renderer.domElement,Math.round(x*pr),Math.round((cr.height-y-H)*pr),cw,ch,0,0,cw,ch);}catch(e){}}
       const sz=new THREE.Vector2();renderer.getSize(sz);renderer.setScissorTest(false);renderer.setViewport(0,0,sz.x,sz.y);renderer.setClearColor(cc,ca);scene.background=bg;
       renderer.autoClear=au;renderer.shadowMap.autoUpdate=su;renderer.shadowMap.needsUpdate=sn;}};
   /* turn it, or touch it: a wall moves the window there (the same rules as on the model), the roof goes back to the model */
@@ -3924,12 +3935,12 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       if(S.win&&S.win.pos){const n=S.win.normal;cam.baseYaw=Math.atan2(n.x,n.y);cam.yaw=0;cam.pitch=0.05;}setFov();applyCam();update();});});
   /* 3. "see from the window" next to the chosen window on the model; the hint only if nothing was touched for a while */
   let touched=false,shownFor='';renderer.domElement.addEventListener('pointerdown',()=>{touched=true;hint.classList.remove('on');});
-  const place=()=>{try{const sh=document.getElementById('sheet');if(!sh)return;const r=sh.getBoundingClientRect(),side=r.width<innerWidth*0.7&&r.height>innerHeight*0.5;
+  const place=()=>{try{const sh=document.getElementById('sheet');if(!sh)return;const r=sh.getBoundingClientRect(),side=r.width<innerWidth*0.7&&r.height>innerHeight*0.5;dock(side);
       const bot=side?16:Math.max(16,innerHeight-r.top+12),right=side?Math.max(12,innerWidth-r.left+16):12;
       box.style.bottom=bot+'px';box.style.right=right+'px';back.style.bottom=bot+'px';see.style.bottom=(bot+(side?0:0))+'px';hint.style.bottom=(bot+56)+'px';}catch(e){}};
   setInterval(place,250);addEventListener('resize',place);
   setInterval(()=>{try{const orbit=cam.mode==='orbit',veil=document.getElementById('qsVeil');const loading=veil&&veil.classList.contains('on');
-    see.hidden=!(orbit&&S.win&&S.win.pos&&!busy&&!loading);
+    see.hidden=docked||!(orbit&&S.win&&S.win.pos&&!busy&&!loading);
     const key=S.label||'';if(key!==shownFor){shownFor=key;touched=false;hint.classList.remove('on');hint._t=performance.now();}
     if(!touched&&orbit&&!loading&&S.building&&performance.now()-(hint._t||0)>6000)hint.classList.add('on');}catch(e){}},300);
 }catch(e){console.warn('window flow',e);}})();
