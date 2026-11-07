@@ -3553,13 +3553,19 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
   const lotMat=new THREE.MeshLambertMaterial({map:lotTex,transparent:true,depthWrite:false,emissive:new THREE.Color(0x000000),emissiveMap:lotTex,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
   lotMat._qsGlow=1; /* the parcel keeps its own wash (no fade into the air) */
   const plainMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xe6e8f3).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
+  /* pools kept, in the model's own palette: a white coping and a very pale lilac-blue water (no texture, no ripples) */
+  const poolW=new THREE.MeshLambertMaterial({color:new THREE.Color(0xc9d2f2).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-12});
+  const poolC=new THREE.MeshLambertMaterial({color:new THREE.Color(0xf6f6fb).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10});
+  try{fadeMat(poolW);fadeMat(poolC);}catch(e){}
+  const isPool=o=>o&&o.isGroup&&o.children.some(c=>c.material===poolMat||c.material===poolW);
   try{ROOF.tuile.color.set(0xdcdde6);ROOF.ardoise.color.set(0xc9ccd8);ROOF.zinc.color.set(0xd6d8e2);ROOF.autre.color.set(0xdfe1e9);}catch(e){}
   const swap=(m,mat)=>{if(m&&m.material!==mat){m.material=mat;if(m.isInstancedMesh&&m.instanceColor)m.instanceColor=null;}};
   function flatten(){if(typeof photoMode!=='undefined'&&photoMode)return;
     try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
     try{if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}if(groundMat.map&&!photoMode){groundMat.map=null;groundMat.needsUpdate=true;}}catch(e){}
-    try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(o.material===poolMat||(o.isGroup||o.type==='Group'))o.visible=false;});}catch(e){}
-    try{scene.traverse(o=>{if(o.material===poolMat)o.visible=false;});}catch(e){}}
+    try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(isPool(o)){o.visible=true;o.children.forEach(c=>{if(c.material===poolMat)swap(c,poolW);else if(c.material!==poolW)swap(c,poolC);});}
+      else if(o.material===poolMat||(o.isGroup||o.type==='Group'))o.visible=false;});}catch(e){}
+    try{scene.traverse(o=>{if(o.material===poolMat)swap(o,poolW);});}catch(e){}}
   setInterval(flatten,1200);
   const quick=()=>{if(typeof photoMode!=='undefined'&&photoMode)return;try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
     try{if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}}catch(e){}};
