@@ -4127,6 +4127,10 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   #qsWhen .m{color:var(--accent);font-size:13px;white-space:nowrap}
   #bottom.inl{position:static;width:auto;left:auto;bottom:auto;top:auto;margin-top:-8px;box-shadow:none;padding:12px}
   body.qsSide #timePill{display:none}
+  @media (max-width:760px){ /* phone: the date and hour panel held inside the screen, and more compact */
+    #bottom:not(.bar){left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));width:auto;max-width:none;box-sizing:border-box;padding:10px 12px;gap:6px 10px;grid-template-columns:auto minmax(0,1fr)}
+    #bottom:not(.bar) .slider{min-width:0}#bottom:not(.bar) input[type=range]{width:100%;min-width:0}
+    #bottom:not(.bar) .val{font-size:12px}#bottom:not(.bar) .btns button{padding:7px 12px;font-size:13px}}
   #bottom.bar{position:absolute;left:24px;bottom:20px;top:auto;width:auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 14px;border-radius:16px}
   #bottom.bar>.slider:nth-of-type(1){flex:1 1 120px}#bottom.bar>.slider:nth-of-type(2){flex:2.2 1 180px}
   #bottom.bar .slider label{font-size:11px}#bottom.bar .btns{grid-column:auto;display:flex;gap:8px;margin:0}#bottom.bar .btns button{white-space:nowrap}
