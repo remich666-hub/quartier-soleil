@@ -2074,7 +2074,7 @@ async function fetchSkyline(){
     let eo=0;{const R=F||C,band=z=>{const h=z-S.alt0-(ud.zBase||0);return h>ud.h-4&&h<ud.h+3&&z-winZ>1;},tx=-w.normal.y,ty=w.normal.x;
       for(let d=0;d<=3.01;d+=0.25){let k=0,m=0;for(const a of [-1.5,0,1.5]){const z=R.at(w.pos.x+sh.dx+w.normal.x*d+tx*a,w.pos.y+sh.dy+w.normal.y*d+ty*a);if(z==null)continue;m++;if(band(z))k++;}
         if(!m||k*2<m){eo=d;break;}eo=d+0.25;}
-      if(eo>3)eo=0; /* roof height that far out: a neighbour of the same height, not this building's edge */}
+      if(eo>3||eo<1)eo=0; /* roof height that far out: a neighbour of the same height, not this building's edge; under 1 m: an eave, already left out below */}
     const ex=w.normal.x*(eo>0?eo+0.3:0),ey=w.normal.y*(eo>0?eo+0.3:0);
     const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8))||(eo>0&&d<eo+2.5&&w.obj.userData.rings.some(r=>distToRing(x-sh.dx,y-sh.dy,r)<eo+0.8));};
     const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+ex+Math.sin(az)*d,y=w.pos.y+sh.dy+ey+Math.cos(az)*d;if(d<8&&ownD(x,y,d))return;pts2.push({ai,d,x,y});}));
