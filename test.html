@@ -4116,7 +4116,8 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   #qsWhen .m{color:var(--accent);font-size:13px;white-space:nowrap}
   #bottom.inl{position:static;width:auto;left:auto;bottom:auto;top:auto;margin-top:-8px;box-shadow:none;padding:12px}
   body.qsSide #timePill{display:none}
-  #bottom.bar{position:absolute;left:24px;bottom:20px;top:auto;width:auto;display:grid;grid-template-columns:auto minmax(120px,1fr) auto minmax(200px,2.2fr) auto;align-items:center;gap:6px 14px;padding:10px 14px;border-radius:16px}
+  #bottom.bar{position:absolute;left:24px;bottom:20px;top:auto;width:auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 14px;border-radius:16px}
+  #bottom.bar>.slider:nth-of-type(1){flex:1 1 120px}#bottom.bar>.slider:nth-of-type(2){flex:2.2 1 180px}
   #bottom.bar .slider label{font-size:11px}#bottom.bar .btns{grid-column:auto;display:flex;gap:8px;margin:0}#bottom.bar .btns button{white-space:nowrap}
   #bottom.bar .val{font-size:14px;font-weight:600}`;
   document.head.appendChild(st);
