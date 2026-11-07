@@ -1543,7 +1543,7 @@ function startLidar(){ // launched right after geocoding, in parallel with build
   S.mnsF=null;
   const c=p=>p.catch(()=>null);
   S.lidarP={mnh:c(fetchLidarRaster('MNH',320,1)),mnsFine:c(fetchLidarRaster('MNS',120,0.5)),mns:c(fetchLidarRaster('MNS',330,1))};
-  const R=S.lidarR={}, tok=S.lidarP; ['mnh','mnsFine','mns'].forEach(k=>S.lidarP[k].then(r=>{if(S.lidarP!==tok||!r)return;R[k]=r;if(R.mnh&&(R.mnsFine||R.mns))onGroundData();}));
+  const R=S.lidarR={_T:S.T}, tok=S.lidarP; ['mnh','mnsFine','mns'].forEach(k=>S.lidarP[k].then(r=>{if(S.lidarP!==tok||!r)return;R[k]=r;if(R.mnh&&(R.mnsFine||R.mns))onGroundData();}));
 }
 async function lidarHeights(pts){
   const M=S.lidarP&&await S.lidarP.mnh; if(M)return pts.map(p=>M.max(p.x,p.y,1));
@@ -2738,15 +2738,21 @@ async function lidarBuildings(){
   for(let i=0;i<80&&!S.rawOrtho;i++){await new Promise(r=>setTimeout(r,150));if(gone_())return;}
   LB.orth=performance.now(); const green=orthoGreen(); const t0=performance.now(); LB.green=t0; let n=0;
   const extOf=m=>{let e=0;m.userData.rings[0].forEach(p=>{e=Math.max(e,Math.abs(p.x),Math.abs(p.y));});return e;};
-  if(await runPass()===false)return;
+  /* the studied house and what stands within 25 m of it first (its annexes, the neighbours its roof model reads): its roof
+     can be asked of the worker while the rest of the neighbourhood is rebuilt; same inputs as before, only the order changes */
+  const H0=S.addrTarget||S.target; let nearF=null;
+  if(H0&&H0.userData&&H0.userData.rings){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;family(H0).forEach(o=>o.userData.rings&&o.userData.rings[0].forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
+    const M=25;nearF=m=>m.userData.rings&&m.userData.rings[0].some(p=>p.x>x0-M&&p.x<x1+M&&p.y>y0-M&&p.y<y1+M);}
+  if(nearF&&!/[?&]avant\b/.test(location.search)){if(await runPass(nearF,false)===false)return; LB.house=performance.now(); S.T.lidarHouse=LB.house;}
+  if(await runPass(null,true)===false)return;
   LB.end=performance.now(); console.log('LiDAR buildings',n,Math.round(performance.now()-t0)+' ms');
-  async function runPass(){
+  async function runPass(only,final){
     const roofSets={tuile:{P:[],N:[]},ardoise:{P:[],N:[]},zinc:{P:[],N:[]},autre:{P:[],N:[]}};
     const gone=new Set(),added=[],hiLater=[]; let tc=performance.now();
-    const list=S.meshes.filter(m=>!m.userData.lidar).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
-    LB.list=performance.now(); let k0=0;
+    const list=S.meshes.filter(m=>!m.userData.lidar&&(!only||only(m))).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
+    if(!LB.list)LB.list=performance.now(); let k0=0;
     for(const m of list){
-      if(performance.now()-tc>12){const y0=performance.now();await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});tc=performance.now();LB.yld+=tc-y0;LB.ny++;if(gone_())return false;}
+      if(performance.now()-tc>(/[?&]avant\b/.test(location.search)?12:40)){const y0=performance.now();await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});tc=performance.now();LB.yld+=tc-y0;LB.ny++;if(gone_())return false;}
       const u=m.userData;const ext=extOf(m);if(ext>LB_R)continue;
       const F=(Ff&&ext<Ff.R-2)?Ff:Fc;if(!F)continue;
       if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
@@ -2792,7 +2798,7 @@ async function lidarBuildings(){
     Object.keys(roofSets).forEach(k=>{const s=roofSets[k];if(!s.P.length)return;const d=S.roofSets[k];d.P.push(...s.P);d.N.push(...s.N);});
     (S.roofSetMeshes||[]).forEach(m=>{scene.remove(m);m.geometry.dispose();gone.add(m);});S.roofSetMeshes=[];
     roofMeshes=roofMeshes.filter(m=>!gone.has(m));LB.p1=performance.now();S.roofEdgeParts=buildRoofSets(S.roofSkip);LB.p2=performance.now();
-    rebuildEdges();LB.p3=performance.now();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); applySlopeWalls(); LB.p4=performance.now(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} if(S.gfWalls)buildGroundFloors(S.gfWalls); S.T.lidarBuilt=performance.now();
+    rebuildEdges();LB.p3=performance.now();S.obstacles=(S.obstacles||[]).filter(o=>!gone.has(o)).concat(added,S.roofSetMeshes);S.lidarBuilt=n>0; applyLattices(); applySlopeWalls(); LB.p4=performance.now(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} if(S.gfWalls)buildGroundFloors(S.gfWalls); if(final)S.T.lidarBuilt=performance.now();
     S.counts=Object.assign(S.counts||{},{lidarBuildings:n}); LB.p5=performance.now();
     return true;
   }
@@ -2896,6 +2902,12 @@ const QV4={T:null,last:0,rings:[],busy:false,n:0,ms:0,log:[],done:[]};
 const qsSleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function qsV4(){
   const T=S.T; QV4.T=T; QV4.busy=true; QV4.times=[]; QV4.rings=[]; QV4.done=[]; QV4.used=new Set(); QV4.wdbg=[]; QV4.wskip=[]; QV4.relax=[]; QV4.sq=[]; QV4.n=0; QV4.ms=0; QV4.log=[]; try{await polyClip();}catch(e){}
+  /* the house's roof is asked as soon as the house and its surroundings are rebuilt, while the rest of the neighbourhood is */
+  let early=null,earlyK='';const famK=f=>f.map(o=>o.uuid).sort().join();
+  for(let i=0;i<400&&!(S.lidarR&&S.lidarR.mnh&&S.T&&(S.T.lidarHouse||S.T.lidarBuilt));i++){await qsSleep(100);if(S.T!==T)return;}
+  try{const lg=window.__qsOld||window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4';
+    if(!lg&&S.T===T&&S.T.lidarHouse&&!S.T.lidarBuilt&&S.addrTarget){const f=family(S.addrTarget).filter(o=>o.userData.rings);
+      if(f.length&&f.every(o=>o.userData.lidar&&o.parent)){earlyK=famK(f);early=qsModelReq(f).catch(e=>{console.error('v5 model',e);return null;});QV4.early=performance.now();}}}catch(e){console.warn('early roof',e);}
   for(let i=0;i<400&&!(S.lidarBuilt&&S.lidarR&&S.lidarR.mnh&&S.T&&S.T.lidarBuilt);i++){await qsSleep(100);if(S.T!==T)return;}
   if(S.T!==T||!S.lidarBuilt){if(S.T===T)QV4.busy=false;return;}
   await qsSleep(400); /* let the scene settle (vegetation, edges) */
@@ -2908,6 +2920,7 @@ async function qsV4(){
     const fam=family(m).filter(o=>o.userData.rings);let d=1e9;fam.forEach(o=>o.userData.rings[0].forEach(p=>{d=Math.min(d,Math.hypot(p.x,p.y));}));const ar=fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0);
     if(fam.some(o=>own.has(o)))d=-1;if((d<=RMAX&&ar<=AMAX)||(d<0&&ar<=4000))list.push({fam,d});});
   list.sort((a,b)=>a.d-b.d);QV4.pri=[];QV4.tried=new Set();
+  if(early){const it=list.find(x=>famK(x.fam)===earlyK);if(it&&it.fam.every(o=>o.parent))it.req=early;QV4.earlyHit=!!it;}
   /* then the blocks the user selects further away, on demand (setHi below), until the address changes */
   while(S.T===T){const it=QV4.pri.shift()||list.shift();QV4.busy=!!it;if(!it){await qsSleep(250);continue;}
     while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;} /* the user is moving the camera: wait */
@@ -3934,11 +3947,11 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     setInterval(()=>{try{const now=performance.now();if(now-ft>=1000){fps=Math.round(frames*1000/(now-ft));frames=0;ft=now;}
       const u0=window.__QSU,q=(typeof QV4!=='undefined'&&QV4)||{},v=document.getElementById('qsVeil'),t0=(S.T&&S.T.start)||0,r=x=>((x-t0)/1000).toFixed(1)+' s';
       if(v&&!v.classList.contains('on')&&!ev.veil&&S.T&&S.T.scene)ev.veil=now;if(q.done&&q.done.length&&!ev.roof)ev.roof=now;
-      if(S.T!==ev._T){for(const k in ev)delete ev[k];ev._T=S.T;}const LR=S.lidarR&&S.lidarP&&S.T&&S.T.start?S.lidarR:{};if(S.rawOrtho&&!ev.ortho)ev.ortho=now;if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
+      if(S.T!==ev._T){for(const k in ev)delete ev[k];ev._T=S.T;}const LR=S.lidarR&&S.lidarR._T===S.T&&S.T?S.lidarR:{};if(S.rawOrtho&&!ev.ortho)ev.ortho=now;if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
       const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.scan0&&!ev.scan)ev.scan=now;
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
       const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
-      box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
+      box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
         'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
         fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
 }catch(e){console.warn('perf',e);}})();
