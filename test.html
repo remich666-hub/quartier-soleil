@@ -2068,15 +2068,23 @@ async function fetchSkyline(){
   const F=S.lidarP&&await S.lidarP.mnsFine, C=S.lidarP&&await S.lidarP.mns, MH=S.lidarP&&await S.lidarP.mnh;
   if(F||C){ // rasters: instant. First register the IGN footprint on the LiDAR roof (they can be 1–2 m apart), then sample from the shifted window
     const ud=w.obj.userData; const sh=MH?(ud._sh&&ud._shMH===MH?ud._sh:(ud._shMH=MH,ud._sh=registerFootprint(w.obj,MH))):{dx:0,dy:0};
-    const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8));};
-    const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+Math.sin(az)*d,y=w.pos.y+sh.dy+Math.cos(az)*d;if(d<8&&ownD(x,y,d))return;pts2.push({ai,d,x,y});}));
+    /* the building's own roof can stand out of the IGN outline (by a metre or two, and the registration does not always catch it):
+       the laser right in front of the window then reads the building itself, and the window looks walled in (0 h of sun, "blind").
+       Walk out along the normal while the laser stays at this building's own roof height: the real wall is where it drops. */
+    let eo=0;{const R=F||C,band=z=>{const h=z-S.alt0-(ud.zBase||0);return h>ud.h-4&&h<ud.h+3&&z-winZ>1;},tx=-w.normal.y,ty=w.normal.x;
+      for(let d=0;d<=3.01;d+=0.25){let k=0,m=0;for(const a of [-1.5,0,1.5]){const z=R.at(w.pos.x+sh.dx+w.normal.x*d+tx*a,w.pos.y+sh.dy+w.normal.y*d+ty*a);if(z==null)continue;m++;if(band(z))k++;}
+        if(!m||k*2<m){eo=d;break;}eo=d+0.25;}
+      if(eo>3)eo=0; /* roof height that far out: a neighbour of the same height, not this building's edge */}
+    const ex=w.normal.x*(eo>0?eo+0.3:0),ey=w.normal.y*(eo>0?eo+0.3:0);
+    const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8))||(eo>0&&d<eo+2.5&&w.obj.userData.rings.some(r=>distToRing(x-sh.dx,y-sh.dy,r)<eo+0.8));};
+    const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+ex+Math.sin(az)*d,y=w.pos.y+sh.dy+ey+Math.cos(az)*d;if(d<8&&ownD(x,y,d))return;pts2.push({ai,d,x,y});}));
     const LG=leafGrid(), horB=new Array(AZ.length).fill(-0.2), decAt=new Array(AZ.length).fill(false);
     pts2.forEach(p=>{let z=null;if(F&&p.d<115)z=F.at(p.x,p.y);if(z==null&&C)z=C.at(p.x,p.y);if(z==null)return;got++;const ang=Math.atan2(z-winZ,p.d);if(ang>hor[p.ai]){hor[p.ai]=ang;hits[p.ai]={d:p.d,z:z-S.alt0};}
       // the same horizon once the deciduous trees are bare: their crowns drop to the ground they stand on
       let zb=z; if(LG&&MH&&LG(p.x-sh.dx,p.y-sh.dy)===1){const hv=MH.at(p.x,p.y);if(hv!=null&&hv>1.2)zb=z-hv;}
       const ab=Math.atan2(zb-winZ,p.d); if(ab>horB[p.ai])horB[p.ai]=ab;});
     for(let i=0;i<AZ.length;i++)decAt[i]=hor[i]-horB[i]>0.5*RAD;
-    if(got>=pts2.length*0.5)return {az:AZ,hor,horB,decAt,hits,n:got,shift:sh,lg:LG};
+    if(got>=pts2.length*0.5)return {az:AZ,hor,horB,decAt,hits,n:got,shift:sh,lg:LG,edge:eo};
     got=0;hor.fill(-0.2);hits.fill(null);
   }
   const B=400; // sequential: the IGN service rate-limits parallel bursts (429)
