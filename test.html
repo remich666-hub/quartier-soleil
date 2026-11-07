@@ -3966,7 +3966,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     setInterval(()=>{try{const now=performance.now();if(now-ft>=1000){fps=Math.round(frames*1000/(now-ft));frames=0;ft=now;}
       const u0=window.__QSU,q=(typeof QV4!=='undefined'&&QV4)||{},v=document.getElementById('qsVeil'),t0=(S.T&&S.T.start)||0,r=x=>((x-t0)/1000).toFixed(1)+' s';
       if(v&&!v.classList.contains('on')&&!ev.veil&&S.T&&S.T.scene)ev.veil=now;if(q.done&&q.done.length&&!ev.roof)ev.roof=now;
-      if(S.T!==ev._T){for(const k in ev)delete ev[k];ev._T=S.T;}const LR=S.lidarR&&S.lidarR._T===S.T&&S.T?S.lidarR:{};if(S.rawOrtho&&!ev.ortho)ev.ortho=now;if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
+      if(S.T!==ev._T){for(const k in ev)delete ev[k];ev._T=S.T;ev._ro0=S.rawOrtho;}const LR=S.lidarR&&S.lidarR._T===S.T&&S.T?S.lidarR:{};if(S.rawOrtho&&S.rawOrtho!==ev._ro0&&!ev.ortho)ev.ortho=now;if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
       const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.scan0&&!ev.scan)ev.scan=now;
       box.style.display=(ev.idle&&ev.scan)||(t0&&now-t0>90000)?'':'none'; /* only once the roofs and the reveal are done: it would hide the intro */
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
