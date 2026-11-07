@@ -3218,7 +3218,7 @@ function qsV4One(fam,pre){
      and the view went through the roof there. A flat cap of each block's own outline, just under its lowest roof edge, closes
      them; wherever the roof is drawn it stands above the cap and hides it. */
   if(V5)famSwap.forEach(o=>{const ud=o.userData,shape=new THREE.Shape(ud.rings[0]);ud.rings.slice(1).forEach(hr=>shape.holes.push(new THREE.Path(hr)));
-    const g=new THREE.ShapeGeometry(shape);g.translate(0,0,topAbs(o)-0.08);const m=new THREE.Mesh(g,ROOF[u.roofKey||'autre']||ROOF.autre);m.castShadow=m.receiveShadow=true;m.position.z=-z0;m.userData.v5cap=true;main.add(m);adds.push(m);});
+    const g=new THREE.ShapeGeometry(shape);g.translate(0,0,topAbs(o)-0.08);const m=new THREE.Mesh(g,ROOF[u.roofKey||'autre']||ROOF.autre);m.receiveShadow=true;m.position.z=-z0;m.userData.v5cap=true;m.raycast=()=>{};main.add(m);}); /* seen only: no shadow, no ray (windows, sky from a window), not an obstacle */
   {const gmat=new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0],side:THREE.DoubleSide});
    GW.forEach((L,o)=>{const Pp=[],Nn=[];for(let i=0;i<L.length;i+=2){Pp.push(...L[i]);Nn.push(L[i+1][0],L[i+1][1],0);}
      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(Pp,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(Nn,3));
