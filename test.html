@@ -4800,7 +4800,9 @@ function qsModel5ref(R,opt){opt=opt||{};
       if(Math.hypot((x0+x1)/2,(y0+y1)/2)>R)return;fams.push({fam,x0,x1,y0,y1});});
     const inAny=(x,y,list)=>list.some(b=>pointInPoly(x,y,b.userData.rings[0])&&!b.userData.rings.slice(1).some(h=>pointInPoly(x,y,h)));
     const out=[];
-    fams.forEach(({fam,x0,x1,y0,y1})=>{const objs=[];fam.forEach(b=>{b.updateMatrixWorld(true);objs.push(b);b.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal)objs.push(c);});});
+    fams.forEach(({fam,x0,x1,y0,y1})=>{const objs=[];fam.forEach(b=>{b.updateMatrixWorld(true);objs.push(b);b.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal)objs.push(c);});if(b.userData.roofMesh&&b.userData.roofMesh.parent)objs.push(b.userData.roofMesh);});
+      /* hip roofs of plain blocks are merged per material into a few shared meshes, outside the blocks: count them too */
+      (S.roofSetMeshes||[]).forEach(m=>{if(m.parent&&m.visible)objs.push(m);});
       const near=S.meshes.filter(m=>!fam.includes(m)&&m.userData.rings&&m.userData.rings[0].some(p=>p.x>x0-4&&p.x<x1+4&&p.y>y0-4&&p.y<y1+4));
       const D=[],P=[];let nIn=0,nEmpty=0,nOut=0,nBand=0;
       for(let x=x0;x<=x1;x+=ST)for(let y=y0;y<=y1;y+=ST){if(!inAny(x,y,fam))continue;
