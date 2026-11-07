@@ -3608,9 +3608,9 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
   function flatten(){if(typeof photoMode!=='undefined'&&photoMode)return;
     try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
     try{if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}if(groundMat.map&&!photoMode){groundMat.map=null;groundMat.needsUpdate=true;}}catch(e){}
-    try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(isPool(o)){o.visible=true;o.children.forEach(c=>{if(c.material===poolMat)swap(c,poolW);else if(c.material!==poolW)swap(c,poolC);});}
+    try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(isPool(o)){o.visible=true;o.children.forEach(c=>{if(c.material===poolMat){if(!c.geometry.attributes.normal)c.geometry.computeVertexNormals();swap(c,poolW);} /* the water carried no normals (its old shader did not need them): lit, it came out black */else if(c.material!==poolW)swap(c,poolC);});}
       else if(o.material===poolMat||(o.isGroup||o.type==='Group'))o.visible=false;});}catch(e){}
-    try{scene.traverse(o=>{if(o.material===poolMat)swap(o,poolW);});}catch(e){}}
+    try{scene.traverse(o=>{if(o.material===poolMat){if(o.geometry&&!o.geometry.attributes.normal)o.geometry.computeVertexNormals();swap(o,poolW);}});}catch(e){}}
   setInterval(flatten,1200);
   const quick=()=>{if(typeof photoMode!=='undefined'&&photoMode)return;try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
     try{if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}}catch(e){}};
