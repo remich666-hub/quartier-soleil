@@ -2606,7 +2606,7 @@ function lidarSamples(u,F,green){
   const r0=u.rings[0],sh=u.shift||{dx:0,dy:0}; let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; r0.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});
   const st=(x1-x0)*(y1-y0)>3000?1:0.5; const pts=[]; let nin=0;
   for(let x=x0+st/2;x<x1;x+=st)for(let y=y0+st/2;y<y1;y+=st){if(!pointInPoly(x,y,r0))continue;let hole=false;for(let k=1;k<u.rings.length;k++)if(pointInPoly(x,y,u.rings[k])){hole=true;break;}if(hole)continue;
-    nin++;const v=F.at(x+sh.dx,y+sh.dy);if(v==null)continue;const hh=v-S.alt0-u.zBase;if(hh<1.6)continue; /* garden sheds and lean-tos stand 2 to 2.5 m: keep them */if(green(x+sh.dx,y+sh.dy)>12)continue;pts.push({x,y,h:hh});}
+    nin++;const v=F.at(x+sh.dx,y+sh.dy);if(v==null)continue;const hh=v-S.alt0-u.zBase;if(hh<(QS_OLD?2:1.6))continue; /* garden sheds and lean-tos stand 2 to 2.5 m: keep them */if(green(x+sh.dx,y+sh.dy)>12)continue;pts.push({x,y,h:hh});}
   return {pts,nin,cell:st*st};
 }
 function splitByLevel(rings,pts,cell,depth){
@@ -2619,7 +2619,7 @@ function splitByLevel(rings,pts,cell,depth){
      least 2.2 m below, set off by a wall (checked once the cut is found: the height jumps there, a sloping roof only ramps) */
   const hard=mB-mA>=3.5&&A.length*cell>=18&&B.length*cell>=18;
   const sA=A.map(p=>p.h).sort((a,b)=>a-b),iqA=qtl(sA,0.75)-qtl(sA,0.25);
-  const soft=!hard&&mB-mA>=2.2&&iqA<0.8&&A.length*cell>=6&&B.length*cell>=9;
+  const soft=!QS_OLD&&!hard&&mB-mA>=2.2&&iqA<0.8&&A.length*cell>=6&&B.length*cell>=9;
   if(!hard&&!soft)return parts;
   const cA=A.reduce((s,p)=>[s[0]+p.x/A.length,s[1]+p.y/A.length],[0,0]),cB=B.reduce((s,p)=>[s[0]+p.x/B.length,s[1]+p.y/B.length],[0,0]);
   let wx=cB[0]-cA[0],wy=cB[1]-cA[1];const wl=Math.hypot(wx,wy);if(wl<1.5)return parts;wx/=wl;wy/=wl;
@@ -2849,6 +2849,7 @@ function findTowers(rings,u,F,green){
 let _pcLib=null;
 function polyClip(){if(!_pcLib)_pcLib=import('https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/+esm').then(m=>{PCSYNC=m.default||m;return PCSYNC;});return _pcLib;}
 setTimeout(()=>polyClip().catch(()=>{}),800);
+const QS_OLD=/[?&]old\b/.test(location.search); /* test page: the model as it was before the 7 Nov corrections */
 let GID=0; var LB_N={rough:0,hit:0,g:0,l:0,nT:0}; const QS_AV=/[?&]avant\b/.test(location.search);
 async function lidarBuildings(){
   // cancelled only by a new address (S.T is per load), not by the tree refinement that the photo starts meanwhile:
@@ -2881,7 +2882,7 @@ async function lidarBuildings(){
       k0=performance.now(); const smp=lidarSamples(u,F,green); LB.smp+=performance.now()-k0; LB.nb++; k0=performance.now(); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
       { const ar=Math.abs(areaOf(u.rings[0])); if(ar<80&&roughRoof(u,F)>0.45){ // small building under a tree: the laser only sees the crown
         // the laser on it all at one low level (a flat shed roof seen between leaves): that level is its height
-        const hl=smp.pts.map(p=>p.h).sort((x,y)=>x-y),lv=hl.length>=8&&qtl(hl,0.9)-qtl(hl,0.1)<1.2?Math.max(2,qtl(hl,0.5)+0.1):null;
+        const hl=smp.pts.map(p=>p.h).sort((x,y)=>x-y),lv=!QS_OLD&&hl.length>=8&&qtl(hl,0.9)-qtl(hl,0.1)<1.2?Math.max(2,qtl(hl,0.5)+0.1):null;
         if(ar<40&&(u.h>3.5||(lv!=null&&lv<u.h-0.5))){ // a shed or a garage, not a tower: bring it down to a believable height (the IGN height there is often the tree's too)
           const nh=lv!=null?Math.min(3.5,lv):3.5, sc=(nh+SINK)/(u.h+SINK), z0=u.zBase-SINK; m.scale.z=sc;
           if(u.edgeArr)for(let i=2;i<u.edgeArr.length;i+=3)u.edgeArr[i]=z0+(u.edgeArr[i]-z0)*sc;
@@ -2889,7 +2890,7 @@ async function lidarBuildings(){
           u.h=nh; u.floors=1; u.ridge=null; }
         LB.rough+=performance.now()-k0; continue; } } LB.rough+=performance.now()-k0;
       const clean=u.rings.map(r=>{const q=r.slice();if(q.length>1&&q[0].distanceTo(q[q.length-1])<0.01)q.pop();return q;});
-      if(!QS_AV&&!/[?&]nofit\b/.test(location.search)&&u.h>=8&&clean.length===1&&Math.abs(areaOf(clean[0]))>150){const nb=S.meshes.filter(o=>o!==m&&o.userData.rings&&o.geometry.boundingSphere&&o.geometry.boundingSphere.center.distanceTo(m.geometry.boundingSphere.center)<o.geometry.boundingSphere.radius+m.geometry.boundingSphere.radius+5);const w=fitWallsToLaser(clean[0],u,F,nb);if(w){clean[0]=w.ring;u.shift={dx:0,dy:0};u.fitW=w.log;S.fitW=(S.fitW||[]).concat([[u.bid,w.log]]);Object.assign(smp,lidarSamples(Object.assign({},u,{rings:clean}),F,green));}} // the laser read again over the outline laid on it
+      if(!QS_AV&&!QS_OLD&&!/[?&]nofit\b/.test(location.search)&&u.h>=8&&clean.length===1&&Math.abs(areaOf(clean[0]))>150){const nb=S.meshes.filter(o=>o!==m&&o.userData.rings&&o.geometry.boundingSphere&&o.geometry.boundingSphere.center.distanceTo(m.geometry.boundingSphere.center)<o.geometry.boundingSphere.radius+m.geometry.boundingSphere.radius+5);const w=fitWallsToLaser(clean[0],u,F,nb);if(w){clean[0]=w.ring;u.shift={dx:0,dy:0};u.fitW=w.log;S.fitW=(S.fitW||[]).concat([[u.bid,w.log]]);Object.assign(smp,lidarSamples(Object.assign({},u,{rings:clean}),F,green));}} // the laser read again over the outline laid on it
       const bases=[clean];
       k0=performance.now(); const parts=[];bases.forEach(rs=>{const pp=smp.pts.filter(p=>pointInPoly(p.x,p.y,rs[0])&&!rs.slice(1).some(hr=>pointInPoly(p.x,p.y,hr)));if(pp.length>=4)parts.push(...splitByLevel(rs,pp,smp.cell,0));});
       LB.split+=performance.now()-k0; k0=performance.now(); const vols=[];for(const pt of parts){let q0=performance.now();const tw=findTowers(pt.rings,u,F,green);LB.ft=(LB.ft||0)+performance.now()-q0;const bp=tw&&tw.base.length>=8?tw.base:pt.pts;q0=performance.now();const md=partModel(bp,pt.rings);LB.pm=(LB.pm||0)+performance.now()-q0;if(!md)continue;md.pts=F===Ff?bp:null;vols.push({rings:pt.rings,md});
