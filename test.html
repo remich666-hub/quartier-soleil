@@ -2743,7 +2743,7 @@ async function lidarBuildings(){
   const H0=S.addrTarget||S.target; let nearF=null;
   if(H0&&H0.userData&&H0.userData.rings){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;family(H0).forEach(o=>o.userData.rings&&o.userData.rings[0].forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}));
     const M=25;nearF=m=>m.userData.rings&&m.userData.rings[0].some(p=>p.x>x0-M&&p.x<x1+M&&p.y>y0-M&&p.y<y1+M);}
-  if(nearF&&!/[?&]avant\b/.test(location.search)){if(await runPass(nearF,false)===false)return; LB.house=performance.now(); S.T.lidarHouse=LB.house;}
+  if(nearF&&/[?&]maison\b/.test(location.search)){ /* tried 7 Nov: no gain on a phone (the worker and this loop slow each other), kept behind ?maison */if(await runPass(nearF,false)===false)return; LB.house=performance.now(); S.T.lidarHouse=LB.house;}
   if(await runPass(null,true)===false)return;
   LB.end=performance.now(); console.log('LiDAR buildings',n,Math.round(performance.now()-t0)+' ms');
   async function runPass(only,final){
@@ -2752,7 +2752,7 @@ async function lidarBuildings(){
     const list=S.meshes.filter(m=>!m.userData.lidar&&(!only||only(m))).map(m=>{if(!m.geometry.boundingSphere)m.geometry.computeBoundingSphere();return m;}).sort((a,b)=>a.geometry.boundingSphere.center.length()-b.geometry.boundingSphere.center.length());
     if(!LB.list)LB.list=performance.now(); let k0=0;
     for(const m of list){
-      if(performance.now()-tc>(/[?&]avant\b/.test(location.search)?12:40)){const y0=performance.now();await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});tc=performance.now();LB.yld+=tc-y0;LB.ny++;if(gone_())return false;}
+      if(performance.now()-tc>12){const y0=performance.now();await new Promise(r=>{yieldQ.push(r);yieldMC.port2.postMessage(0);});tc=performance.now();LB.yld+=tc-y0;LB.ny++;if(gone_())return false;}
       const u=m.userData;const ext=extOf(m);if(ext>LB_R)continue;
       const F=(Ff&&ext<Ff.R-2)?Ff:Fc;if(!F)continue;
       if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
@@ -4189,6 +4189,11 @@ function qsModel5(R,opt){opt=opt||{};
   const pts=[];for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)pts.push([u0+(i+.5)*g,v0+(j+.5)*g,HR[i][j]]);
   /* fitting on the grid itself (typed arrays, no per-point allocation): same models, same order, same solver as v4 */
   const PZ=new Float64Array(NU*NV);for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)PZ[i*NV+j]=HR[i][j];
+  /* summed-area tables of the moments over the laser cells: the first least-squares pass of a rectangle in a few reads */
+  const W1=NV+1,SA=k=>new Float64Array((NU+1)*W1),sN=SA(),sZ=SA(),sU=SA(),sV=SA(),sUU=SA(),sVV=SA(),sUZ=SA(),sVZ=SA();
+  for(let i=0;i<NU;i++){const u=u0+(i+.5)*g;for(let j=0;j<NV;j++){const z=PZ[i*NV+j],o=(i+1)*W1+j+1,a=i*W1+j+1,b=(i+1)*W1+j,c=i*W1+j,ok=z===z,v=v0+(j+.5)*g;
+    const put=(T,x)=>{T[o]=(ok?x:0)+T[a]+T[b]-T[c];};put(sN,1);put(sZ,z);put(sU,u);put(sV,v);put(sUU,u*u);put(sVV,v*v);put(sUZ,u*z);put(sVZ,v*z);}}
+  const rs=(T,i0,i1,j0,j1)=>(i1<i0||j1<j0)?0:T[(i1+1)*W1+j1+1]-T[i0*W1+j1+1]-T[(i1+1)*W1+j0]+T[i0*W1+j0];
   const rngOf=Rc=>[Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1)];
   const ptsIn=Rc=>{const [i0,i1,j0,j1]=rngOf(Rc),out=[];for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)out.push(pts[i*NV+j]);return out;};
   const solveN=(Mx,bb,np)=>{for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
@@ -4196,6 +4201,32 @@ function qsModel5(R,opt){opt=opt||{};
   const PRF={fit:0,cost:0,nLeaf:0,nFit:0,nCost:0};const fitM=(I,feat,np)=>{const _t=performance.now();PRF.nFit++;try{return fitM0(I,feat,np);}finally{PRF.fit+=performance.now()-_t;}};
   /* least squares of the laser over a rectangle (twice: the second time without the points more than 50 cm off).
      Flat typed arrays, no allocation per pass, and no second solve when the second pass kept every point (same sums, same result). */
+  /* the features written out per kind (no closure per cell: the closures were megamorphic and slow); same expressions and
+     same order of the sums as the generic version below, so the very same numbers */
+  const fitK=(I,K,np)=>{PRF.nFit++;return fitK0(I,K,np);};
+  const fitK0=(I,K,np)=>{const t=K.t,a0=K.a,r=K.r,w0=K.w0,Rc=K.Rc;let M00,M01,M02,M11,M12,M22,B0,B1,B2;
+    const pass=x=>{M00=M01=M02=M11=M12=M22=B0=B1=B2=0;let n=0;const x0=x?x[0]:0,x1=x?x[1]:0,x2=x&&np>2?x[2]:0;
+      for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;let f1,f2=0;
+        if(t===0)f1=u-a0;else if(t===1)f1=v-a0;else if(t===2){f1=-Math.max(0,r-v);f2=-Math.max(0,v-r);}else if(t===3){f1=-Math.max(0,r-u);f2=-Math.max(0,u-r);}
+        else{const d=Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);if(t===4)f1=d;else{f1=Math.min(d,w0);f2=Math.max(0,d-w0);}}
+        if(x){let pz=0;pz+=1*x0;pz+=f1*x1;if(np>2)pz+=f2*x2;if(!(Math.abs(z-pz)<0.5))continue;}n++;
+        B0+=1*z;M00+=1*1;M01+=1*f1;B1+=f1*z;M11+=f1*f1;if(np>2){M02+=1*f2;M12+=f1*f2;B2+=f2*z;M22+=f2*f2;}}}return n;};
+    const sol=()=>np>2?solveN([[M00,M01,M02],[M01,M11,M12],[M02,M12,M22]],[B0,B1,B2],3):solveN([[M00,M01],[M01,M11]],[B0,B1],2);
+    let n0;if(t<=3){const [i0,i1,j0,j1]=I,q=(T)=>rs(T,i0,i1,j0,j1);n0=q(sN);M00=n0;B0=q(sZ);
+      if(t<=1){const SX=t===0?sU:sV,SXX=t===0?sUU:sVV,SXZ=t===0?sUZ:sVZ,N=n0,X=q(SX);M01=X-a0*N;M11=q(SXX)-2*a0*X+a0*a0*N;B1=q(SXZ)-a0*q(sZ);M02=M12=M22=B2=0;}
+      else{ /* split at r across the rows (gableU: along v) or the columns (gableV: along u) */
+        const alongV=t===2,lo=alongV?j0:i0,hi=alongV?j1:i1,c0=alongV?v0:u0;let kA=lo-1,kB=hi+1;for(let k=lo;k<=hi;k++){const c=c0+(k+.5)*g;if(c<r)kA=k;else if(c>r){kB=k;break;}}
+        const qa=T=>alongV?rs(T,i0,i1,j0,kA):rs(T,i0,kA,j0,j1),qb=T=>alongV?rs(T,i0,i1,kB,j1):rs(T,kB,i1,j0,j1),SX=alongV?sV:sU,SXX=alongV?sVV:sUU,SXZ=alongV?sVZ:sUZ;
+        const NA=qa(sN),XA=qa(SX),NB=qb(sN),XB=qb(SX),ZA=qa(sZ),ZB=qb(sZ);
+        M01=XA-r*NA;M11=qa(SXX)-2*r*XA+r*r*NA;B1=qa(SXZ)-r*ZA; /* f1=c-r below r */
+        M02=r*NB-XB;M22=qb(SXX)-2*r*XB+r*r*NB;B2=r*ZB-qb(SXZ);M12=0; /* f2=r-c above r */}}
+    else n0=pass(null);
+    /* second pass: count the points within 50 cm; the sums again (over those only) only when some were left out */
+    const cnt=x=>{const x0=x[0],x1=x[1],x2=np>2?x[2]:0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;let f1,f2=0;
+        if(t===0)f1=u-a0;else if(t===1)f1=v-a0;else if(t===2){f1=-Math.max(0,r-v);f2=-Math.max(0,v-r);}else if(t===3){f1=-Math.max(0,r-u);f2=-Math.max(0,u-r);}
+        else{const d=Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);if(t===4)f1=d;else{f1=Math.min(d,w0);f2=Math.max(0,d-w0);}}
+        let pz=0;pz+=1*x0;pz+=f1*x1;if(np>2)pz+=f2*x2;if(!(Math.abs(z-pz)<0.5))return true;}}return false;};
+    let x=sol();if(cnt(x)){const n1=pass(x);if(n1>np+3&&n1!==n0)x=sol();}return x;};
   const fitM0=(I,feat,np)=>{const f=new Float64Array(np),M=new Float64Array(np*np),B=new Float64Array(np);
     const pass=x=>{M.fill(0);B.fill(0);let n=0;
       for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;feat(u,v,f);
@@ -4204,22 +4235,33 @@ function qsModel5(R,opt){opt=opt||{};
     const sol=()=>{const Mx=[];for(let a=0;a<np;a++){const r=new Array(np);for(let c=0;c<np;c++)r[c]=M[a*np+c];Mx.push(r);}return solveN(Mx,Array.from(B),np);};
     const n0=pass(null);let x=sol();const n1=pass(x);if(n1>np+3&&n1!==n0)x=sol();return x;};
   const costI=(I,pred)=>{const _t=performance.now();PRF.nCost++;try{return costI0(I,pred);}finally{PRF.cost+=performance.now()-_t;}};
+  /* the same per kind, written out: same expressions as each candidate's pred */
+  const costK=(I,c,Rc)=>{PRF.nCost++;return costK0(I,c,Rc);};
+  const costK0=(I,c,Rc)=>{const T=c.type,x=c.x||[0,0,0],x0=x[0],x1=x[1],x2=x[2],r=c.r,w0=c.w0;let s=0;
+    const t=T==='none'?-1:T==='flat'?5:T==='shedU'?0:T==='shedV'?1:T==='gableU'?2:T==='gableV'?3:T==='hip'?4:T==='mansard'?6:7;if(t===7)return costI0(I,c.pred);
+    for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const v=v0+(j+.5)*g;let p;
+      if(t===-1)p=0;else if(t===5)p=x0;else if(t===0)p=x0+x1*(u-Rc[0]);else if(t===1)p=x0+x1*(v-Rc[2]);
+      else if(t===2)p=x0-x1*Math.max(0,r-v)-x2*Math.max(0,v-r);else if(t===3)p=x0-x1*Math.max(0,r-u)-x2*Math.max(0,u-r);
+      else{const d=Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);p=t===4?x0+x1*d:x0+x1*Math.min(d,w0)+x2*Math.max(0,d-w0);}
+      const dd=Math.abs(zz-p);s+=dd<CL?dd:CL;}}return s;};
   const costI0=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const d=Math.abs(zz-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
+  /* k-th smallest (the same value a full sort would put at k) */
+  const qsel=(a,k)=>{let l=0,h=a.length-1;while(l<h){const p=a[(l+h)>>1];let i=l,j=h;while(i<=j){while(a[i]<p)i++;while(a[j]>p)j--;if(i<=j){const t=a[i];a[i]=a[j];a[j]=t;i++;j--;}}if(k<=j)h=j;else if(k>=i)l=i;else return a[k];}return a[k];};
   const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){PRF.nLeaf++;r=leafFit0(Rc);LFC.set(key,r);}return r;};
   const leafFit0=Rc=>{const I=rngOf(Rc),none={type:'none',pred:()=>0,cost:0,cr:0,R:Rc,np:0};if(I[1]<I[0]||I[3]<I[2])return none;
     let nP=0,n2=0,zmax=-1e9;const hi=[];for(let i=I[0];i<=I[1];i++)for(let j=I[2];j<=I[3];j++){const z=PZ[i*NV+j];if(z!==z)continue;nP++;if(z>2)n2++;if(z>1)hi.push(z);if(z>zmax)zmax=z;}
     if(!nP)return none;const occ=n2/nP;const cands=[{type:'none',pred:()=>0,np:0}];
-    if(occ>0.3){hi.sort((x,y)=>x-y);const md=hi.length?hi[hi.length>>1]:0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
-      const su=fitM(I,(u,v,f)=>{f[0]=1;f[1]=u-Rc[0];},2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
-      const sv=fitM(I,(u,v,f)=>{f[0]=1;f[1]=v-Rc[2];},2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
+    if(occ>0.3){const md=hi.length?qsel(hi,hi.length>>1):0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
+      const su=fitK(I,{t:0,a:Rc[0]},2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
+      const sv=fitK(I,{t:1,a:Rc[2]},2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
       const w=Rc[3]-Rc[2],l=Rc[1]-Rc[0];
-      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[2]+fr*w,x=fitM(I,(u,v,f)=>{f[0]=1;f[1]=-Math.max(0,r-v);f[2]=-Math.max(0,v-r);},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableU',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-v)-x[2]*Math.max(0,v-r),np:3});}
-      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[0]+fr*l,x=fitM(I,(u,v,f)=>{f[0]=1;f[1]=-Math.max(0,r-u);f[2]=-Math.max(0,u-r);},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableV',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-u)-x[2]*Math.max(0,u-r),np:3});}
-      const dm=(u,v)=>Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);const hx=fitM(I,(u,v,f)=>{f[0]=1;f[1]=dm(u,v);},2);if(hx[1]>0.15&&hx[1]<1.8)cands.push({type:'hip',x:hx,pred:(u,v)=>hx[0]+hx[1]*dm(u,v),np:2});
-      if(big)for(const w0 of [0.8,1.2,1.6]){if(Math.min(w,l)<2*w0+1)continue;const x=fitM(I,(u,v,f)=>{const d=dm(u,v);f[0]=1;f[1]=Math.min(d,w0);f[2]=Math.max(0,d-w0);},3);if(x[1]>1.2&&x[1]<4&&x[2]>=0&&x[2]<0.8)cands.push({type:'mansard',w0,x,pred:(u,v)=>{const d=dm(u,v);return x[0]+x[1]*Math.min(d,w0)+x[2]*Math.max(0,d-w0);},np:3});}}
+      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[2]+fr*w,x=fitK(I,{t:2,r},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableU',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-v)-x[2]*Math.max(0,v-r),np:3});}
+      for(const fr of (big?[0.4,0.5,0.6]:[0.35,0.5,0.65])){const r=Rc[0]+fr*l,x=fitK(I,{t:3,r},3);if(x[1]>0.15&&x[2]>0.15&&x[1]<1.8&&x[2]<1.8)cands.push({type:'gableV',r,x,pred:(u,v)=>x[0]-x[1]*Math.max(0,r-u)-x[2]*Math.max(0,u-r),np:3});}
+      const dm=(u,v)=>Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);const hx=fitK(I,{t:4,Rc},2);if(hx[1]>0.15&&hx[1]<1.8)cands.push({type:'hip',x:hx,pred:(u,v)=>hx[0]+hx[1]*dm(u,v),np:2});
+      if(big)for(const w0 of [0.8,1.2,1.6]){if(Math.min(w,l)<2*w0+1)continue;const x=fitK(I,{t:5,w0,Rc},3);if(x[1]>1.2&&x[1]<4&&x[2]>=0&&x[2]<0.8)cands.push({type:'mansard',w0,x,pred:(u,v)=>{const d=dm(u,v);return x[0]+x[1]*Math.min(d,w0)+x[2]*Math.max(0,d-w0);},np:3});}}
     const hmax=zmax+0.5;let best=null;
     cands.forEach(c=>{if((c.type=='shedU'||c.type=='shedV')&&c.k>1)return;if(c.type!='none'){let bad=false;[[Rc[0],Rc[2]],[Rc[1],Rc[2]],[Rc[0],Rc[3]],[Rc[1],Rc[3]],[(Rc[0]+Rc[1])/2,(Rc[2]+Rc[3])/2]].forEach(([u,v])=>{const z=c.pred(u,v);if(z>hmax||z<-0.5)bad=true;});if(bad)return;}
-      const cr=costI(I,c.pred),co=cr+0.15*c.np*Math.sqrt(nP);if(!best||co<best.cost)best={...c,cost:co,cr};});best.R=Rc;return best;};
+      const cr=costK(I,c,Rc),co=cr+0.15*c.np*Math.sqrt(nP);if(!best||co<best.cost)best={...c,cost:co,cr};});best.R=Rc;return best;};
   const LAM=(opt.lam||8)*(g*g/0.25)**0.5, memo=new Map(), tS=performance.now();
   const solve=(a,b,c,d)=>{const key=a+','+b+','+c+','+d;if(memo.has(key))return memo.get(key);const lf=leafFit([CU[a],CU[b],CV[c],CV[d]]);let best={cost:lf.cost+(lf.type=='none'?0:LAM),leaves:[lf]};
     if(performance.now()-tS<6000){
