@@ -56,6 +56,11 @@ function qsModel5(R,opt){opt=opt||{};
   const pts=[];for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)pts.push([u0+(i+.5)*g,v0+(j+.5)*g,HR[i][j]]);
   /* fitting on the grid itself (typed arrays, no per-point allocation): same models, same order, same solver as v4 */
   const PZ=new Float64Array(NU*NV);for(let i=0;i<NU;i++)for(let j=0;j<NV;j++)PZ[i*NV+j]=HR[i][j];
+  /* summed-area tables of the moments over the laser cells: the first least-squares pass of a rectangle in a few reads */
+  const W1=NV+1,SA=k=>new Float64Array((NU+1)*W1),sN=SA(),sZ=SA(),sU=SA(),sV=SA(),sUU=SA(),sVV=SA(),sUZ=SA(),sVZ=SA();
+  for(let i=0;i<NU;i++){const u=u0+(i+.5)*g;for(let j=0;j<NV;j++){const z=PZ[i*NV+j],o=(i+1)*W1+j+1,a=i*W1+j+1,b=(i+1)*W1+j,c=i*W1+j,ok=z===z,v=v0+(j+.5)*g;
+    const put=(T,x)=>{T[o]=(ok?x:0)+T[a]+T[b]-T[c];};put(sN,1);put(sZ,z);put(sU,u);put(sV,v);put(sUU,u*u);put(sVV,v*v);put(sUZ,u*z);put(sVZ,v*z);}}
+  const rs=(T,i0,i1,j0,j1)=>(i1<i0||j1<j0)?0:T[(i1+1)*W1+j1+1]-T[i0*W1+j1+1]-T[(i1+1)*W1+j0]+T[i0*W1+j0];
   const rngOf=Rc=>[Math.max(0,Math.ceil((Rc[0]-u0)/g-0.5)),Math.min(NU-1,Math.ceil((Rc[1]-u0)/g-0.5)-1),Math.max(0,Math.ceil((Rc[2]-v0)/g-0.5)),Math.min(NV-1,Math.ceil((Rc[3]-v0)/g-0.5)-1)];
   const ptsIn=Rc=>{const [i0,i1,j0,j1]=rngOf(Rc),out=[];for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)out.push(pts[i*NV+j]);return out;};
   const solveN=(Mx,bb,np)=>{for(let i=0;i<np;i++)Mx[i][i]+=1e-6;const Mm=Mx.map((r,i)=>[...r,bb[i]]);for(let c=0;c<np;c++){let p=c;for(let r=c+1;r<np;r++)if(Math.abs(Mm[r][c])>Math.abs(Mm[p][c]))p=r;[Mm[c],Mm[p]]=[Mm[p],Mm[c]];for(let r=0;r<np;r++)if(r!=c&&Mm[c][c]){const f=Mm[r][c]/Mm[c][c];for(let q=c;q<=np;q++)Mm[r][q]-=f*Mm[c][q];}}return Mm.map((r,i)=>r[np]/r[i]);};
@@ -74,7 +79,21 @@ function qsModel5(R,opt){opt=opt||{};
         if(x){let pz=0;pz+=1*x0;pz+=f1*x1;if(np>2)pz+=f2*x2;if(!(Math.abs(z-pz)<0.5))continue;}n++;
         B0+=1*z;M00+=1*1;M01+=1*f1;B1+=f1*z;M11+=f1*f1;if(np>2){M02+=1*f2;M12+=f1*f2;B2+=f2*z;M22+=f2*f2;}}}return n;};
     const sol=()=>np>2?solveN([[M00,M01,M02],[M01,M11,M12],[M02,M12,M22]],[B0,B1,B2],3):solveN([[M00,M01],[M01,M11]],[B0,B1],2);
-    const n0=pass(null);let x=sol();const n1=pass(x);if(n1>np+3&&n1!==n0)x=sol();return x;};
+    let n0;if(t<=3){const [i0,i1,j0,j1]=I,q=(T)=>rs(T,i0,i1,j0,j1);n0=q(sN);M00=n0;B0=q(sZ);
+      if(t<=1){const SX=t===0?sU:sV,SXX=t===0?sUU:sVV,SXZ=t===0?sUZ:sVZ,N=n0,X=q(SX);M01=X-a0*N;M11=q(SXX)-2*a0*X+a0*a0*N;B1=q(SXZ)-a0*q(sZ);M02=M12=M22=B2=0;}
+      else{ /* split at r across the rows (gableU: along v) or the columns (gableV: along u) */
+        const alongV=t===2,lo=alongV?j0:i0,hi=alongV?j1:i1,c0=alongV?v0:u0;let kA=lo-1,kB=hi+1;for(let k=lo;k<=hi;k++){const c=c0+(k+.5)*g;if(c<r)kA=k;else if(c>r){kB=k;break;}}
+        const qa=T=>alongV?rs(T,i0,i1,j0,kA):rs(T,i0,kA,j0,j1),qb=T=>alongV?rs(T,i0,i1,kB,j1):rs(T,kB,i1,j0,j1),SX=alongV?sV:sU,SXX=alongV?sVV:sUU,SXZ=alongV?sVZ:sUZ;
+        const NA=qa(sN),XA=qa(SX),NB=qb(sN),XB=qb(SX),ZA=qa(sZ),ZB=qb(sZ);
+        M01=XA-r*NA;M11=qa(SXX)-2*r*XA+r*r*NA;B1=qa(SXZ)-r*ZA; /* f1=c-r below r */
+        M02=r*NB-XB;M22=qb(SXX)-2*r*XB+r*r*NB;B2=r*ZB-qb(SXZ);M12=0; /* f2=r-c above r */}}
+    else n0=pass(null);
+    /* second pass: count the points within 50 cm; the sums again (over those only) only when some were left out */
+    const cnt=x=>{let n=0;const x0=x[0],x1=x[1],x2=np>2?x[2]:0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;let f1,f2=0;
+        if(t===0)f1=u-a0;else if(t===1)f1=v-a0;else if(t===2){f1=-Math.max(0,r-v);f2=-Math.max(0,v-r);}else if(t===3){f1=-Math.max(0,r-u);f2=-Math.max(0,u-r);}
+        else{const d=Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);if(t===4)f1=d;else{f1=Math.min(d,w0);f2=Math.max(0,d-w0);}}
+        let pz=0;pz+=1*x0;pz+=f1*x1;if(np>2)pz+=f2*x2;if(Math.abs(z-pz)<0.5)n++;}}return n;};
+    let x=sol();const n1=cnt(x);if(n1>np+3&&n1!==n0){pass(x);x=sol();}return x;};
   const fitM0=(I,feat,np)=>{const f=new Float64Array(np),M=new Float64Array(np*np),B=new Float64Array(np);
     const pass=x=>{M.fill(0);B.fill(0);let n=0;
       for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g,row=i*NV;for(let j=I[2];j<=I[3];j++){const z=PZ[row+j];if(z!==z)continue;const v=v0+(j+.5)*g;feat(u,v,f);
@@ -93,11 +112,13 @@ function qsModel5(R,opt){opt=opt||{};
       else{const d=Math.min(u-Rc[0],Rc[1]-u,v-Rc[2],Rc[3]-v);p=t===4?x0+x1*d:x0+x1*Math.min(d,w0)+x2*Math.max(0,d-w0);}
       const dd=Math.abs(zz-p);s+=dd<CL?dd:CL;}}return s;};
   const costI0=(I,pred)=>{let s=0;for(let i=I[0];i<=I[1];i++){const u=u0+(i+.5)*g;for(let j=I[2];j<=I[3];j++){const zz=PZ[i*NV+j];if(zz!==zz)continue;const d=Math.abs(zz-pred(u,v0+(j+.5)*g));s+=d<CL?d:CL;}}return s;};
+  /* k-th smallest (the same value a full sort would put at k) */
+  const qsel=(a,k)=>{let l=0,h=a.length-1;while(l<h){const p=a[(l+h)>>1];let i=l,j=h;while(i<=j){while(a[i]<p)i++;while(a[j]>p)j--;if(i<=j){const t=a[i];a[i]=a[j];a[j]=t;i++;j--;}}if(k<=j)h=j;else if(k>=i)l=i;else return a[k];}return a[k];};
   const LFC=new Map();const leafFit=Rc=>{const key=Rc.map(v=>v.toFixed(2)).join(',');let r=LFC.get(key);if(!r){PRF.nLeaf++;r=leafFit0(Rc);LFC.set(key,r);}return r;};
   const leafFit0=Rc=>{const I=rngOf(Rc),none={type:'none',pred:()=>0,cost:0,cr:0,R:Rc,np:0};if(I[1]<I[0]||I[3]<I[2])return none;
     let nP=0,n2=0,zmax=-1e9;const hi=[];for(let i=I[0];i<=I[1];i++)for(let j=I[2];j<=I[3];j++){const z=PZ[i*NV+j];if(z!==z)continue;nP++;if(z>2)n2++;if(z>1)hi.push(z);if(z>zmax)zmax=z;}
     if(!nP)return none;const occ=n2/nP;const cands=[{type:'none',pred:()=>0,np:0}];
-    if(occ>0.3){hi.sort((x,y)=>x-y);const md=hi.length?hi[hi.length>>1]:0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
+    if(occ>0.3){const md=hi.length?qsel(hi,hi.length>>1):0;cands.push({type:'flat',x:[md],pred:()=>md,np:1});
       const su=fitK(I,{t:0,a:Rc[0]},2);cands.push({type:'shedU',x:su,pred:(u,v)=>su[0]+su[1]*(u-Rc[0]),np:2,k:Math.abs(su[1])});
       const sv=fitK(I,{t:1,a:Rc[2]},2);cands.push({type:'shedV',x:sv,pred:(u,v)=>sv[0]+sv[1]*(v-Rc[2]),np:2,k:Math.abs(sv[1])});
       const w=Rc[3]-Rc[2],l=Rc[1]-Rc[0];
