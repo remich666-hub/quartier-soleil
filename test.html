@@ -3930,11 +3930,11 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     setInterval(()=>{try{const now=performance.now();if(now-ft>=1000){fps=Math.round(frames*1000/(now-ft));frames=0;ft=now;}
       const u0=window.__QSU,q=(typeof QV4!=='undefined'&&QV4)||{},v=document.getElementById('qsVeil'),t0=(S.T&&S.T.start)||0,r=x=>((x-t0)/1000).toFixed(1)+' s';
       if(v&&!v.classList.contains('on')&&!ev.veil&&S.T&&S.T.scene)ev.veil=now;if(q.done&&q.done.length&&!ev.roof)ev.roof=now;
-      if(S.T!==ev._T){for(const k in ev)delete ev[k];ev._T=S.T;}const LR=S.lidarR&&S.lidarP&&S.T&&S.T.start?S.lidarR:{};if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
+      if(S.T!==ev._T){for(const k in ev)delete ev[k];ev._T=S.T;}const LR=S.lidarR&&S.lidarP&&S.T&&S.T.start?S.lidarR:{};if(S.rawOrtho&&!ev.ortho)ev.ortho=now;if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
       const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.scan0&&!ev.scan)ev.scan=now;
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
       const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
-      box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
+      box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
         'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
         fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
 }catch(e){console.warn('perf',e);}})();
