@@ -3910,7 +3910,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       if(k!==skey||(live&&now-busyT>500)){skey=k;busyT=now;renderer.shadowMap.needsUpdate=true;}}
     return R1(sc,c);};
   /* 2. beyond the fade nothing shows (faces and edges are discarded there): those buildings are not drawn at all */
-  const cull=()=>{try{const u=window.__QSU;if(!u||!S.meshes)return;const cx=u.uQsC.value.x,cy=u.uQsC.value.y,lim=Math.max(u.uQsD1.value,u.uQsL1.value)+20;
+  const cull=()=>{try{const u=window.__QSU;if(!u||!S.meshes)return;const cx=u.uQsC.value.x,cy=u.uQsC.value.y,lim=u.uQsD1.value+20; /* past the faces' fade only the edges remain, and they are one separate object */
     const scanning=u.uScanR.value<1e5;
     S.meshes.forEach(m=>{if(!m||!m.geometry)return;const g=m.geometry;if(!g.boundingSphere)g.computeBoundingSphere();const b=g.boundingSphere,far=!scanning&&Math.hypot(b.center.x-cx,b.center.y-cy)-b.radius>lim;
       if(far&&m.visible){m.visible=false;m.userData._qsFar=1;}else if(!far&&m.userData._qsFar){m.visible=true;delete m.userData._qsFar;}});}catch(e){}};
