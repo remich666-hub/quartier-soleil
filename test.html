@@ -2619,7 +2619,7 @@ function splitByLevel(rings,pts,cell,depth){
      least 2.2 m below, set off by a wall (checked once the cut is found: the height jumps there, a sloping roof only ramps) */
   const hard=mB-mA>=3.5&&A.length*cell>=18&&B.length*cell>=18;
   const sA=A.map(p=>p.h).sort((a,b)=>a-b),iqA=qtl(sA,0.75)-qtl(sA,0.25);
-  const soft=!hard&&mB-mA>=2.2&&iqA<0.8&&A.length*cell>=9&&B.length*cell>=9;
+  const soft=!hard&&mB-mA>=2.2&&iqA<0.8&&A.length*cell>=6&&B.length*cell>=9;
   if(!hard&&!soft)return parts;
   const cA=A.reduce((s,p)=>[s[0]+p.x/A.length,s[1]+p.y/A.length],[0,0]),cB=B.reduce((s,p)=>[s[0]+p.x/B.length,s[1]+p.y/B.length],[0,0]);
   let wx=cB[0]-cA[0],wy=cB[1]-cA[1];const wl=Math.hypot(wx,wy);if(wl<1.5)return parts;wx/=wl;wy/=wl;
@@ -2634,12 +2634,12 @@ function splitByLevel(rings,pts,cell,depth){
   if(!cut)return parts;
   if(hard&&cut.acc<0.86)return parts;
   if(soft){ // an L of lean-tos is not split by one straight wall: what matters is that the low side is low; the rest is cut again
-    let lo=0,lA=0;pts.forEach(p=>{if(p.x*cut.ax+p.y*cut.ay-cut.c<0){lo++;if(p.h<best.t)lA++;}});if(!lo||lA/lo<0.85||lo*cell<9)return parts;}
+    let lo=0,lA=0;pts.forEach(p=>{if(p.x*cut.ax+p.y*cut.ay-cut.c<0){lo++;if(p.h<best.t)lA++;}});if(!lo||lA/lo<0.85||lo*cell<6)return parts;}
   if(soft){const nA=[],nB=[];pts.forEach(p=>{const d=p.x*cut.ax+p.y*cut.ay-cut.c;if(d>-1.25&&d<-0.25)nA.push(p.h);else if(d>0.25&&d<1.25)nB.push(p.h);});
     if(nA.length<4||nB.length<4)return parts;nA.sort((a,b)=>a-b);nB.sort((a,b)=>a-b);if(qtl(nB,0.5)-qtl(nA,0.5)<1.8)return parts;}
   const side=(sg)=>{const o=clipHalf(rings[0],sg*cut.ax,sg*cut.ay,-sg*cut.c);if(!o)return null;const hl=rings.slice(1).map(r=>clipHalf(r,sg*cut.ax,sg*cut.ay,-sg*cut.c)).filter(Boolean);
     return {rings:[o].concat(hl),pts:pts.filter(p=>sg*(p.x*cut.ax+p.y*cut.ay-cut.c)>=0)};};
-  const lo=side(-1),hi=side(1); if(!lo||!hi||lo.pts.length*cell<12||hi.pts.length*cell<12)return parts;
+  const lo=side(-1),hi=side(1); if(!lo||!hi||lo.pts.length*cell<(soft?6:12)||hi.pts.length*cell<12)return parts;
   return splitByLevel(lo.rings,lo.pts,cell,depth+1).concat(splitByLevel(hi.rings,hi.pts,cell,depth+1));
 }
 function partModel(pts,rings){
@@ -2880,8 +2880,10 @@ async function lidarBuildings(){
       if(!u.shift&&MH&&ext<90)u.shift=registerFootprint(m,MH);
       k0=performance.now(); const smp=lidarSamples(u,F,green); LB.smp+=performance.now()-k0; LB.nb++; k0=performance.now(); if(smp.pts.length<4||smp.pts.length<0.4*smp.nin)continue; // no laser return here: keep the IGN volume
       { const ar=Math.abs(areaOf(u.rings[0])); if(ar<80&&roughRoof(u,F)>0.45){ // small building under a tree: the laser only sees the crown
-        if(ar<40&&u.h>3.5){ // a shed or a garage, not a tower: bring it down to a believable height (the IGN height there is often the tree's too)
-          const nh=3.5, sc=(nh+SINK)/(u.h+SINK), z0=u.zBase-SINK; m.scale.z=sc;
+        // the laser on it all at one low level (a flat shed roof seen between leaves): that level is its height
+        const hl=smp.pts.map(p=>p.h).sort((x,y)=>x-y),lv=hl.length>=8&&qtl(hl,0.9)-qtl(hl,0.1)<1.2?Math.max(2,qtl(hl,0.5)+0.1):null;
+        if(ar<40&&(u.h>3.5||(lv!=null&&lv<u.h-0.5))){ // a shed or a garage, not a tower: bring it down to a believable height (the IGN height there is often the tree's too)
+          const nh=lv!=null?Math.min(3.5,lv):3.5, sc=(nh+SINK)/(u.h+SINK), z0=u.zBase-SINK; m.scale.z=sc;
           if(u.edgeArr)for(let i=2;i<u.edgeArr.length;i+=3)u.edgeArr[i]=z0+(u.edgeArr[i]-z0)*sc;
           if(u.roofMesh){scene.remove(u.roofMesh);u.roofMesh=null;} if(u.roofRef)S.roofSkip.add([u.roofRef.key,u.roofRef.a,u.roofRef.b]);
           u.h=nh; u.floors=1; u.ridge=null; }
