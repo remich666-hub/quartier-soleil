@@ -4674,7 +4674,7 @@ const QW={w:null,ws:[],load:[],failed:false,seq:0,cb:new Map(),sent:null,ortho:n
 function qsWorker(){if(QW.failed)return null;if(QW.w)return QW.w;
   try{const src='const RAD=Math.PI/180;const MK={};MK.area='+MK.area.toString()+';MK.clipHalf='+MK.clipHalf.toString()+';const RF={};const S={};\n'+qsModel5.toString()+'\n('+qsWorkerMain.toString()+')();';
     const url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
-    const N=Math.max(1,Math.min(3,(navigator.hardwareConcurrency||2)-1));
+    const N=matchMedia('(pointer:coarse)').matches?1:Math.max(1,Math.min(3,(navigator.hardwareConcurrency||2)-1)); /* a phone shares its cores badly (small cores, heat): one worker there */
     for(let k=0;k<N;k++){const w=new Worker(url),wi=k;QW.load.push(0);
     w.onmessage=e=>{if(!e.data.stage)QW.load[wi]=Math.max(0,QW.load[wi]-1);if(e.data.stage){try{const fam=QW.fam&&QW.fam.get(e.data.id);if(fam&&QW.onStage)QW.onStage(fam,e.data.stage,e.data.data);}catch(_){}return;}const f=QW.cb.get(e.data.id);if(f){QW.cb.delete(e.data.id);if(QW.fam)QW.fam.delete(e.data.id);f(e.data);}};
     w.onerror=e=>{console.warn('qs worker',e.message);QW.failed=true;QW.cb.forEach(f=>f({M:null,err:1}));QW.cb.clear();};
