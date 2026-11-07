@@ -3302,6 +3302,7 @@ const QWR={t:0,z:[],all:false};
 function qsWinDirty(x,y,r){if(x==null)QWR.all=true;else QWR.z.push([x,y,r||0]);clearTimeout(QWR.t);QWR.t=setTimeout(qsWinFlush,400);}
 function qsWinFlush(){const Z=QWR.z,all=QWR.all;QWR.z=[];QWR.all=false;
   const close=(x,y,r,d)=>all||Z.some(([a,b,c])=>Math.hypot(x-a,y-b)<c+r+d);
+  try{const b=S.building;if(b&&b.parent){const f=family(b);const mw=f.find(o=>o.userData._win);if(mw&&!f.some(o=>o.userData.v4done))qsWindowsLaser(b);}}catch(e){}
   (QV4.done||[]).forEach(m=>{if(!m.parent||!m.userData._v4)return;const bs=m.geometry.boundingSphere;if(!bs||!close(bs.center.x,bs.center.y,bs.radius,40))return;try{qsWindows(m);}catch(e){}});
   try{const w=S.win;if(w&&w.pos&&close(w.pos.x,w.pos.y,0,60)){const moved=qsSnapWin();if(moved||!S.skyline)scheduleSummary();}}catch(e){}}
 function qsWindows(main){const V=main.userData._v4;if(!V)return;if(V.w5)return qsWindows5(main);const {fam,XL,OUT}=V;
@@ -3368,7 +3369,7 @@ function qsWindows(main){const V=main.userData._v4;if(!V)return;if(V.w5)return q
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
   const m=new THREE.Mesh(g,QS_WIN_MAT);m.position.z=-main.position.z;m.renderOrder=2;m.userData.winDecal=true;m.userData.hiRoof=true;m.raycast=()=>{};main.add(m);}
 /* a block selected beyond the processed radius: rebuilt on demand, ahead of the queue */
-if(typeof setHi==='function'){const _hi=setHi;setHi=function(m,on){_hi(m,on);try{const u=m&&m.userData;if(!on||!u||!u.lidar||u.monu||u.church||!QV4.pri)return;
+if(typeof setHi==='function'){const _hi=setHi;setHi=function(m,on){_hi(m,on);try{if(on&&m&&m.parent&&!family(m).some(o=>o.userData.v4done))setTimeout(()=>{try{if(m.parent&&S.building&&family(S.building).includes(m)&&!family(m).some(o=>o.userData.v4done))qsWindowsLaser(m);}catch(e){}},250);}catch(e){}try{const u=m&&m.userData;if(!on||!u||!u.lidar||u.monu||u.church||!QV4.pri)return;
   const fam=family(m).filter(o=>o.userData.rings);if(fam.some(o=>o.userData.v4done||QV4.used.has(o)||(QV4.tried&&QV4.tried.has(o))||QV4.pri.some(it=>it.fam.includes(o))))return;
   if(fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0)>4000)return;const bc=m.geometry.boundingSphere;if(bc&&bc.center.length()>RECENTER_D&&!(S.qsExt||[]).some(e=>e.T===S.T&&Math.hypot(e.cx-bc.center.x,e.cy-bc.center.y)<40))return; /* far: after the laser extension (recenterOn) */QV4.pri.push({fam,d:0});}catch(e){}};}
 /* the model's slope pass and ground-floor bands, kept consistent with these buildings: no texture grid laid back on their walls,
@@ -3627,6 +3628,11 @@ if(typeof recenterOn==='function'){const _rc=recenterOn;recenterOn=async functio
       try{if(S.building&&S.win)chooseFacade(+$('facade').value||0);}catch(e){}
       toast('Laser fin chargé autour de ce bâtiment');}
     finally{QV4.extBusy=false;}}};}
+
+/* choosing another building lets go of the window studied on the previous one: its outline, its marker, its result and its
+   lit windows stayed on the first building while the second was being looked at */
+if(typeof selectBuilding==='function'){const _sb=selectBuilding;selectBuilding=function(obj){const w=S.win;_sb.apply(this,arguments);
+  try{if(w&&obj&&(!w.obj||!w.obj.parent||!family(obj).includes(w.obj))&&S.win===w){S.win=null;S.skyline=null;skyLine.visible=false;skyLine.userData.ready=false;marker.visible=false;markerArrow.visible=false;facadeLine.visible=false;$("results").hidden=true;$("mini").hidden=true;}}catch(e){}};}
 
 /* ===== Quartier Soleil — « Aube givrée » theme (light) and its night (dark): pale lavender-blue air, a deep night-blue mass,
    one warm orange-to-pink light, always soft; fine grain on the glass panels. The warm light follows the sun of the chosen hour. ===== */
@@ -5146,8 +5152,8 @@ function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.us
 /* windows on the v5 walls: the wall lines, their top and bottom are known along them, so no ray is needed to find the wall;
    rays only for what stands in front (a neighbour, a wing in a corner). Same rules as before: the study's storeys, 3.5 m bays,
    lintel under the eave, sill above the ground in front. */
-function qsWindows5(main){const V=main.userData._v4,{fam,w5}=V;
-  [...main.children].forEach(c=>{if(c.userData.winDecal){main.remove(c);c.geometry.dispose();}});
+function qsWindows5(main,Vin){const V=Vin||main.userData._v4,{fam,w5}=V;
+  fam.forEach(o=>[...o.children].forEach(c=>{if(c.userData.winDecal){o.remove(c);c.geometry.dispose();}})); /* the whole group: windows drawn before on another block of it go too */
   const objs=[];fam.forEach(o=>{objs.push(o);o.children.forEach(c=>{if(c.isMesh&&!c.userData.winDecal&&!c.userData.hiRoof)objs.push(c);});});
   const bs=main.geometry.boundingSphere||(main.geometry.computeBoundingSphere(),main.geometry.boundingSphere);
   const near=S.meshes.filter(m=>!fam.includes(m)&&m.geometry&&(m.geometry.boundingSphere||(m.geometry.computeBoundingSphere(),m.geometry.boundingSphere)).center.distanceTo(bs.center)<bs.radius+40);
@@ -5194,6 +5200,15 @@ function qsPansFromLeaves(M){const L5=M.L5,pans=[];L5.leaves.forEach((l,li)=>{qs
     let i1=1,i2=2,best=0;for(let a=1;a<W3.length;a++)for(let b=a+1;b<W3.length;b++){const ar=Math.abs((W3[a][0]-W3[0][0])*(W3[b][1]-W3[0][1])-(W3[a][1]-W3[0][1])*(W3[b][0]-W3[0][0]));if(ar>best){best=ar;i1=a;i2=b;}}if(best<1e-4)return;
     const p0=W3[0],p1=W3[i1],p2=W3[i2],e1=[p1[0]-p0[0],p1[1]-p0[1],p1[2]-p0[2]],e2=[p2[0]-p0[0],p2[1]-p0[1],p2[2]-p0[2]];let nr=[e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]];if(nr[2]<0)nr=nr.map(v=>-v);const ln=Math.hypot(...nr);nr=nr.map(v=>v/ln);if(nr[2]<0.05)return;
     const a=-nr[0]/nr[2],b=-nr[1]/nr[2],c=p0[2]-a*p0[0]-b*p0[1];let Q=W3.map(p=>[p[0],p[1]]);if(MK.area(Q)<0)Q=Q.reverse();pans.push({id:pans.length,piece:li,Q,a,b,c,n:nr});});});return pans;}
+
+/* Windows on a building the roof model left as laser blocks (its fit was not better than the blocks): the same placement, on
+   the blocks' own outer walls, from the ground up to their eaves. Done when such a building is selected. */
+function qsWindowsLaser(m){const fam=family(m).filter(o=>o.userData.rings&&o.parent);if(!fam.length||fam.some(o=>o.userData.v4done))return;
+  const main=fam.slice().sort((a,b)=>Math.abs(areaOf(b.userData.rings[0]))-Math.abs(areaOf(a.userData.rings[0])))[0];const w5=[];
+  fam.forEach(o=>{const u=o.userData,r=u.rings[0],n=r.length,zt=u.zBase+u.h;for(let i=0;i<n;i++){const a=r[i],b=r[(i+1)%n],L=Math.hypot(b.x-a.x,b.y-a.y);if(L<1.6)continue;
+    let nx=(b.y-a.y)/L,ny=-(b.x-a.x)/L;if(pointInPoly((a.x+b.x)/2+nx*0.2,(a.y+b.y)/2+ny*0.2,r)){nx=-nx;ny=-ny;}
+    w5.push({a:[a.x,a.y],b:[b.x,b.y],nx,ny,za0:null,zb0:null,za1:zt,zb1:zt});}});
+  const V={fam,w5,laser:true};main.userData._win=V;try{qsWindows5(main,V);}catch(e){console.warn('laser windows',e);}return V.stat;}
 
 function registerFamily(fam,MH){
   const rings=fam.flatMap(m=>m.userData.rings?[m.userData.rings[0]]:[]); if(!rings.length)return {dx:0,dy:0};
