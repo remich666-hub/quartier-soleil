@@ -1386,6 +1386,9 @@ function addRoof(sets,ring,zEave,zRidge){
   const halfMin=(bmax-bmin)/2; if(halfMin<1.5)return false;
   const rise=zRidge-zEave; const inset=Math.min(rise*1.7,halfMin*0.92); const k=Math.max(0.06,1-inset/halfMin);
   const inner=p.map(q=>new THREE.Vector2(cx+(q.x-cx)*k,cy+(q.y-cy)*k));
+  /* a hip roof shrunk toward the centre only fits a nearly convex outline: past an inner corner the slopes leave the walls and
+     float over the courtyard. Every point of the ridge outline must stand over the building, or this roof is not drawn here */
+  if(!QS_OLD)for(let i=0;i<inner.length;i++){const q=inner[i],r=inner[(i+1)%inner.length];if(!pointInPoly(q.x,q.y,p)||!pointInPoly((q.x+r.x)/2,(q.y+r.y)/2,p))return false;}
   const P=sets.P,N=sets.N;
   for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length],c=inner[(i+1)%p.length],d=inner[i];
     const n=new THREE.Vector3().crossVectors(new THREE.Vector3(b.x-a.x,b.y-a.y,0),new THREE.Vector3(d.x-a.x,d.y-a.y,rise)).normalize(); if(n.z<0)n.negate();
@@ -2771,7 +2774,7 @@ function makeBlock(src,rings,model,roofSets){
     mesh.userData.roofEdgeArr=ea; mesh.userData.ridge=pr.top; mesh.userData.panRoof=pr.faces.length;
   }
   else if(model.rise>0){const s=roofSets[u.roofKey||'autre']||roofSets.autre;
-    if(convexity(outer)>0.8){if(addRoof(s,outer,u.zBase+h,u.zBase+h+model.rise))mesh.userData.ridge=h+model.rise;}
+    if(convexity(outer)>0.8&&addRoof(s,outer,u.zBase+h,u.zBase+h+model.rise))mesh.userData.ridge=h+model.rise;
     else{ // L, T, U shapes: one hip roof per wing (maximal rectangles inside the footprint), same pitch everywhere, like a real compound roof
       const R=rectDecomp(outer); if(R.length){const main=R[0],slope=Math.min(1,model.rise/Math.max(1.5,main.w/2));let top=0;
         R.forEach(r=>{const rise=Math.min(model.rise,slope*r.w/2);if(addRoof(s,r.ring,u.zBase+h,u.zBase+h+rise))top=Math.max(top,rise);});if(top)mesh.userData.ridge=h+top;}}}
