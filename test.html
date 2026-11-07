@@ -872,7 +872,7 @@ async function gardensRun(TP,MH){
 async function buildParcels(lat,lon){
   const tok=++parcelTok;
   if(parcelGroup){parcelGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();});scene.remove(parcelGroup);parcelGroup=null;}
-  let feats=[]; try{feats=await wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',lat,lon,DETAIL_R+20,2500);}catch(e){return;}
+  let feats=[]; try{feats=await ((S.parcP&&S.parcPkey===lat+','+lon)?S.parcP:wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',lat,lon,DETAIL_R+20,2500));}catch(e){return;}
   for(let i=0;i<80&&!S.rawOrtho&&tok===parcelTok;i++)await new Promise(r=>setTimeout(r,250));
   if(tok!==parcelTok||!feats.length)return;
   try{S.rgbFar=S.rgbFarP?await Promise.race([S.rgbFarP,new Promise(r=>setTimeout(()=>r(null),4000))]):null;}catch(e){S.rgbFar=null;} if(tok!==parcelTok)return;
@@ -2045,6 +2045,48 @@ const skyLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMater
 skyLine.renderOrder=6; skyLine.visible=false; scene.add(skyLine);
 function unproj(x,y){const kx=111320*Math.cos(S.lat*RAD),ky=110574;return [S.lon+x/kx,S.lat+y/ky];}
 function distToRing(x,y,ring){let best=1e9;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[j],b=ring[i];const dx=b.x-a.x,dy=b.y-a.y;const L2=dx*dx+dy*dy||1;let t=((x-a.x)*dx+(y-a.y)*dy)/L2;t=Math.max(0,Math.min(1,t));best=Math.min(best,Math.hypot(a.x+t*dx-x,a.y+t*dy-y));}return best;}
+/* Rows of houses (footprints that touch) registered on the laser as one block, then moved where the laser puts them.
+   A terraced house alone cannot be registered along its row (its neighbours look the same), so one by one the shifts came out at
+   random; the row as a whole has its ends and its gardens. The move is kept only if the cadastre agrees (the houses fall better
+   inside their own parcels afterwards). The footprints themselves are moved (the IGN outlines of a whole row can be ~2 m off). */
+function registerRows(feats,MH,parcels){
+  const out={rows:0,moved:0,list:[]};if(!MH||!feats||!feats.length)return out;
+  const kx=111320*Math.cos(S.lat*RAD),ky=110574;
+  const outerOf=f=>{const g=f.geometry;if(!g)return null;const c=g.type==='MultiPolygon'?g.coordinates[0][0]:g.type==='Polygon'?g.coordinates[0]:null;return c?c.map(([lo,la])=>({x:(lo-S.lon)*kx,y:(la-S.lat)*ky})):null;};
+  const B=[];feats.forEach((f,i)=>{const h=f.properties&&f.properties.hauteur;const r=outerOf(f);if(!r||r.length<4)return;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});
+    if(Math.hypot((x0+x1)/2,(y0+y1)/2)>250)return;B.push({f,r,x0,x1,y0,y1,h:typeof h==='number'?h:null});});
+  /* touching: a vertex of one within 0.6 m of an edge of the other */
+  const segD=(p,a,b)=>{const dx=b.x-a.x,dy=b.y-a.y,L=dx*dx+dy*dy;let t=L?((p.x-a.x)*dx+(p.y-a.y)*dy)/L:0;t=Math.max(0,Math.min(1,t));return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);};
+  const touch=(A,C)=>{if(A.x0>C.x1+0.6||C.x0>A.x1+0.6||A.y0>C.y1+0.6||C.y0>A.y1+0.6)return false;const t1=(P,Q)=>P.r.some(p=>{for(let i=0,j=Q.r.length-1;i<Q.r.length;j=i++)if(segD(p,Q.r[j],Q.r[i])<0.6)return true;return false;});return t1(A,C)||t1(C,A);};
+  const par=B.map((_,i)=>i),find=i=>par[i]===i?i:(par[i]=find(par[i]));
+  const G=new Map();B.forEach((b,i)=>{const k=Math.floor(b.x0/20)+','+Math.floor(b.y0/20);(G.get(k)||G.set(k,[]).get(k)).push(i);});
+  B.forEach((b,i)=>{const gx=Math.floor(b.x0/20),gy=Math.floor(b.y0/20);for(let a=-1;a<=1;a++)for(let c=-1;c<=1;c++)(G.get((gx+a)+','+(gy+c))||[]).forEach(j=>{if(j<=i)return;if(find(i)!==find(j)&&touch(b,B[j]))par[find(i)]=find(j);});});
+  const groups=new Map();B.forEach((b,i)=>{const k=find(i);(groups.get(k)||groups.set(k,[]).get(k)).push(b);});
+  const P=parcels&&parcels.length?parcels.map(f=>{const r=outerOf(f);if(!r)return null;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});return {r,x0,x1,y0,y1};}).filter(Boolean):null;
+  const parcelOf=(x,y)=>{if(!P)return -1;for(let k=0;k<P.length;k++){const q=P[k];if(x<q.x0||x>q.x1||y<q.y0||y>q.y1)continue;if(pointInPoly(x,y,q.r))return k;}return -1;};
+  groups.forEach(gr=>{const big=gr.filter(b=>(b.h==null||b.h>=2.5));if(big.length<2||big.length>30)return;out.rows++;
+    const pin=[],pout=[],per=[];
+    big.forEach(b=>{const mine=[];for(let x=b.x0;x<=b.x1;x+=0.5)for(let y=b.y0;y<=b.y1;y+=0.5)if(pointInPoly(x,y,b.r)){pin.push([x,y]);mine.push([x,y]);}per.push(mine);
+      for(let i=0,j=b.r.length-1;i<b.r.length;j=i++){const a=b.r[j],c=b.r[i],L=Math.hypot(c.x-a.x,c.y-a.y);if(L<0.5)continue;let nx=(c.y-a.y)/L,ny=-(c.x-a.x)/L;const mx=(a.x+c.x)/2,my=(a.y+c.y)/2;if(pointInPoly(mx+nx*0.6,my+ny*0.6,b.r)){nx=-nx;ny=-ny;}
+        for(let t=0.5;t<L-0.4;t+=0.75){const px=a.x+(c.x-a.x)*t/L,py=a.y+(c.y-a.y)*t/L;[1,1.75].forEach(o=>{const qx=px+nx*o,qy=py+ny*o;if(!big.some(o2=>pointInPoly(qx,qy,o2.r)))pout.push([qx,qy]);});}}});
+    if(pin.length<20||pout.length<10)return;
+    const thin=(a,m)=>{if(a.length<=m)return a;const k=Math.ceil(a.length/m);return a.filter((_,i)=>i%k===0);};const pinS=thin(pin,1500),poutS=thin(pout,800);
+    const hs=big.map(b=>b.h).filter(v=>v!=null).sort((a,b)=>a-b),thr=Math.max(1.8,(hs.length?hs[hs.length>>1]:4)*0.5);
+    const frac=(pts,dx,dy)=>{let s=0,n=0;for(const [x,y] of pts){const v=MH.at(x+dx,y+dy);if(v!=null){n++;if(v>thr)s++;}}return n?s/n:0;};
+    const score=(dx,dy)=>frac(pinS,dx,dy)-0.6*frac(poutS,dx,dy);
+    const s0=score(0,0);let best={dx:0,dy:0,s:s0};
+    for(let dx=-3;dx<=3.001;dx+=1)for(let dy=-3;dy<=3.001;dy+=1){const s=score(dx,dy);if(s>best.s+0.01||(Math.abs(s-best.s)<=0.01&&Math.hypot(dx,dy)<Math.hypot(best.dx,best.dy)))best={dx,dy,s};}
+    for(const st of [0.5,0.25]){const c=best;for(let dx=c.dx-st;dx<=c.dx+st+0.001;dx+=st)for(let dy=c.dy-st;dy<=c.dy+st+0.001;dy+=st){const s=score(dx,dy);if(s>best.s+0.005)best={dx,dy,s};}}
+    const d=Math.hypot(best.dx,best.dy);if(best.s<s0+0.04||d<0.5)return;
+    /* the cadastre's say: share of each house inside its main parcel, before and after */
+    if(!P)return;const inside=(dx,dy)=>{let s=0,n=0;per.forEach(pts=>{const c=new Map();let m=0;pts.forEach(([x,y])=>{const k=parcelOf(x+dx,y+dy);if(k<0)return;m++;c.set(k,(c.get(k)||0)+1);});if(!m)return;let mx=0;c.forEach(v=>{if(v>mx)mx=v;});s+=mx;n+=m;});return n?s/n:0;};
+    const c0=inside(0,0),c1=inside(best.dx,best.dy);out.list.push({n:big.length,dx:best.dx,dy:best.dy,gain:+(best.s-s0).toFixed(3),cad0:+c0.toFixed(2),cad1:+c1.toFixed(2)});
+    if(c1<c0+0.03)return;
+    const dlo=best.dx/kx,dla=best.dy/ky;
+    gr.forEach(b=>{const g=b.f.geometry;const mv=ring=>ring.forEach(pt=>{pt[0]+=dlo;pt[1]+=dla;});if(g.type==='Polygon')g.coordinates.forEach(mv);else if(g.type==='MultiPolygon')g.coordinates.forEach(pl=>pl.forEach(mv));b.f.properties._qsRow={dx:best.dx,dy:best.dy};});
+    out.moved++;});
+  return out;
+}
 function registerFootprint(obj,MH){ // shift (≤2 m) that best lays the IGN footprint on the LiDAR roof: high inside, low just outside
   const rings=obj.userData.rings; const r0=rings[0]; const xs=r0.map(p=>p.x),ys=r0.map(p=>p.y); const pin=[],pout=[];
   for(let x=Math.min(...xs);x<=Math.max(...xs);x+=0.5)for(let y=Math.min(...ys);y<=Math.max(...ys);y+=0.5)if(pointInPoly(x,y,r0))pin.push([x,y]);
@@ -2377,6 +2419,7 @@ async function load(q,at){
       setTimeout(()=>{if(S.lat===myLat)S.startIRC();},9000);}
     status('Bâtiments et relief IGN…');
     const pBat=Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]);
+    S.parcP=wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',g.lat,g.lon,DETAIL_R+20,2500).catch(()=>[]);S.parcPkey=g.lat+','+g.lon; /* also used to check the rows' registration below */
     /* the context layers (roads, vegetation, weather, small constructions) are asked now, queued behind the buildings and the laser,
        instead of once the model is built: they used to cost ~2.5 s of waiting on a phone after the scene */
     const PN0=()=>{const R=DETAIL_R+40,RW=CONTEXT_R,L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
@@ -2391,7 +2434,9 @@ async function load(q,at){
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
     S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.rawOrtho=null; S.slopeHouses=[]; S.lot=null; S.loading=true; /* nothing of the previous address may feed this one */ S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
-    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
+    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();
+      if(!/[?&]avant\b/.test(location.search))try{const pf=await Promise.race([S.parcP,new Promise(r=>setTimeout(()=>r(null),2500))]);S.rowReg=registerRows(feats,mh,pf);S.T.rows=performance.now();}catch(err){console.warn('rows',err);}
+      S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
     S.T.relief=performance.now(); S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} S.T.scene=performance.now(); loadOrtho(g.lat,g.lon); loadLot(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
@@ -4038,7 +4083,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       box.style.display=(ev.idle&&ev.scan)||(t0&&now-t0>90000)?'':'none'; /* only once the roofs and the reveal are done: it would hide the intro */
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
       const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
-      const T_=S.T||{},dd=(a,b)=>(T_[a]&&T_[b])?((T_[b]-T_[a])/1000).toFixed(2):'…';box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'  adresse '+dd('start','geo')+' · bâtiment de l\'adresse '+dd('geo','link')+' · bâtiments+altitude IGN '+dd(T_.link?'link':'geo','feats')+' · relief laser '+dd('feats','relief')+' · construction '+dd('relief','scene'),'après la scène : routes/végétation/météo… (réseau) '+dd('scene','netA')+' · constructions (réseau) '+dd('netA','netB')+' · routes '+dd('netB','bRoads')+' · ouvrages '+dd('bRoads','bStruct')+' · couches '+dd('bStruct','bLayers')+' · plan+arbres IGN '+dd('bLayers','bPlan')+' · fondu '+dd('bPlan','layers')+' · parcelles '+dd('layers','bParc')+' · végétation '+dd('bParc','bVeg'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' (tours '+x(B.ft||0)+(typeof LB_N!=='undefined'?' [grille '+x(LB_N.g)+' · seuils '+x(LB_N.l)+']':'')+' · modèle '+x(B.pm||0)+')'+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
+      const T_=S.T||{},dd=(a,b)=>(T_[a]&&T_[b])?((T_[b]-T_[a])/1000).toFixed(2):'…';box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'  rangées recalées '+(S.rowReg?S.rowReg.moved+'/'+S.rowReg.rows+' ('+dd('rasters','rows')+' s)':'—')+' · adresse '+dd('start','geo')+' · bâtiment de l\'adresse '+dd('geo','link')+' · bâtiments+altitude IGN '+dd(T_.link?'link':'geo','feats')+' · relief laser '+dd('feats','relief')+' · construction '+dd('relief','scene'),'après la scène : routes/végétation/météo… (réseau) '+dd('scene','netA')+' · constructions (réseau) '+dd('netA','netB')+' · routes '+dd('netB','bRoads')+' · ouvrages '+dd('bRoads','bStruct')+' · couches '+dd('bStruct','bLayers')+' · plan+arbres IGN '+dd('bLayers','bPlan')+' · fondu '+dd('bPlan','layers')+' · parcelles '+dd('layers','bParc')+' · végétation '+dd('bParc','bVeg'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' (tours '+x(B.ft||0)+(typeof LB_N!=='undefined'?' [grille '+x(LB_N.g)+' · seuils '+x(LB_N.l)+']':'')+' · modèle '+x(B.pm||0)+')'+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
         'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
         fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
 }catch(e){console.warn('perf',e);}})();
