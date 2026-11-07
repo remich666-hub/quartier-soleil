@@ -2698,11 +2698,11 @@ function findTowers(rings,u,F,green){
   const r0=rings[0],a=domAngle(r0),ca=Math.cos(a),sa=Math.sin(a),sh=u.shift||{dx:0,dy:0},st=0.5,cA=st*st;
   let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9; r0.forEach(p=>{const U=p.x*ca+p.y*sa,V=-p.x*sa+p.y*ca;u0=Math.min(u0,U);u1=Math.max(u1,U);v0=Math.min(v0,V);v1=Math.max(v1,V);});
   const nu=Math.ceil((u1-u0)/st),nv=Math.ceil((v1-v0)/st); if(nu<4||nv<4||nu*nv>200000)return null;
-  const H=new Float32Array(nu*nv).fill(NaN),XY=new Float32Array(nu*nv*2); let nIn=0; const hs=[];
+  const _t0=performance.now();const H=new Float32Array(nu*nv).fill(NaN),XY=new Float32Array(nu*nv*2); let nIn=0; const hs=[];
   for(let j=0;j<nv;j++)for(let i=0;i<nu;i++){const U=u0+(i+0.5)*st,V=v0+(j+0.5)*st,x=U*ca-V*sa,y=U*sa+V*ca,k=j*nu+i;XY[k*2]=x;XY[k*2+1]=y;
     if(!pointInPoly(x,y,r0))continue;let hole=false;for(let q=1;q<rings.length;q++)if(pointInPoly(x,y,rings[q])){hole=true;break;}if(hole)continue;
     nIn++;const v=F.at(x+sh.dx,y+sh.dy);if(v==null)continue;const hh=v-S.alt0-u.zBase;if(hh<2||green(x+sh.dx,y+sh.dy)>12)continue;H[k]=hh;hs.push(hh);}
-  if(hs.length<40)return null; hs.sort((p,q)=>p-q);
+  LB_N.g+=performance.now()-_t0;if(hs.length<40)return null; hs.sort((p,q)=>p-q);const _t1=performance.now();
   const used=new Uint8Array(nu*nv),towers=[],lab=new Int32Array(nu*nv);let id=0;
   const rough=new Map(); /* the roughness test of a rectangle depends on the rectangle only: a crown met again at the next threshold is not measured again */
   for(let T=qtl(hs,0.35);T<=qtl(hs,0.98);T+=0.5){
@@ -2727,7 +2727,7 @@ function findTowers(rings,u,F,green){
       cells.forEach(c=>used[c]=1); towers.push({cells,i0,i1,j0,j1});
     }
   }
-  if(!towers.length)return null;
+  LB_N.l+=performance.now()-_t1;LB_N.nT++;if(!towers.length)return null;
   const W=(U,V)=>new THREE.Vector2(U*ca-V*sa,U*sa+V*ca), pt=c=>({x:XY[c*2],y:XY[c*2+1],h:H[c]});
   const out=towers.map(t=>{const R=[W(u0+t.i0*st,v0+t.j0*st),W(u0+(t.i1+1)*st,v0+t.j0*st),W(u0+(t.i1+1)*st,v0+(t.j1+1)*st),W(u0+t.i0*st,v0+(t.j1+1)*st)];
     let poly=r0.slice();for(let e=0;e<4&&poly;e++){const p=R[e],q=R[(e+1)%4];poly=clipHalf(poly,-(q.y-p.y),q.x-p.x,(q.y-p.y)*p.x-(q.x-p.x)*p.y);}
@@ -2740,12 +2740,12 @@ function findTowers(rings,u,F,green){
 let _pcLib=null;
 function polyClip(){if(!_pcLib)_pcLib=import('https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/+esm').then(m=>{PCSYNC=m.default||m;return PCSYNC;});return _pcLib;}
 setTimeout(()=>polyClip().catch(()=>{}),800);
-let GID=0; var LB_N={rough:0,hit:0}; const QS_AV=/[?&]avant\b/.test(location.search);
+let GID=0; var LB_N={rough:0,hit:0,g:0,l:0,nT:0}; const QS_AV=/[?&]avant\b/.test(location.search);
 async function lidarBuildings(){
   // cancelled only by a new address (S.T is per load), not by the tree refinement that the photo starts meanwhile:
   // that used to abort the rebuild half-way whenever the photo arrived during it (no laser buildings, or different ones per load)
   const L=S.T, gone_=()=>S.T!==L; if(!S.lidarP||S.lidarRun===L)return; S.lidarRun=L;
-  const LB=S.LB={T:L,a:performance.now(),smp:0,rough:0,split:0,tw:0,mk:0,yld:0,ny:0,nb:0}; const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); LB.ras=performance.now(); if(gone_()||(!Ff&&!Fc))return; S.mnsF=Ff||null;
+  LB_N={rough:0,hit:0,g:0,l:0,nT:0}; const LB=S.LB={T:L,a:performance.now(),smp:0,rough:0,split:0,tw:0,mk:0,yld:0,ny:0,nb:0}; const [Ff,Fc,MH]=await Promise.all([S.lidarP.mnsFine,S.lidarP.mns,S.lidarP.mnh]); LB.ras=performance.now(); if(gone_()||(!Ff&&!Fc))return; S.mnsF=Ff||null;
   // the 20 cm photo tells foliage from roof (a crown over a roof is not a storey): without it the result would depend on which
   // arrived first, the laser or the photo, and the same address could give different buildings from one load to the next
   for(let i=0;i<80&&!S.rawOrtho;i++){await new Promise(r=>setTimeout(r,150));if(gone_())return;}
@@ -3964,7 +3964,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.scan0&&!ev.scan)ev.scan=now;
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
       const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
-      const T_=S.T||{},dd=(a,b)=>(T_[a]&&T_[b])?((T_[b]-T_[a])/1000).toFixed(2):'…';box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'  adresse '+dd('start','geo')+' · bâtiment de l\'adresse '+dd('geo','link')+' · bâtiments+altitude IGN '+dd(T_.link?'link':'geo','feats')+' · relief laser '+dd('feats','relief')+' · construction '+dd('relief','scene'),'après la scène : routes/végétation/météo… (réseau) '+dd('scene','netA')+' · constructions (réseau) '+dd('netA','netB')+' · routes '+dd('netB','bRoads')+' · ouvrages '+dd('bRoads','bStruct')+' · couches '+dd('bStruct','bLayers')+' · plan+arbres IGN '+dd('bLayers','bPlan')+' · fondu '+dd('bPlan','layers')+' · parcelles '+dd('layers','bParc')+' · végétation '+dd('bParc','bVeg'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' (tours '+x(B.ft||0)+' · modèle '+x(B.pm||0)+')'+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
+      const T_=S.T||{},dd=(a,b)=>(T_[a]&&T_[b])?((T_[b]-T_[a])/1000).toFixed(2):'…';box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'  adresse '+dd('start','geo')+' · bâtiment de l\'adresse '+dd('geo','link')+' · bâtiments+altitude IGN '+dd(T_.link?'link':'geo','feats')+' · relief laser '+dd('feats','relief')+' · construction '+dd('relief','scene'),'après la scène : routes/végétation/météo… (réseau) '+dd('scene','netA')+' · constructions (réseau) '+dd('netA','netB')+' · routes '+dd('netB','bRoads')+' · ouvrages '+dd('bRoads','bStruct')+' · couches '+dd('bStruct','bLayers')+' · plan+arbres IGN '+dd('bLayers','bPlan')+' · fondu '+dd('bPlan','layers')+' · parcelles '+dd('layers','bParc')+' · végétation '+dd('bParc','bVeg'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' (tours '+x(B.ft||0)+(typeof LB_N!=='undefined'?' [grille '+x(LB_N.g)+' · seuils '+x(LB_N.l)+']':'')+' · modèle '+x(B.pm||0)+')'+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
         'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
         fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
 }catch(e){console.warn('perf',e);}})();
