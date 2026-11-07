@@ -2915,7 +2915,8 @@ async function qsV4(){
     const legacy=window.__qsOld||window.__qsV4geo||sessionStorage.getItem('qsGeo')==='v4';let pre;
     /* the next blocks of the list are asked of the other workers meanwhile (their answers wait on the item) */
     if(!legacy&&!it.req)it.req=qsModelReq(it.fam).catch(e=>{console.error('v5 model',e);return null;}); /* this block first, then the next ones */
-    if(!legacy&&typeof QW!=='undefined'&&QW.ws&&QW.ws.length>1){let k=0;for(const nx of list){if(k>=QW.ws.length-1)break;if(!nx.req&&!nx.fam.some(o=>QV4.used.has(o))){nx.req=qsModelReq(nx.fam).catch(()=>null);}k++;}}
+    const ownIt=S.addrTarget&&it.fam.includes(S.addrTarget); /* the house alone first: its tries get the cores */
+    if(!legacy&&!ownIt&&typeof QW!=='undefined'&&QW.ws&&QW.ws.length>1){let k=0;for(const nx of list){if(k>=QW.ws.length-1)break;if(!nx.req&&!nx.fam.some(o=>QV4.used.has(o))){nx.req=qsModelReq(nx.fam).catch(()=>null);}k++;}}
     if(!legacy){const tq=performance.now();try{pre=await (it.req||qsModelReq(it.fam));}catch(e){console.error('v5 model',e);pre=null;}QV4.tWait=(QV4.tWait||0)+performance.now()-tq;
       if(S.T!==T)return;if(it.fam.some(o=>!o.parent||QV4.used.has(o)))continue;while(performance.now()-QV4.last<600){await qsSleep(120);if(S.T!==T)return;}}
     it.fam.forEach(o=>QV4.tried.add(o));
@@ -3929,7 +3930,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
     setInterval(()=>{try{const now=performance.now();if(now-ft>=1000){fps=Math.round(frames*1000/(now-ft));frames=0;ft=now;}
       const u0=window.__QSU,q=(typeof QV4!=='undefined'&&QV4)||{},v=document.getElementById('qsVeil'),t0=(S.T&&S.T.start)||0,r=x=>((x-t0)/1000).toFixed(1)+' s';
       if(v&&!v.classList.contains('on')&&!ev.veil&&S.T&&S.T.scene)ev.veil=now;if(q.done&&q.done.length&&!ev.roof)ev.roof=now;
-      const LR=S.lidarR||{};if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
+      if(S.T!==ev._T){for(const k in ev)delete ev[k];ev._T=S.T;}const LR=S.lidarR&&S.lidarP&&S.T&&S.T.start?S.lidarR:{};if(LR.mnh&&!ev.mnh)ev.mnh=now;if(LR.mnsFine&&!ev.fine)ev.fine=now;if(LR.mns&&!ev.mns)ev.mns=now;if(u0&&u0.uScanR.value<1e5&&u0.uScanR.value>0&&!ev.scan0)ev.scan0=now;if(ev.roof&&q.busy===false&&!ev.idle)ev.idle=now;
       const u=window.__QSU;if(u&&u.uScanR.value>=1e5&&ev.scan0&&!ev.scan)ev.scan=now;
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
       const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
@@ -4722,11 +4723,14 @@ function qsModelReq(fam){const main=fam.slice().sort((p,q)=>Math.abs(areaOf(q.us
     qsPick().postMessage(Object.assign({kind:'model',id,big,stages,R:Rq},msg));});
   /* the studied house, with more than one worker: its three tries side by side, then the same choice as one after the other */
   const own=S.addrTarget&&fam.includes(S.addrTarget);
-  if(own&&QW.ws.length>1)return Promise.all([ask({only:{}},wantStages),ask({only:{noShift:true}},false),ask({only:{big:false,lam:4,kinks:true}},false)]).then(([a,b,c])=>new Promise(res=>{
-    if(a.err&&b.err&&c.err)return res(undefined);let M=a.M;
-    if(!M||(!big&&M.rms>0.12)){const M2=b.M;if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;}
-    if(!M||M.rms>0.3){const M3=c.M;if(M3&&(!M||M3.rms<M.rms*0.9))M=M3;}
-    done(M,res);}));
+  /* the studied house, with more than one worker: its first two tries side by side; the answer is taken as soon as it is known
+     (the same choice as one after the other), the third try only when it is needed */
+  if(own&&QW.ws.length>1){const pa=ask({only:{}},wantStages),pb=ask({only:{noShift:true}},false);
+    return pa.then(a=>{let M=a.M;const enough=M=>M&&M.rms<=0.3;
+      if(M&&(big||M.rms<=0.12))return enough(M)?M:ask({only:{big:false,lam:4,kinks:true}},false).then(c=>{const M3=c.M;return (M3&&M3.rms<M.rms*0.9)?M3:M;});
+      return pb.then(b=>{const M2=b.M;if(M2&&(!M||M2.rms<M.rms-0.005))M=M2;
+        if(!M||M.rms>0.3)return ask({only:{big:false,lam:4,kinks:true}},false).then(c=>{const M3=c.M;return (M3&&(!M||M3.rms<M.rms*0.9))?M3:M;});return M;});
+    }).then(M=>new Promise(res=>done(M,res)));}
   return ask({},wantStages).then(d=>new Promise(res=>{if(d.err)return res(undefined);done(d.M,res);}));}
 /* windows on the v5 walls: the wall lines, their top and bottom are known along them, so no ray is needed to find the wall;
    rays only for what stands in front (a neighbour, a wing in a corner). Same rules as before: the study's storeys, 3.5 m bays,
