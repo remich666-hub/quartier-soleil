@@ -4048,7 +4048,7 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   let touched=false,shownFor='';renderer.domElement.addEventListener('pointerdown',()=>{touched=true;hint.classList.remove('on');});
   const place=()=>{try{const sh=document.getElementById('sheet');if(!sh)return;const r=sh.getBoundingClientRect(),side=matchMedia('(min-width:761px)').matches;dock(side);
       const bot=side?16:Math.max(16,innerHeight-r.top+12),right=side?Math.max(12,innerWidth-r.left+16):12;
-      if(!docked){box.style.bottom=bot+'px';box.style.right=right+'px';}back.style.bottom=bot+'px';see.style.bottom=(bot+(side?0:0))+'px';hint.style.bottom=(side?104:bot+56)+'px';}catch(e){}};
+      if(!docked){box.style.bottom=bot+'px';box.style.right=right+'px';}back.style.bottom=bot+'px';see.style.bottom=(bot+(side?0:0))+'px';{const bb=document.getElementById('bottom'),br=bb&&!bb.hidden&&bb.classList.contains('bar')?bb.getBoundingClientRect():null;hint.style.bottom=(side?(br?innerHeight-br.top+12:104):bot+56)+'px';} /* above the time bar */}catch(e){}};
   setInterval(place,250);addEventListener('resize',place);
   setInterval(()=>{try{const orbit=cam.mode==='orbit',veil=document.getElementById('qsVeil');const loading=veil&&veil.classList.contains('on');
     see.hidden=docked||!(orbit&&S.win&&S.win.pos&&!busy&&!loading);

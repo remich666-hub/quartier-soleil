@@ -872,7 +872,7 @@ async function gardensRun(TP,MH){
 async function buildParcels(lat,lon){
   const tok=++parcelTok;
   if(parcelGroup){parcelGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();});scene.remove(parcelGroup);parcelGroup=null;}
-  let feats=[]; try{feats=await wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',lat,lon,DETAIL_R+20,2500);}catch(e){return;}
+  let feats=[]; try{feats=await ((S.parcP&&S.parcPkey===lat+','+lon)?S.parcP:wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',lat,lon,DETAIL_R+20,2500));}catch(e){return;}
   for(let i=0;i<80&&!S.rawOrtho&&tok===parcelTok;i++)await new Promise(r=>setTimeout(r,250));
   if(tok!==parcelTok||!feats.length)return;
   try{S.rgbFar=S.rgbFarP?await Promise.race([S.rgbFarP,new Promise(r=>setTimeout(()=>r(null),4000))]):null;}catch(e){S.rgbFar=null;} if(tok!==parcelTok)return;
@@ -1011,6 +1011,15 @@ async function buildMNT(MS,MH,feats){ const yl=slicer(); // bare ground from the
       polys.forEach(poly=>{if(!poly[0]||poly[0].length<4)return;cg.beginPath();poly.forEach(r=>{ringToLocal(r).forEach((q,i)=>{const X=(q.x+MNT_R)/MNT_ST+0.5,Y=(MNT_R-q.y)/MNT_ST+0.5;i?cg.lineTo(X,Y):cg.moveTo(X,Y);});cg.closePath();});cg.fill('evenodd');cg.lineWidth=2/MNT_ST;cg.strokeStyle='#000';cg.stroke();});});
     // (the outline is widened by ~1 m: eaves and the 1 m pixels astride the wall read the roof, not the ground)
     const occ=cg.getImageData(0,0,N,N).data; const val=new Float32Array(N*N), seen=new Uint8Array(N*N), q=new Int32Array(N*N); let qh=0,qt=0;
+    /* at the foot of a building the laser "ground" can read the building itself (a facade or eaves the height grid missed, a roof that
+       stands out of the IGN outline): metres-high peaks along the wall. Within 6 m of a footprint, a cell more than 2.5 m above the low
+       part of the ground around it (20th percentile over ±6 m, outside the footprints) takes that value; one more than 2.5 m under its median takes the median. */
+    if(!/[?&]avant\b/.test(location.search)){const near=new Uint8Array(N*N);
+      for(let j=0;j<N;j++)for(let i=0;i<N;i++){if(occ[(j*N+i)*4+3]<128)continue;for(let dj=-6;dj<=6;dj+=2){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-6;di<=6;di+=2){const ii=i+di;if(ii>=0&&ii<N)near[jj*N+ii]=1;}}}
+      const ww=[],fix=[];for(let j=0;j<N;j++){if(!(j&31))await yl();for(let i=0;i<N;i++){const k=j*N+i;if(!near[k]||occ[k*4+3]>=128||isNaN(raw[k]))continue;ww.length=0;
+        for(let dj=-6;dj<=6;dj+=2){const jj=j+dj;if(jj<0||jj>=N)continue;for(let di=-6;di<=6;di+=2){const ii=i+di;if(ii<0||ii>=N)continue;const kk=jj*N+ii;if(occ[kk*4+3]>=128)continue;const v=raw[kk];if(v===v)ww.push(v);}}
+        if(ww.length<8)continue;ww.sort((a,b)=>a-b);const lo=ww[Math.floor(ww.length*0.2)],md=ww[ww.length>>1];if(raw[k]>lo+2.5)fix.push(k,lo);else if(raw[k]<md-2.5)fix.push(k,md); /* and pits: a roof height taken off bare ground (the two grids a metre apart) */}}
+      for(let t=0;t<fix.length;t+=2)raw[fix[t]]=fix[t+1];S.mntFix=fix.length/2;}
     for(let k=0;k<N*N;k++){if(occ[k*4+3]<128&&!isNaN(raw[k])){val[k]=raw[k];seen[k]=1;q[qt++]=k;}}
     while(qh<qt){const k=q[qh++],i=k%N,j=(k/N)|0;[[1,0],[-1,0],[0,1],[0,-1]].forEach(([di,dj])=>{const ii=i+di,jj=j+dj;if(ii<0||jj<0||ii>=N||jj>=N)return;const kk=jj*N+ii;if(seen[kk])return;seen[kk]=1;val[kk]=val[k];q[qt++]=kk;});}
     for(let k=0;k<N*N;k++)if(seen[k])raw[k]=val[k];}
@@ -2045,6 +2054,48 @@ const skyLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMater
 skyLine.renderOrder=6; skyLine.visible=false; scene.add(skyLine);
 function unproj(x,y){const kx=111320*Math.cos(S.lat*RAD),ky=110574;return [S.lon+x/kx,S.lat+y/ky];}
 function distToRing(x,y,ring){let best=1e9;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[j],b=ring[i];const dx=b.x-a.x,dy=b.y-a.y;const L2=dx*dx+dy*dy||1;let t=((x-a.x)*dx+(y-a.y)*dy)/L2;t=Math.max(0,Math.min(1,t));best=Math.min(best,Math.hypot(a.x+t*dx-x,a.y+t*dy-y));}return best;}
+/* Rows of houses (footprints that touch) registered on the laser as one block, then moved where the laser puts them.
+   A terraced house alone cannot be registered along its row (its neighbours look the same), so one by one the shifts came out at
+   random; the row as a whole has its ends and its gardens. The move is kept only if the cadastre agrees (the houses fall better
+   inside their own parcels afterwards). The footprints themselves are moved (the IGN outlines of a whole row can be ~2 m off). */
+function registerRows(feats,MH,parcels){
+  const out={rows:0,moved:0,list:[]};if(!MH||!feats||!feats.length)return out;
+  const kx=111320*Math.cos(S.lat*RAD),ky=110574;
+  const outerOf=f=>{const g=f.geometry;if(!g)return null;const c=g.type==='MultiPolygon'?g.coordinates[0][0]:g.type==='Polygon'?g.coordinates[0]:null;return c?c.map(([lo,la])=>({x:(lo-S.lon)*kx,y:(la-S.lat)*ky})):null;};
+  const B=[];feats.forEach((f,i)=>{const h=f.properties&&f.properties.hauteur;const r=outerOf(f);if(!r||r.length<4)return;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});
+    if(Math.hypot((x0+x1)/2,(y0+y1)/2)>250)return;B.push({f,r,x0,x1,y0,y1,h:typeof h==='number'?h:null});});
+  /* touching: a vertex of one within 0.6 m of an edge of the other */
+  const segD=(p,a,b)=>{const dx=b.x-a.x,dy=b.y-a.y,L=dx*dx+dy*dy;let t=L?((p.x-a.x)*dx+(p.y-a.y)*dy)/L:0;t=Math.max(0,Math.min(1,t));return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);};
+  const touch=(A,C)=>{if(A.x0>C.x1+0.6||C.x0>A.x1+0.6||A.y0>C.y1+0.6||C.y0>A.y1+0.6)return false;const t1=(P,Q)=>P.r.some(p=>{for(let i=0,j=Q.r.length-1;i<Q.r.length;j=i++)if(segD(p,Q.r[j],Q.r[i])<0.6)return true;return false;});return t1(A,C)||t1(C,A);};
+  const par=B.map((_,i)=>i),find=i=>par[i]===i?i:(par[i]=find(par[i]));
+  const G=new Map();B.forEach((b,i)=>{const k=Math.floor(b.x0/20)+','+Math.floor(b.y0/20);(G.get(k)||G.set(k,[]).get(k)).push(i);});
+  B.forEach((b,i)=>{const gx=Math.floor(b.x0/20),gy=Math.floor(b.y0/20);for(let a=-1;a<=1;a++)for(let c=-1;c<=1;c++)(G.get((gx+a)+','+(gy+c))||[]).forEach(j=>{if(j<=i)return;if(find(i)!==find(j)&&touch(b,B[j]))par[find(i)]=find(j);});});
+  const groups=new Map();B.forEach((b,i)=>{const k=find(i);(groups.get(k)||groups.set(k,[]).get(k)).push(b);});
+  const P=parcels&&parcels.length?parcels.map(f=>{const r=outerOf(f);if(!r)return null;let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;r.forEach(p=>{x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);});return {r,x0,x1,y0,y1};}).filter(Boolean):null;
+  const parcelOf=(x,y)=>{if(!P)return -1;for(let k=0;k<P.length;k++){const q=P[k];if(x<q.x0||x>q.x1||y<q.y0||y>q.y1)continue;if(pointInPoly(x,y,q.r))return k;}return -1;};
+  groups.forEach(gr=>{const big=gr.filter(b=>(b.h==null||b.h>=2.5));if(big.length<2||big.length>30)return;out.rows++;
+    const pin=[],pout=[],per=[];
+    big.forEach(b=>{const mine=[];for(let x=b.x0;x<=b.x1;x+=0.5)for(let y=b.y0;y<=b.y1;y+=0.5)if(pointInPoly(x,y,b.r)){pin.push([x,y]);mine.push([x,y]);}per.push(mine);
+      for(let i=0,j=b.r.length-1;i<b.r.length;j=i++){const a=b.r[j],c=b.r[i],L=Math.hypot(c.x-a.x,c.y-a.y);if(L<0.5)continue;let nx=(c.y-a.y)/L,ny=-(c.x-a.x)/L;const mx=(a.x+c.x)/2,my=(a.y+c.y)/2;if(pointInPoly(mx+nx*0.6,my+ny*0.6,b.r)){nx=-nx;ny=-ny;}
+        for(let t=0.5;t<L-0.4;t+=0.75){const px=a.x+(c.x-a.x)*t/L,py=a.y+(c.y-a.y)*t/L;[1,1.75].forEach(o=>{const qx=px+nx*o,qy=py+ny*o;if(!big.some(o2=>pointInPoly(qx,qy,o2.r)))pout.push([qx,qy]);});}}});
+    if(pin.length<20||pout.length<10)return;
+    const thin=(a,m)=>{if(a.length<=m)return a;const k=Math.ceil(a.length/m);return a.filter((_,i)=>i%k===0);};const pinS=thin(pin,1500),poutS=thin(pout,800);
+    const hs=big.map(b=>b.h).filter(v=>v!=null).sort((a,b)=>a-b),thr=Math.max(1.8,(hs.length?hs[hs.length>>1]:4)*0.5);
+    const frac=(pts,dx,dy)=>{let s=0,n=0;for(const [x,y] of pts){const v=MH.at(x+dx,y+dy);if(v!=null){n++;if(v>thr)s++;}}return n?s/n:0;};
+    const score=(dx,dy)=>frac(pinS,dx,dy)-0.6*frac(poutS,dx,dy);
+    const s0=score(0,0);let best={dx:0,dy:0,s:s0};
+    for(let dx=-3;dx<=3.001;dx+=1)for(let dy=-3;dy<=3.001;dy+=1){const s=score(dx,dy);if(s>best.s+0.01||(Math.abs(s-best.s)<=0.01&&Math.hypot(dx,dy)<Math.hypot(best.dx,best.dy)))best={dx,dy,s};}
+    for(const st of [0.5,0.25]){const c=best;for(let dx=c.dx-st;dx<=c.dx+st+0.001;dx+=st)for(let dy=c.dy-st;dy<=c.dy+st+0.001;dy+=st){const s=score(dx,dy);if(s>best.s+0.005)best={dx,dy,s};}}
+    const d=Math.hypot(best.dx,best.dy);if(best.s<s0+0.04||d<0.5)return;
+    /* the cadastre's say: share of each house inside its main parcel, before and after */
+    if(!P)return;const inside=(dx,dy)=>{let s=0,n=0;per.forEach(pts=>{const c=new Map();let m=0;pts.forEach(([x,y])=>{const k=parcelOf(x+dx,y+dy);if(k<0)return;m++;c.set(k,(c.get(k)||0)+1);});if(!m)return;let mx=0;c.forEach(v=>{if(v>mx)mx=v;});s+=mx;n+=m;});return n?s/n:0;};
+    const c0=inside(0,0),c1=inside(best.dx,best.dy);out.list.push({n:big.length,dx:best.dx,dy:best.dy,gain:+(best.s-s0).toFixed(3),cad0:+c0.toFixed(2),cad1:+c1.toFixed(2)});
+    if(c1<c0+0.03)return;
+    const dlo=best.dx/kx,dla=best.dy/ky;
+    gr.forEach(b=>{const g=b.f.geometry;const mv=ring=>ring.forEach(pt=>{pt[0]+=dlo;pt[1]+=dla;});if(g.type==='Polygon')g.coordinates.forEach(mv);else if(g.type==='MultiPolygon')g.coordinates.forEach(pl=>pl.forEach(mv));b.f.properties._qsRow={dx:best.dx,dy:best.dy};});
+    out.moved++;});
+  return out;
+}
 function registerFootprint(obj,MH){ // shift (≤2 m) that best lays the IGN footprint on the LiDAR roof: high inside, low just outside
   const rings=obj.userData.rings; const r0=rings[0]; const xs=r0.map(p=>p.x),ys=r0.map(p=>p.y); const pin=[],pout=[];
   for(let x=Math.min(...xs);x<=Math.max(...xs);x+=0.5)for(let y=Math.min(...ys);y<=Math.max(...ys);y+=0.5)if(pointInPoly(x,y,r0))pin.push([x,y]);
@@ -2068,15 +2119,23 @@ async function fetchSkyline(){
   const F=S.lidarP&&await S.lidarP.mnsFine, C=S.lidarP&&await S.lidarP.mns, MH=S.lidarP&&await S.lidarP.mnh;
   if(F||C){ // rasters: instant. First register the IGN footprint on the LiDAR roof (they can be 1–2 m apart), then sample from the shifted window
     const ud=w.obj.userData; const sh=MH?(ud._sh&&ud._shMH===MH?ud._sh:(ud._shMH=MH,ud._sh=registerFootprint(w.obj,MH))):{dx:0,dy:0};
-    const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8));};
-    const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+Math.sin(az)*d,y=w.pos.y+sh.dy+Math.cos(az)*d;if(d<8&&ownD(x,y,d))return;pts2.push({ai,d,x,y});}));
+    /* the building's own roof can stand out of the IGN outline (by a metre or two, and the registration does not always catch it):
+       the laser right in front of the window then reads the building itself, and the window looks walled in (0 h of sun, "blind").
+       Walk out along the normal while the laser stays at this building's own roof height: the real wall is where it drops. */
+    let eo=0;{const R=F||C,band=z=>{const h=z-S.alt0-(ud.zBase||0);return h>ud.h-4&&h<ud.h+3&&z-winZ>1;},tx=-w.normal.y,ty=w.normal.x;
+      for(let d=0;d<=3.01;d+=0.25){let k=0,m=0;for(const a of [-1.5,0,1.5]){const z=R.at(w.pos.x+sh.dx+w.normal.x*d+tx*a,w.pos.y+sh.dy+w.normal.y*d+ty*a);if(z==null)continue;m++;if(band(z))k++;}
+        if(!m||k*2<m){eo=d;break;}eo=d+0.25;}
+      if(eo>3||eo<1)eo=0; /* roof height that far out: a neighbour of the same height, not this building's edge; under 1 m: an eave, already left out below */}
+    const ex=w.normal.x*(eo>0?eo+0.3:0),ey=w.normal.y*(eo>0?eo+0.3:0);
+    const ownD=(x,y,d)=>{const q={x:x-sh.dx,y:y-sh.dy};return w.obj.userData.rings.some(r=>pointInPoly(q.x,q.y,r)||(d<2.5&&distToRing(q.x,q.y,r)<0.8))||(eo>0&&d<eo+2.5&&w.obj.userData.rings.some(r=>distToRing(x-sh.dx,y-sh.dy,r)<eo+0.8));};
+    const pts2=[];AZ.forEach((az,ai)=>D.forEach(d=>{const x=w.pos.x+sh.dx+ex+Math.sin(az)*d,y=w.pos.y+sh.dy+ey+Math.cos(az)*d;if(d<8&&ownD(x,y,d))return;pts2.push({ai,d,x,y});}));
     const LG=leafGrid(), horB=new Array(AZ.length).fill(-0.2), decAt=new Array(AZ.length).fill(false);
     pts2.forEach(p=>{let z=null;if(F&&p.d<115)z=F.at(p.x,p.y);if(z==null&&C)z=C.at(p.x,p.y);if(z==null)return;got++;const ang=Math.atan2(z-winZ,p.d);if(ang>hor[p.ai]){hor[p.ai]=ang;hits[p.ai]={d:p.d,z:z-S.alt0};}
       // the same horizon once the deciduous trees are bare: their crowns drop to the ground they stand on
       let zb=z; if(LG&&MH&&LG(p.x-sh.dx,p.y-sh.dy)===1){const hv=MH.at(p.x,p.y);if(hv!=null&&hv>1.2)zb=z-hv;}
       const ab=Math.atan2(zb-winZ,p.d); if(ab>horB[p.ai])horB[p.ai]=ab;});
     for(let i=0;i<AZ.length;i++)decAt[i]=hor[i]-horB[i]>0.5*RAD;
-    if(got>=pts2.length*0.5)return {az:AZ,hor,horB,decAt,hits,n:got,shift:sh,lg:LG};
+    if(got>=pts2.length*0.5)return {az:AZ,hor,horB,decAt,hits,n:got,shift:sh,lg:LG,edge:eo};
     got=0;hor.fill(-0.2);hits.fill(null);
   }
   const B=400; // sequential: the IGN service rate-limits parallel bursts (429)
@@ -2369,6 +2428,7 @@ async function load(q,at){
       setTimeout(()=>{if(S.lat===myLat)S.startIRC();},9000);}
     status('Bâtiments et relief IGN…');
     const pBat=Promise.all([fetchElevation(g.lat,g.lon),wfs('BDTOPO_V3:batiment',g.lat,g.lon,440,6000)]);
+    S.parcP=wfs('CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle',g.lat,g.lon,DETAIL_R+20,2500).catch(()=>[]);S.parcPkey=g.lat+','+g.lon; /* also used to check the rows' registration below */
     /* the context layers (roads, vegetation, weather, small constructions) are asked now, queued behind the buildings and the laser,
        instead of once the model is built: they used to cost ~2.5 s of waiting on a phone after the scene */
     const PN0=()=>{const R=DETAIL_R+40,RW=CONTEXT_R,L=(name,count)=>wfs('BDTOPO_V3:'+name,g.lat,g.lon,R,count).catch(()=>[]);
@@ -2383,7 +2443,9 @@ async function load(q,at){
     let alt0=alt; if(alt0==null){const a=feats.map(f=>f.properties.altitude_minimale_sol).filter(v=>typeof v==='number'&&v>-50);a.sort((x,y)=>x-y);alt0=a.length?a[Math.floor(a.length/2)]:0;}
     S.alt0=alt0; S.terrain=terrain; S.orthoState=[]; S.rawOrtho=null; S.slopeHouses=[]; S.lot=null; S.loading=true; /* nothing of the previous address may feed this one */ S.pendingRefine=false; treeSets.osm=[];treeSets.ortho=[];treeSets.ign=[];treeSets.lidar=[]; S.osmHedges=[]; S.orthoHedges=[]; refineToken++; S.lidarBuilt=false; if(lidarVegMesh){scene.remove(lidarVegMesh);lidarVegMesh.geometry.dispose();lidarVegMesh=null;} if(hedgeMesh){scene.remove(hedgeMesh);hedgeMesh.geometry.dispose();hedgeMesh=null;}
     S.mnt=null; S.cadStreets=false; status('Relief mesuré au laser…');
-    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
+    try{const LP=S.lidarP;const [mh,ms]=await Promise.race([Promise.all([LP.mnh,LP.mns]),new Promise(r=>setTimeout(()=>r([null,null]),9000))]);if(mh&&ms){S.T.rasters=performance.now();
+      if(!/[?&]avant\b/.test(location.search))try{const pf=await Promise.race([S.parcP,new Promise(r=>setTimeout(()=>r(null),2500))]);S.rowReg=registerRows(feats,mh,pf);S.T.rows=performance.now();}catch(err){console.warn('rows',err);}
+      S.mnt=await buildMNT(ms,mh,feats);S.T.mnt=performance.now();}}catch(err){S.mnt=null;}
     if(!S.mnt){status('Relief IGN…');S.terrain=await fetchTerrain(g.lat,g.lon).catch(()=>null);}
     S.T.relief=performance.now(); S.lattices=detectLattices(feats); S.arches=detectArches(feats); await buildScene(feats); applyLattices(); try{linkAnnexes();if(S.target)setHi(S.target,true);}catch(e){console.error('annexes',e);} S.T.scene=performance.now(); loadOrtho(g.lat,g.lon); loadLot(g.lat,g.lon);
     $('siteLabel').textContent=`${g.label} · ${feats.length} bâtiments${S.mnt||S.terrain?' · relief':''}`; $('site').hidden=false;
@@ -3545,13 +3607,21 @@ button.cta:hover{background:linear-gradient(100deg,color-mix(in srgb,var(--accen
   const lotMat=new THREE.MeshLambertMaterial({map:lotTex,transparent:true,depthWrite:false,emissive:new THREE.Color(0x000000),emissiveMap:lotTex,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
   lotMat._qsGlow=1; /* the parcel keeps its own wash (no fade into the air) */
   const plainMat=new THREE.MeshLambertMaterial({color:new THREE.Color(0xe6e8f3).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-8});
+  /* pools kept, in the model's own palette: a white coping and a very pale lilac-blue water (no texture, no ripples) */
+  const poolW=new THREE.MeshLambertMaterial({color:new THREE.Color(0xc9d2f2).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-12});
+  const poolC=new THREE.MeshLambertMaterial({color:new THREE.Color(0xf6f6fb).convertSRGBToLinear(),polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-10});
+  try{fadeMat(poolW);fadeMat(poolC);}catch(e){}
+  const upN=g=>{const n=new Float32Array(g.attributes.position.count*3);for(let i=2;i<n.length;i+=3)n[i]=1;g.setAttribute('normal',new THREE.BufferAttribute(n,3));}; /* flat water: straight up */
+  poolW.side=THREE.DoubleSide;
+  const isPool=o=>o&&o.isGroup&&o.children.some(c=>c.material===poolMat||c.material===poolW);
   try{ROOF.tuile.color.set(0xdcdde6);ROOF.ardoise.color.set(0xc9ccd8);ROOF.zinc.color.set(0xd6d8e2);ROOF.autre.color.set(0xdfe1e9);}catch(e){}
   const swap=(m,mat)=>{if(m&&m.material!==mat){m.material=mat;if(m.isInstancedMesh&&m.instanceColor)m.instanceColor=null;}};
   function flatten(){if(typeof photoMode!=='undefined'&&photoMode)return;
     try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
     try{if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}if(groundMat.map&&!photoMode){groundMat.map=null;groundMat.needsUpdate=true;}}catch(e){}
-    try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(o.material===poolMat||(o.isGroup||o.type==='Group'))o.visible=false;});}catch(e){}
-    try{scene.traverse(o=>{if(o.material===poolMat)o.visible=false;});}catch(e){}}
+    try{if(parcelGroup)parcelGroup.children.forEach(o=>{if(o.userData.fill)swap(o,plainMat);else if(isPool(o)){o.visible=true;o.children.forEach(c=>{if(c.material===poolMat){if(!c.geometry.attributes.normal)upN(c.geometry);swap(c,poolW);} /* the water carried no normals (its old shader did not need them): lit, it came out black */else if(c.material!==poolW)swap(c,poolC);});}
+      else if(o.material===poolMat||(o.isGroup||o.type==='Group'))o.visible=false;});}catch(e){}
+    try{scene.traverse(o=>{if(o.material===poolMat){if(o.geometry&&!o.geometry.attributes.normal)upN(o.geometry);swap(o,poolW);}});}catch(e){}}
   setInterval(flatten,1200);
   const quick=()=>{if(typeof photoMode!=='undefined'&&photoMode)return;try{swap(treeCrown,vegMat);swap(treeCrownD,vegMatD);swap(treeTrunk,trunkMat);swap(treeBranch,trunkMat);swap(hedgeMesh,vegMat);swap(lidarVegMesh,vegMat);}catch(e){}
     try{if(groundMat.vertexColors){groundMat.vertexColors=false;groundMat.needsUpdate=true;}}catch(e){}};
@@ -3629,7 +3699,7 @@ input[type=text]{background:color-mix(in srgb,#ffffff 55%,transparent)!important
     hemi.color=lerpC(0x3a438a,0xc3cbff,day);hemi.groundColor=lerpC(0x1c2048,0xd9c8ec,day);  /* shadows take this lavender fill */
     hemi.intensity=day>0.05?0.58:0.42;if(day>0.05)sun.intensity=Math.max(sun.intensity,1.05);
     scene.fog=new THREE.FogExp2(skyUni.horizon.value.getHex(),(wx&&(wx.code===45||wx.code===48))?0.004:0.0005);
-    try{groundMat.color.copy(day>0.05?lin(0xe2e4f1):lin(0x262c55));}catch(e){}
+    try{groundMat.color.copy(lin(0xe2e4f1));}catch(e){} /* the same pale ground day and night (the night light tints it): a dark ground showed through the gaps of the layers laid on it as black patches */
     try{lotMat.emissive.setRGB(0.55,0.32,0.36).multiplyScalar(1-day);lotMat.opacity=day>0.05?0.9:0.55;}catch(e){}
     try{const em=lin(0x8a3a2c).multiplyScalar(1-day);const ew=new THREE.Color(1,1,1).multiplyScalar(1-day);const setE=m=>{if(m&&m.emissive)m.emissive.copy(m._qsWinEmi?ew:em);};if(WIN_ON){const night=day<0.5;WIN_ON.blending=night?THREE.NormalBlending:THREE.MultiplyBlending;WIN_ON.color.set(night?0xffd29a:0xd47a78);} /* the window panes of the model's walls: darker than the wall by day, lit at night */[PART_HI.roof,PART_HI.wall,PART_HI.wallT].forEach(setE);for(const k in matCache)if(k.startsWith('T:'))matCache[k].forEach(setE);}catch(e){}};}catch(e){console.warn('model sky',e);}
 })();
@@ -3864,6 +3934,12 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   #qsMiniBox{position:fixed;right:12px;bottom:200px;width:min(34vw,180px);aspect-ratio:1;border-radius:18px;
     box-shadow:0 10px 30px rgba(40,40,90,.28),inset 0 0 0 1px rgba(255,255,255,.55);z-index:25;touch-action:none;cursor:grab;overflow:hidden}
   #qsMiniBox[hidden]{display:none}
+  #qsMiniBox.dock{position:relative;right:auto;bottom:auto;width:100%;aspect-ratio:auto;height:170px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line,rgba(0,0,0,.08));z-index:auto;flex:none}
+  #qsMiniBox canvas{display:none;width:100%;height:100%}#qsMiniBox.dock canvas{display:block}
+  #qsMiniBox .qa{position:absolute;top:50%;transform:translateY(-50%);width:30px;height:30px;border-radius:50%;border:0;background:rgba(255,255,255,.88);color:#2a2650;font:500 18px/1 system-ui,sans-serif;
+    box-shadow:0 3px 10px rgba(40,40,90,.18);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;z-index:2}
+  #qsMiniBox .qa.l{left:8px}#qsMiniBox .qa.r{right:8px}#qsMiniBox .qa:hover{background:#fff;color:#f0773a}
+  #qsMiniCap{font:400 12px/1.35 'Instrument Sans',system-ui,sans-serif;color:var(--muted,#6b6580);margin-top:-8px}#qsMiniCap[hidden]{display:none}
   #qsBack{position:fixed;left:max(12px,env(safe-area-inset-left,0px));bottom:200px;z-index:25;
     font:500 14px/1 'Instrument Sans',system-ui,sans-serif;padding:10px 14px;border-radius:999px;border:0;background:rgba(255,255,255,.92);color:#2a2650;box-shadow:0 6px 18px rgba(40,40,90,.22)}
   #qsBack[hidden]{display:none}
@@ -3878,6 +3954,15 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   const mk=(tag,id,html)=>{const e=document.createElement(tag);e.id=id;if(html)e.innerHTML=html;document.body.appendChild(e);return e;};
   const fadeEl=mk('div','qsFade'),box=mk('div','qsMiniBox'),back=mk('button','qsBack','← Maquette'),see=mk('button','qsSee','Voir depuis la fenêtre'),hint=mk('div','qsHint','<b>Touchez votre fenêtre</b><small>Vous pourrez ajuster l\'étage et la façade ensuite.</small>');
   box.hidden=true;back.hidden=true;see.hidden=true;back.type='button';see.type='button';
+  const cv2=document.createElement('canvas');box.appendChild(cv2);const ctx2=cv2.getContext('2d');
+  const arrow=(cls,txt,dir)=>{const a=document.createElement('button');a.type='button';a.className='qa '+cls;a.textContent=txt;a.setAttribute('aria-label',dir>0?'Tourner vers la droite':'Tourner vers la gauche');
+    a.addEventListener('pointerdown',e=>e.stopPropagation());a.addEventListener('click',e=>{e.stopPropagation();if(mth!==null)tgt=(tgt!==null?tgt:mth)-dir*Math.PI/2;});box.appendChild(a);};
+  arrow('l','‹',-1);arrow('r','›',1);
+  const cap=document.createElement('div');cap.id='qsMiniCap';cap.textContent='Votre fenêtre. Glissez pour tourner, touchez une façade pour y placer la fenêtre.';cap.hidden=true;
+  /* desktop (side panel): the miniature sits in the panel, above the façade and floor settings it goes with; the floating
+     "back" and "see from the window" buttons go (the panel has its own button for both) */
+  let docked=false;const dock=on=>{if(on===docked)return;docked=on;const wb=document.getElementById('winBox'),lab=wb&&wb.querySelector(':scope > .n');
+    if(on&&lab){lab.after(box);box.after(cap);box.classList.add('dock');box.style.bottom=box.style.right='';}else{document.body.appendChild(box);cap.remove();box.classList.remove('dock');}};
   const isDay=()=>{try{return sun.position.z-sun.target.position.z>0;}catch(e){return true;}};
   const fade=(mid)=>new Promise(res=>{fadeEl.style.setProperty('--qs-fade',isDay()?'#f3effa':'#1d2048');fadeEl.classList.add('on');
     setTimeout(()=>{try{mid&&mid();}catch(e){console.warn(e);}requestAnimationFrame(()=>{fadeEl.classList.remove('on');setTimeout(res,130);});},125);});
@@ -3889,15 +3974,45 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
   see.addEventListener('click',()=>{hint.classList.remove('on');setMode('window');});
   /* 2. the house in miniature: only the studied house (its own layer), turned by the finger, drawn in a corner of the same canvas */
   const mc=new THREE.PerspectiveCamera(30,1,0.5,3000);let mth=null,boxKey='',ctr=new THREE.Vector3(),rad=10;const LM=9;
-  const mark=new THREE.Mesh(new THREE.SphereGeometry(0.55,16,12),new THREE.MeshBasicMaterial({color:0xf0773a,fog:false,toneMapped:false,depthTest:false}));
-  mark.layers.set(LM);mark.renderOrder=10;scene.add(mark);
+  /* the chosen window drawn exactly (a quad over its own decal, with a border), the window under the mouse, and a fan showing where
+     the big view is looking; all on the miniature's own layer */
+  const qGeo=()=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(12),3));g.setIndex([0,1,2,0,2,3]);return g;};
+  const qMat=(c,o,dt)=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:o,fog:false,toneMapped:false,depthTest:dt,depthWrite:false,side:THREE.DoubleSide});
+  const selB=new THREE.Mesh(qGeo(),qMat(0xb8461c,1,true)),selF=new THREE.Mesh(qGeo(),qMat(0xff8a3d,1,true)),hov=new THREE.Mesh(qGeo(),qMat(0xfff4e6,0.95,true));
+  const fanG=new THREE.BufferGeometry();fanG.setAttribute('position',new THREE.BufferAttribute(new Float32Array(9*8),3));const fan=new THREE.Mesh(fanG,qMat(0xf0773a,0.38,false));
+  [selB,selF,hov,fan].forEach((m,i)=>{m.layers.set(LM);m.renderOrder=10+i;m.visible=false;m.frustumCulled=false;scene.add(m);});
+  const mark={get visible(){return selF.visible;},set visible(v){selB.visible=selF.visible=fan.visible=v;if(!v)hov.visible=false;},position:new THREE.Vector3()};
+  const setQ=(m,c,ux,uy,nx,ny,hw,z0,z1,o)=>{const a=m.geometry.attributes.position.array,ox=nx*o,oy=ny*o;
+    a.set([c.x-ux*hw+ox,c.y-uy*hw+oy,z0, c.x+ux*hw+ox,c.y+uy*hw+oy,z0, c.x+ux*hw+ox,c.y+uy*hw+oy,z1, c.x-ux*hw+ox,c.y-uy*hw+oy,z1]);m.geometry.attributes.position.needsUpdate=true;m.geometry.computeBoundingSphere();};
+  /* the windows of the family, read from the decals that draw them (6 vertices a window: bottom-left, bottom-right, top-right…) */
+  let winKey='',wins=[];
+  const winsOf=fam=>{const decs=[];fam.forEach(o=>o.children.forEach(c=>{if(c.userData.winDecal)decs.push(c);}));const k=decs.map(d=>d.geometry.uuid).join();if(k===winKey)return wins;winKey=k;wins=[];
+    const v=new THREE.Vector3();decs.forEach(d=>{d.updateMatrixWorld(true);const a=d.geometry.attributes.position;for(let i=0;i+5<a.count;i+=6){
+      const p0=v.fromBufferAttribute(a,i).applyMatrix4(d.matrixWorld).clone(),p1=v.fromBufferAttribute(a,i+1).applyMatrix4(d.matrixWorld).clone(),p2=v.fromBufferAttribute(a,i+2).applyMatrix4(d.matrixWorld).clone();
+      const dx=p1.x-p0.x,dy=p1.y-p0.y,L=Math.hypot(dx,dy);if(L<0.05)continue;const ux=dx/L,uy=dy/L;
+      wins.push({c:new THREE.Vector3((p0.x+p1.x)/2,(p0.y+p1.y)/2,(p0.z+p2.z)/2),ux,uy,nx:uy,ny:-ux,hw:L/2,z0:p0.z,z1:p2.z});}});return wins;};
+  const winAt=(p,tol,n)=>{let best=null,bd=1e9;for(const w of wins){if(n&&w.nx*n.x+w.ny*n.y<0.9)continue;const ex=p.x-w.c.x,ey=p.y-w.c.y,dn=Math.abs(ex*w.nx+ey*w.ny),t=Math.abs(ex*w.ux+ey*w.uy);
+      if(dn>(n?3:0.8)||t>w.hw+tol||p.z<w.z0-tol||p.z>w.z1+tol)continue;const d=dn+Math.max(0,t-w.hw)+Math.max(0,w.z0-p.z,p.z-w.z1);if(d<bd){bd=d;best=w;}}return best;};
+  let tgt=null,lastWin='',hovW=null;
   const cc=new THREE.Color();
   const placeCam=()=>{const ph=0.5,d=rad*3.3;mc.position.set(ctr.x+d*Math.cos(ph)*Math.sin(mth),ctr.y+d*Math.cos(ph)*Math.cos(mth),ctr.z+d*Math.sin(ph));mc.up.set(0,0,1);mc.lookAt(ctr);mc.updateMatrixWorld();};
-  window.__qsMini={hide(){box.hidden=true;back.hidden=true;mark.visible=false;},
-    draw(R0,b,LH){const w=S.win;if(!w||!w.pos){this.hide();return;}box.hidden=false;back.hidden=false;
+  window.__qsMini={hide(){box.hidden=true;back.hidden=true;cap.hidden=true;mark.visible=false;},
+    draw(R0,b,LH){const w=S.win;if(!w||!w.pos){this.hide();return;}box.hidden=false;back.hidden=docked;cap.hidden=!docked;
       const fam=family(b),key=b.uuid+fam.length;if(key!==boxKey){const bb=new THREE.Box3();fam.forEach(o=>bb.expandByObject(o));bb.getCenter(ctr);const sz=bb.getSize(new THREE.Vector3());rad=Math.max(4,Math.max(sz.x,sz.y,sz.z)/2);boxKey=key;mth=null;}
       if(mth===null)mth=Math.atan2(w.normal.x,w.normal.y)+0.6; /* first seen from the window's side, a little turned */
-      mark.position.copy(w.pos);mark.visible=true;
+      /* a new window: the miniature turns (smoothly) to face it, a little from the side */
+      const wk=w.pos.x.toFixed(2)+','+w.pos.y.toFixed(2)+','+w.pos.z.toFixed(2);if(wk!==lastWin){lastWin=wk;tgt=Math.atan2(w.normal.x,w.normal.y)+0.45;}
+      if(tgt!==null){const d=wrap(tgt,mth)-mth;if(Math.abs(d)<0.002){mth=tgt;tgt=null;}else mth+=d*0.14;}
+      winsOf(fam);const sw=winAt(w.pos,0.9,w.normal);
+      const pad=Math.max(0.35,rad*0.05); /* the border grows with the building, so the chosen window reads at any size */
+      if(sw){setQ(selB,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw+pad,sw.z0-pad,sw.z1+pad,0.08);setQ(selF,sw.c,sw.ux,sw.uy,sw.nx,sw.ny,sw.hw,sw.z0,sw.z1,0.12);}
+      else{const n=w.normal,ux=-n.y,uy=n.x,e=(window.__qsEyeD||0);setQ(selB,w.pos,ux,uy,n.x,n.y,0.65+pad,w.pos.z-0.75-pad,w.pos.z+0.75+pad,e+0.08);setQ(selF,w.pos,ux,uy,n.x,n.y,0.65,w.pos.z-0.75,w.pos.z+0.75,e+0.12);}
+      { /* the fan: where the big view looks (its yaw), from the window, flat */
+        const o=sw?sw.c:w.pos,yaw=cam.baseYaw+cam.yaw,hf=Math.min(1.2,((cam.hfov||70)*Math.PI/180)/2),Lf=rad*0.9,a=fan.geometry.attributes.position.array;let k=0;
+        for(let i=0;i<8;i++){const t0=yaw-hf+2*hf*i/8,t1=yaw-hf+2*hf*(i+1)/8;a.set([o.x,o.y,o.z, o.x+Lf*Math.sin(t0),o.y+Lf*Math.cos(t0),o.z, o.x+Lf*Math.sin(t1),o.y+Lf*Math.cos(t1),o.z],k);k+=9;}
+        fan.geometry.attributes.position.needsUpdate=true;fan.geometry.computeBoundingSphere();}
+      mark.visible=true;
+      if(hovW&&(!sw||hovW!==sw)){setQ(hov,hovW.c,hovW.ux,hovW.uy,hovW.nx,hovW.ny,hovW.hw,hovW.z0,hovW.z1,0.1);hov.visible=true;}else hov.visible=false;
       const cr=renderer.domElement.getBoundingClientRect(),rr=box.getBoundingClientRect();if(!rr.width)return;
       const x=rr.left-cr.left,y=cr.bottom-rr.bottom,W=rr.width,H=rr.height;mc.aspect=W/H;mc.updateProjectionMatrix();placeCam();
       mc.layers.set(LH);mc.layers.enable(LM);if(!this._lit){scene.traverse(o=>{if(o.isLight){o.layers.enable(LH);o.layers.enable(LM);}});this._lit=1;}
@@ -3905,16 +4020,23 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       renderer.autoClear=false;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=false;scene.background=null;
       renderer.setScissorTest(true);renderer.setScissor(x,y,W,H);renderer.setViewport(x,y,W,H);renderer.setClearColor(isDay()?0xeef0fb:0x232750,1);renderer.clear(true,true,false);
       R0(scene,mc);
+      if(docked){const pr=renderer.getPixelRatio(),cw=Math.round(W*pr),ch=Math.round(H*pr);if(cv2.width!==cw||cv2.height!==ch){cv2.width=cw;cv2.height=ch;}
+        try{ctx2.drawImage(renderer.domElement,Math.round(x*pr),Math.round((cr.height-y-H)*pr),cw,ch,0,0,cw,ch);}catch(e){}}
       const sz=new THREE.Vector2();renderer.getSize(sz);renderer.setScissorTest(false);renderer.setViewport(0,0,sz.x,sz.y);renderer.setClearColor(cc,ca);scene.background=bg;
       renderer.autoClear=au;renderer.shadowMap.autoUpdate=su;renderer.shadowMap.needsUpdate=sn;}};
   /* turn it, or touch it: a wall moves the window there (the same rules as on the model), the roof goes back to the model */
   let pd=null;
   box.addEventListener('pointerdown',e=>{pd={x:e.clientX,y:e.clientY,x0:e.clientX,moved:false,id:e.pointerId};try{box.setPointerCapture(e.pointerId);}catch(_){}e.stopPropagation();});
-  box.addEventListener('pointermove',e=>{if(!pd||e.pointerId!==pd.id)return;const dx=e.clientX-pd.x;if(Math.abs(e.clientX-pd.x0)>6)pd.moved=true;mth-=dx*0.012;pd.x=e.clientX;});
-  box.addEventListener('pointerup',e=>{if(!pd||e.pointerId!==pd.id)return;const was=pd;pd=null;if(was.moved)return;
-    const rr=box.getBoundingClientRect(),nx=((e.clientX-rr.left)/rr.width)*2-1,ny=-((e.clientY-rr.top)/rr.height)*2+1;
-    const rc=new THREE.Raycaster();rc.layers.set(7);rc.setFromCamera(new THREE.Vector2(nx,ny),mc);const h=rc.intersectObjects(scene.children,true)[0];
+  box.addEventListener('pointermove',e=>{if(!pd||e.pointerId!==pd.id)return;const dx=e.clientX-pd.x;if(Math.abs(e.clientX-pd.x0)>6)pd.moved=true;mth+=dx*0.012;tgt=null;hovW=null;pd.x=e.clientX;});
+  const under=(cx,cy)=>{const rr=box.getBoundingClientRect(),nx=((cx-rr.left)/rr.width)*2-1,ny=-((cy-rr.top)/rr.height)*2+1;
+    const rc=new THREE.Raycaster();rc.layers.set(7);rc.setFromCamera(new THREE.Vector2(nx,ny),mc);return {nx,ny,h:rc.intersectObjects(scene.children,true)[0]};};
+  box.addEventListener('pointermove',e=>{if(pd||e.pointerType!=='mouse')return;try{const u=under(e.clientX,e.clientY);hovW=u.h&&Math.abs(u.h.face.normal.clone().transformDirection(u.h.object.matrixWorld).z)<0.3?winAt(u.h.point,0.6):null;box.style.cursor=hovW?'pointer':'grab';}catch(_){hovW=null;}});
+  box.addEventListener('pointerleave',()=>{hovW=null;});
+  box.addEventListener('pointerup',e=>{if(!pd||e.pointerId!==pd.id)return;const was=pd;pd=null;if(was.moved){tgt=null;return;}
+    let {nx,ny,h}=under(e.clientX,e.clientY);
     if(!h){return;}if(Math.abs(h.face.normal.clone().transformDirection(h.object.matrixWorld).z)>=0.3){setMode('orbit');return;}
+    /* on a window: aim at its centre, so the very window touched is the one chosen */
+    {const ww=winAt(h.point,0.6);if(ww){const c=ww.c.clone().addScaledVector(new THREE.Vector3(ww.nx,ww.ny,0),0.05).project(mc);nx=c.x;ny=c.y;}}
     /* a wall: run the model's own pick as if the finger had touched this point on the big view, seen from the miniature's camera */
     fade(()=>{const sv={p:camera.position.clone(),q:camera.quaternion.clone(),pm:camera.projectionMatrix.clone(),pi:camera.projectionMatrixInverse.clone()},lay=ray.layers.mask;
       camera.position.copy(mc.position);camera.quaternion.copy(mc.quaternion);camera.updateMatrixWorld(true);camera.projectionMatrix.copy(mc.projectionMatrix);camera.projectionMatrixInverse.copy(mc.projectionMatrixInverse);ray.layers.set(7);
@@ -3924,14 +4046,15 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       if(S.win&&S.win.pos){const n=S.win.normal;cam.baseYaw=Math.atan2(n.x,n.y);cam.yaw=0;cam.pitch=0.05;}setFov();applyCam();update();});});
   /* 3. "see from the window" next to the chosen window on the model; the hint only if nothing was touched for a while */
   let touched=false,shownFor='';renderer.domElement.addEventListener('pointerdown',()=>{touched=true;hint.classList.remove('on');});
-  const place=()=>{try{const sh=document.getElementById('sheet');if(!sh)return;const r=sh.getBoundingClientRect(),side=r.width<innerWidth*0.7&&r.height>innerHeight*0.5;
+  const place=()=>{try{const sh=document.getElementById('sheet');if(!sh)return;const r=sh.getBoundingClientRect(),side=matchMedia('(min-width:761px)').matches;dock(side);
       const bot=side?16:Math.max(16,innerHeight-r.top+12),right=side?Math.max(12,innerWidth-r.left+16):12;
-      box.style.bottom=bot+'px';box.style.right=right+'px';back.style.bottom=bot+'px';see.style.bottom=(bot+(side?0:0))+'px';hint.style.bottom=(bot+56)+'px';}catch(e){}};
+      if(!docked){box.style.bottom=bot+'px';box.style.right=right+'px';}back.style.bottom=bot+'px';see.style.bottom=(bot+(side?0:0))+'px';{const bb=document.getElementById('bottom'),br=bb&&!bb.hidden&&bb.classList.contains('bar')?bb.getBoundingClientRect():null;hint.style.bottom=(side?(br?innerHeight-br.top+12:104):bot+56)+'px';} /* above the time bar */}catch(e){}};
   setInterval(place,250);addEventListener('resize',place);
   setInterval(()=>{try{const orbit=cam.mode==='orbit',veil=document.getElementById('qsVeil');const loading=veil&&veil.classList.contains('on');
-    see.hidden=!(orbit&&S.win&&S.win.pos&&!busy&&!loading);
+    see.hidden=docked||!(orbit&&S.win&&S.win.pos&&!busy&&!loading);
     const key=S.label||'';if(key!==shownFor){shownFor=key;touched=false;hint.classList.remove('on');hint._t=performance.now();}
-    if(!touched&&orbit&&!loading&&S.building&&performance.now()-(hint._t||0)>6000)hint.classList.add('on');}catch(e){}},300);
+    if(!orbit||(S.win&&S.win.pos))hint.classList.remove('on'); /* a window chosen, or the view from it: nothing to hint */
+    else if(!touched&&!loading&&S.building&&performance.now()-(hint._t||0)>6000)hint.classList.add('on');}catch(e){}},300);
 }catch(e){console.warn('window flow',e);}})();
 
 /* ===== Performance: shadows only when something changed, nothing drawn beyond the fade, a lighter pixel ratio on phones;
@@ -3971,10 +4094,62 @@ try{window.__setMin=m=>{S.minute=m;try{$('time').value=m;}catch(e){}update();};}
       box.style.display=(ev.idle&&ev.scan)||(t0&&now-t0>90000)?'':'none'; /* only once the roofs and the reveal are done: it would hide the intro */
       let drawn=0;scene.traverse(o=>{if(o.isMesh&&o.visible)drawn++;});
       const TT=q.TT?Object.entries(q.TT).filter(([k])=>k!=='_').map(([k,x])=>k+' '+(x/1000).toFixed(1)).join(' · '):'';
-      const T_=S.T||{},dd=(a,b)=>(T_[a]&&T_[b])?((T_[b]-T_[a])/1000).toFixed(2):'…';box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'  adresse '+dd('start','geo')+' · bâtiment de l\'adresse '+dd('geo','link')+' · bâtiments+altitude IGN '+dd(T_.link?'link':'geo','feats')+' · relief laser '+dd('feats','relief')+' · construction '+dd('relief','scene'),'après la scène : routes/végétation/météo… (réseau) '+dd('scene','netA')+' · constructions (réseau) '+dd('netA','netB')+' · routes '+dd('netB','bRoads')+' · ouvrages '+dd('bRoads','bStruct')+' · couches '+dd('bStruct','bLayers')+' · plan+arbres IGN '+dd('bLayers','bPlan')+' · fondu '+dd('bPlan','layers')+' · parcelles '+dd('layers','bParc')+' · végétation '+dd('bParc','bVeg'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' (tours '+x(B.ft||0)+(typeof LB_N!=='undefined'?' [grille '+x(LB_N.g)+' · seuils '+x(LB_N.l)+']':'')+' · modèle '+x(B.pm||0)+')'+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
+      const T_=S.T||{},dd=(a,b)=>(T_[a]&&T_[b])?((T_[b]-T_[a])/1000).toFixed(2):'…';box.textContent=['scène '+(S.T&&S.T.scene?r(S.T.scene):'…'),'  rangées recalées '+(S.rowReg?S.rowReg.moved+'/'+S.rowReg.rows+' ('+dd('rasters','rows')+' s)':'—')+' · adresse '+dd('start','geo')+' · bâtiment de l\'adresse '+dd('geo','link')+' · bâtiments+altitude IGN '+dd(T_.link?'link':'geo','feats')+' · relief laser '+dd('feats','relief')+' · construction '+dd('relief','scene'),'après la scène : routes/végétation/météo… (réseau) '+dd('scene','netA')+' · constructions (réseau) '+dd('netA','netB')+' · routes '+dd('netB','bRoads')+' · ouvrages '+dd('bRoads','bStruct')+' · couches '+dd('bStruct','bLayers')+' · plan+arbres IGN '+dd('bLayers','bPlan')+' · fondu '+dd('bPlan','layers')+' · parcelles '+dd('layers','bParc')+' · végétation '+dd('bParc','bVeg'),'laser reçu  hauteurs '+(ev.mnh?r(ev.mnh):'…')+' · fin '+(ev.fine?r(ev.fine):'…')+' · large '+(ev.mns?r(ev.mns):'…'),'photo aérienne reçue '+(ev.ortho?r(ev.ortho):'…'),'laser traité '+(S.T&&S.T.lidarBuilt?r(S.T.lidarBuilt):'…'),...(()=>{const B=S.LB;if(!B||B.T!==S.T)return[];const d=(a,b)=>(B[a]&&B[b])?((B[b]-B[a])/1000).toFixed(2):'…',x=v=>(v/1000).toFixed(2);return['  début '+r(B.a)+' · maison prête '+(B.house?r(B.house):'—')+(q.early?' · son toit demandé '+r(q.early)+(q.earlyHit===false?' (perdu)':''):'')+' · données prêtes '+(B.ras?r(B.ras):'…')+' · attente photo '+d('ras','orth')+' · végétation '+d('orth','green')+' · tri '+d('green','list'),'  boucle '+d('list','loop')+' ('+B.nb+' bât.) : points '+x(B.smp)+' · arbres '+x(B.rough)+' · découpe '+x(B.split)+' · tours+modèle '+x(B.tw)+' (tours '+x(B.ft||0)+(typeof LB_N!=='undefined'?' [grille '+x(LB_N.g)+' · seuils '+x(LB_N.l)+']':'')+' · modèle '+x(B.pm||0)+')'+' · blocs '+x(B.mk)+' · pauses '+x(B.yld)+' ('+B.ny+')','  après : '+d('loop','p1')+' · toits '+d('p1','p2')+' · arêtes '+d('p2','p3')+' · treillis '+d('p3','p4')+' · annexes '+d('p4','p5')+' · '+(AVANT?'AVANT':'nouveau')];})(),'1er toit '+(ev.roof?r(ev.roof):'…'),'scan  début '+(ev.scan0?r(ev.scan0):'…')+' · fin '+(ev.scan?r(ev.scan):'…'),
         'toits finis '+(ev.idle?r(ev.idle):'…')+'  ('+((q.done||[]).length)+')','calcul '+((q.tWorker||0)/1000).toFixed(1)+' s',TT,
         fps+' img/s · '+drawn+' objets · dpr '+renderer.getPixelRatio()].join('\n');}catch(e){}},250);}
 }catch(e){console.warn('perf',e);}})();
+
+/* ===== the eye at the window stands on the wall that is drawn: the roof model's walls can sit a little outside the IGN outline
+   the window was placed on (up to a metre or two); the eye was then inside the building and the view was one flat wall colour ===== */
+(()=>{try{
+  const rc=new THREE.Raycaster(),off=new THREE.Vector3();let key='',d0=0;
+  const _ac=applyCam;
+  applyCam=function(){_ac.apply(this,arguments);try{
+    if(cam.mode!=='window'||!S.win||!S.win.pos||!S.win.normal)return;const w=S.win;
+    const k=w.pos.x.toFixed(2)+','+w.pos.y.toFixed(2)+','+w.pos.z.toFixed(2)+'|'+(w.obj?w.obj.uuid:'');
+    if(k!==key){key=k;d0=0;const dir=new THREE.Vector3(w.normal.x,w.normal.y,0).normalize(),objs=[];
+      (w.obj?family(w.obj):[]).forEach(o=>{o.traverse(c=>{if(c.isMesh&&c.visible&&!c.userData.winDecal)objs.push(c);});});
+      rc.set(w.pos,dir);rc.near=0;rc.far=4;
+      /* walls crossed from the inside (their face turned the same way as the ray): the eye goes just past the last one */
+      for(const h of rc.intersectObjects(objs,false)){const n=h.face&&h.face.normal.clone().transformDirection(h.object.matrixWorld);if(!n)continue;if(n.dot(dir)>0.2)d0=h.distance+0.15;else break;}}
+    window.__qsEyeD=d0;if(d0>0){off.set(w.normal.x,w.normal.y,0).normalize().multiplyScalar(d0);camera.position.add(off);camera.updateMatrixWorld();}
+  }catch(e){}};
+}catch(e){console.warn('window eye',e);}})();
+
+/* ===== the date and hour in the panel (desktop): the button far down the left corner read as a label, alone and away from
+   everything else. On a computer it is now a line of the panel, under the address, and its sliders open in place ===== */
+(()=>{try{
+  const st=document.createElement('style');st.textContent=`
+  #qsWhen{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 70%,#fff 30%);
+    font:500 14px/1.25 'Instrument Sans',system-ui,sans-serif;color:inherit;cursor:pointer;text-align:left;transition:border-color .2s cubic-bezier(.65,0,.35,1),background .2s cubic-bezier(.65,0,.35,1)}
+  #qsWhen:hover{border-color:var(--accent)}#qsWhen[hidden]{display:none}
+  #qsWhen svg{width:20px;height:20px;color:var(--accent);flex:none}#qsWhen .t{flex:1;min-width:0}#qsWhen .t small{display:block;font-size:11px;color:var(--muted);font-weight:400}
+  #qsWhen .m{color:var(--accent);font-size:13px;white-space:nowrap}
+  #bottom.inl{position:static;width:auto;left:auto;bottom:auto;top:auto;margin-top:-8px;box-shadow:none;padding:12px}
+  body.qsSide #timePill{display:none}
+  #bottom.bar{position:absolute;left:24px;bottom:20px;top:auto;width:auto;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 14px;border-radius:16px}
+  #bottom.bar>.slider:nth-of-type(1){flex:1 1 120px}#bottom.bar>.slider:nth-of-type(2){flex:2.2 1 180px}
+  #bottom.bar .slider label{font-size:11px}#bottom.bar .btns{grid-column:auto;display:flex;gap:8px;margin:0}#bottom.bar .btns button{white-space:nowrap}
+  #bottom.bar .val{font-size:14px;font-weight:600}`;
+  document.head.appendChild(st);
+  const left=document.getElementById('left'),bottom=document.getElementById('bottom'),pill=document.getElementById('timePill'),home=bottom.parentNode,next=bottom.nextSibling;
+  const row=document.createElement('button');row.type='button';row.id='qsWhen';row.hidden=true;row.setAttribute('aria-controls','bottom');row.setAttribute('aria-expanded','false');
+  row.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9.9" r="2.2" fill="currentColor"/></svg><span class="t"><small>Date et heure du soleil</small><span id="qsWhenT">—</span></span><span class="m">Modifier</span>';
+  row.addEventListener('click',()=>{bottom.hidden=!bottom.hidden;row.setAttribute('aria-expanded',String(!bottom.hidden));row.querySelector('.m').textContent=bottom.hidden?'Modifier':'Fermer';});
+  const BAR=!/[?&]date=panel\b/.test(location.search);
+  let side=null;
+  const sync=()=>{try{const sh=document.getElementById('sheet').getBoundingClientRect(),s=matchMedia('(min-width:761px)').matches; /* the page's own phone breakpoint */
+    if(BAR){ /* option 2: the bar, always there on a computer, across the view (left of the panel) */
+      if(s!==side){side=s;document.body.classList.toggle('qsSide',s);bottom.classList.toggle('bar',s);if(!s)bottom.hidden=true;}
+      const ad0=document.getElementById('addrDone');if(s){bottom.hidden=!(S.label&&S.T&&S.T.scene);bottom.style.right=Math.max(24,innerWidth-sh.left+24)+'px';}else bottom.style.right='';
+      row.hidden=true;return;}
+    if(s!==side){side=s;document.body.classList.toggle('qsSide',s);
+      if(s){const ad=document.getElementById('addrDone');(ad||left.firstChild).after(row);row.after(bottom);bottom.classList.add('inl');}
+      else{row.remove();home.insertBefore(bottom,next);bottom.classList.remove('inl');}}
+    const ad=document.getElementById('addrDone');row.hidden=!s||!ad||ad.hidden;if(row.hidden&&s&&!bottom.hidden&&(!ad||ad.hidden))bottom.hidden=true;
+    const d=document.getElementById('pillDate'),t=document.getElementById('pillTime');if(d&&t)document.getElementById('qsWhenT').textContent=d.textContent+' · '+t.textContent;}catch(e){}};
+  setInterval(sync,300);addEventListener('resize',sync);sync();
+}catch(e){console.warn('when row',e);}})();
 
 /* ===== the loading veil plays the home page's window (copy of home-hero.js, own ids) ===== */
 window.QS_SUN=window.QS_SUN||3;
