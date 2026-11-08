@@ -3226,7 +3226,23 @@ function qsV4One(fam,pre){
          part is a lower roof or a courtyard of the outline: a cap there floated as a slab over it (a 2 m overhang over a courtyard on one test building) */
       let parts=[];try{parts=RU&&RU.length?PCSYNC.difference([R0],...RU):[];}catch(e){parts=[];}
       parts.forEach(poly=>{const R=poly[0];let A=0,P=0;for(let k=0,j=R.length-1;k<R.length;j=k++){A+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);P+=Math.hypot(R[k][0]-R[j][0],R[k][1]-R[j][1]);}A=Math.abs(A/2);
-        if(!P||2*A/P>0.7||A<0.02)return;const shape=new THREE.Shape(R.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)));poly.slice(1).forEach(h=>shape.holes.push(new THREE.Path(h.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)))));
+        if(!P||A<0.02)return;
+        if(2*A/P>0.7){ /* a wide part of the outline the roof model left out: when the laser stands high there it is a piece of the
+           building (a wing, a corner block), drawn as its own volume up to the laser roof, with its outer walls and their windows */
+          const F=S.mnsF||(S.lidarR&&S.lidarR.mns);if(!F||A<4)return;const zs=[];let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;R.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);});
+          const inP=(x,y)=>pointInPoly(x,y,R.map(([a,b])=>({x:a,y:b})))&&!poly.slice(1).some(h=>pointInPoly(x,y,h.map(([a,b])=>({x:a,y:b}))));
+          for(let x=x0+0.25;x<x1;x+=0.5)for(let y=y0+0.25;y<y1;y+=0.5){if(!inP(x,y))continue;const v=F.at(x,y);if(v!=null)zs.push(v-S.alt0);}
+          if(zs.length<12)return;zs.sort((p,q)=>p-q);const zt=zs[zs.length>>1];if(zt-ud.zBase<2.2||zs.filter(z=>z-ud.zBase<1.2).length>zs.length*0.3)return; /* a courtyard or a low roof: nothing to draw */
+          const shp=new THREE.Shape(R.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)));poly.slice(1).forEach(h=>shp.holes.push(new THREE.Path(h.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)))));
+          const rg=new THREE.ShapeGeometry(shp);rg.translate(0,0,zt);const rm=new THREE.Mesh(rg,ROOF[u.roofKey||'autre']||ROOF.autre);rm.castShadow=rm.receiveShadow=true;rm.position.z=-z0;main.add(rm);adds.push(rm);
+          const WP=[],WN=[];const inOutA=(x,y)=>(OUT||[]).some(pl=>pointInPoly(x,y,pl[0].map(([a,b])=>({x:a,y:b}))));
+          poly.forEach(Rr=>{for(let k=0;k<Rr.length-1;k++){const a=Rr[k],c=Rr[k+1],L=Math.hypot(c[0]-a[0],c[1]-a[1]);if(L<0.05)continue;let nx=(c[1]-a[1])/L,ny=-(c[0]-a[0])/L;const mx=(a[0]+c[0])/2,my=(a[1]+c[1])/2;if(inP(mx+nx*0.1,my+ny*0.1)){nx=-nx;ny=-ny;}
+            const zb=ud.zBase-SINK;[[a[0],a[1],zb],[c[0],c[1],zb],[c[0],c[1],zt],[a[0],a[1],zb],[c[0],c[1],zt],[a[0],a[1],zt]].forEach(v=>{WP.push(...v);WN.push(nx,ny,0);});
+            if(L>=1.6&&!inOutA(mx+nx*0.3,my+ny*0.3)&&V5&&V5.walls)V5.walls.push({a:[a[0],a[1]],b:[c[0],c[1]],nx,ny,za0:null,zb0:null,za1:zt,zb1:zt});}});
+          const wg=new THREE.BufferGeometry();wg.setAttribute('position',new THREE.Float32BufferAttribute(WP,3));wg.setAttribute('normal',new THREE.Float32BufferAttribute(WN,3));
+          const wm=new THREE.Mesh(wg,new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0],side:THREE.DoubleSide}));wm.castShadow=wm.receiveShadow=true;wm.position.z=-z0;wm.userData.gable=true;o.add(wm);adds.push(wm);
+          (QV4.rest=QV4.rest||[]).push({bid:ud.bid,A:+A.toFixed(1),zt:+zt.toFixed(1)});return;}
+        const shape=new THREE.Shape(R.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)));poly.slice(1).forEach(h=>shape.holes.push(new THREE.Path(h.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)))));
         const g=new THREE.ShapeGeometry(shape);g.translate(0,0,topAbs(o)-0.08);const m=new THREE.Mesh(g,ROOF[u.roofKey||'autre']||ROOF.autre);m.receiveShadow=true;m.position.z=-z0;m.userData.v5cap=true;m.raycast=()=>{};main.add(m);});});} /* seen only: no shadow, no ray (windows, sky from a window), not an obstacle */
   {const gmat=new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0],side:THREE.DoubleSide});
    GW.forEach((L,o)=>{const Pp=[],Nn=[];for(let i=0;i<L.length;i+=2){Pp.push(...L[i]);Nn.push(L[i+1][0],L[i+1][1],0);}
