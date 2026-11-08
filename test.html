@@ -3220,7 +3220,14 @@ function qsV4One(fam,pre){
   /* v5 volumes are rectangles: along a jagged IGN outline (notches, small offsets) they leave slivers the roof does not cover,
      and the view went through the roof there. A flat cap of each block's own outline, just under its lowest roof edge, closes
      them; wherever the roof is drawn it stands above the cap and hides it. */
-  if(V5)famSwap.forEach(o=>{const ud=o.userData,shape=new THREE.Shape(ud.rings[0]);ud.rings.slice(1).forEach(hr=>shape.holes.push(new THREE.Path(hr)));
+  if(V5){let RU=null;try{RU=qsUnion(drawn.map(d=>[d.outer,...d.holes]));}catch(e){RU=null;}
+    famSwap.forEach(o=>{const ud=o.userData,R0=ud.rings[0].map(p=>[p.x,p.y]);if(R0.length<3)return;if(R0[0][0]!==R0[R0.length-1][0]||R0[0][1]!==R0[R0.length-1][1])R0.push(R0[0].slice());
+      /* only the slivers: the parts of the outline the roof leaves uncovered that are thin (under ~70 cm wide). A wide uncovered
+         part is a lower roof or a courtyard of the outline: a cap there floated as a slab over it (a 2 m overhang over a courtyard on one test building) */
+      let parts=[];try{parts=RU&&RU.length?PCSYNC.difference([R0],...RU):[];}catch(e){parts=[];}
+      parts.forEach(poly=>{const R=poly[0];let A=0,P=0;for(let k=0,j=R.length-1;k<R.length;j=k++){A+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);P+=Math.hypot(R[k][0]-R[j][0],R[k][1]-R[j][1]);}A=Math.abs(A/2);
+        if(!P||2*A/P>0.7||A<0.02)return;const shape=new THREE.Shape(R.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)));poly.slice(1).forEach(h=>shape.holes.push(new THREE.Path(h.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)))));
+        const g=new THREE.ShapeGeometry(shape);g.translate(0,0,topAbs(o)-0.08);const m=new THREE.Mesh(g,ROOF[u.roofKey||'autre']||ROOF.autre);m.receiveShadow=true;m.position.z=-z0;m.userData.v5cap=true;m.raycast=()=>{};main.add(m);});});} /* seen only: no shadow, no ray (windows, sky from a window), not an obstacle */
     const g=new THREE.ShapeGeometry(shape);g.translate(0,0,topAbs(o)-0.08);const m=new THREE.Mesh(g,ROOF[u.roofKey||'autre']||ROOF.autre);m.receiveShadow=true;m.position.z=-z0;m.userData.v5cap=true;m.raycast=()=>{};main.add(m);}); /* seen only: no shadow, no ray (windows, sky from a window), not an obstacle */
   {const gmat=new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0],side:THREE.DoubleSide});
    GW.forEach((L,o)=>{const Pp=[],Nn=[];for(let i=0;i<L.length;i+=2){Pp.push(...L[i]);Nn.push(L[i+1][0],L[i+1][1],0);}
