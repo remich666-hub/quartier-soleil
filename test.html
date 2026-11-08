@@ -3391,7 +3391,11 @@ function qsWindows(main){const V=main.userData._v4;if(!V)return;if(V.w5)return q
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
   const m=new THREE.Mesh(g,QS_WIN_MAT);m.position.z=-main.position.z;m.renderOrder=2;m.userData.winDecal=true;m.userData.hiRoof=true;m.raycast=()=>{};main.add(m);}
 /* a block selected beyond the processed radius: rebuilt on demand, ahead of the queue */
-if(typeof setHi==='function'){const _hi=setHi;setHi=function(m,on){_hi(m,on);try{if(on&&m&&m.parent&&!family(m).some(o=>o.userData.v4done))setTimeout(()=>{try{if(m.parent&&S.building&&family(S.building).includes(m)&&!family(m).some(o=>o.userData.v4done))qsWindowsLaser(m);}catch(e){}},250);}catch(e){}try{const u=m&&m.userData;if(!on||!u||!u.lidar||u.monu||u.church||!QV4.pri)return;
+if(typeof setHi==='function'){const _hi=setHi;setHi=function(m,on){_hi(m,on);
+  /* one building lit at a time: a building rebuilt from the laser while selected is lit again under its new meshes, and the
+     selection kept pointing at the old ones, so choosing another one never switched it off (several lit at once on a phone) */
+  try{if(on&&m){const f=family(m);S.meshes.forEach(o=>{if(!f.includes(o)&&o.userData&&o.userData.usage!==undefined&&o.material===matsFor(o.userData.usage,true)){o.material=baseMats(o);partsSync(o);}});}}catch(e){}
+  try{if(on&&m&&m.parent&&!family(m).some(o=>o.userData.v4done))setTimeout(()=>{try{if(m.parent&&S.building&&family(S.building).includes(m)&&!family(m).some(o=>o.userData.v4done))qsWindowsLaser(m);}catch(e){}},250);}catch(e){}try{const u=m&&m.userData;if(!on||!u||!u.lidar||u.monu||u.church||!QV4.pri)return;
   const fam=family(m).filter(o=>o.userData.rings);if(fam.some(o=>o.userData.v4done||QV4.used.has(o)||(QV4.tried&&QV4.tried.has(o))||QV4.pri.some(it=>it.fam.includes(o))))return;
   if(fam.reduce((a,o)=>a+Math.abs(areaOf(o.userData.rings[0])),0)>4000)return;const bc=m.geometry.boundingSphere;if(bc&&bc.center.length()>RECENTER_D&&!(S.qsExt||[]).some(e=>e.T===S.T&&Math.hypot(e.cx-bc.center.x,e.cy-bc.center.y)<40))return; /* far: after the laser extension (recenterOn) */QV4.pri.push({fam,d:0});}catch(e){}};}
 /* the model's slope pass and ground-floor bands, kept consistent with these buildings: no texture grid laid back on their walls,
