@@ -3228,7 +3228,6 @@ function qsV4One(fam,pre){
       parts.forEach(poly=>{const R=poly[0];let A=0,P=0;for(let k=0,j=R.length-1;k<R.length;j=k++){A+=(R[j][0]-R[k][0])*(R[j][1]+R[k][1]);P+=Math.hypot(R[k][0]-R[j][0],R[k][1]-R[j][1]);}A=Math.abs(A/2);
         if(!P||2*A/P>0.7||A<0.02)return;const shape=new THREE.Shape(R.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)));poly.slice(1).forEach(h=>shape.holes.push(new THREE.Path(h.slice(0,-1).map(([x,y])=>new THREE.Vector2(x,y)))));
         const g=new THREE.ShapeGeometry(shape);g.translate(0,0,topAbs(o)-0.08);const m=new THREE.Mesh(g,ROOF[u.roofKey||'autre']||ROOF.autre);m.receiveShadow=true;m.position.z=-z0;m.userData.v5cap=true;m.raycast=()=>{};main.add(m);});});} /* seen only: no shadow, no ray (windows, sky from a window), not an obstacle */
-    const g=new THREE.ShapeGeometry(shape);g.translate(0,0,topAbs(o)-0.08);const m=new THREE.Mesh(g,ROOF[u.roofKey||'autre']||ROOF.autre);m.receiveShadow=true;m.position.z=-z0;m.userData.v5cap=true;m.raycast=()=>{};main.add(m);}); /* seen only: no shadow, no ray (windows, sky from a window), not an obstacle */
   {const gmat=new THREE.MeshLambertMaterial({color:(USAGE[u.usage]||[0xf0efea])[0],side:THREE.DoubleSide});
    GW.forEach((L,o)=>{const Pp=[],Nn=[];for(let i=0;i<L.length;i+=2){Pp.push(...L[i]);Nn.push(L[i+1][0],L[i+1][1],0);}
      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(Pp,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(Nn,3));
